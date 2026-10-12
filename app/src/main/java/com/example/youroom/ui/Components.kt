@@ -25,8 +25,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import java.time.format.DateTimeFormatter
-import com.example.youroom.domain.SchoolZone
 
 @Composable
 fun AppMark(modifier: Modifier = Modifier) {
@@ -108,17 +106,5 @@ fun AvailabilityStrip(freeSlots: Set<Int>, allSlots: List<Int>, modifier: Modifi
                 if (number in freeSlots) colors.primary else colors.outlineVariant,
                 RectangleShape))
         }
-    }
-}
-
-fun snapshotLabel(state: YouRoomState): String {
-    val snapshot = state.campusSnapshot ?: return "尚未获取教室数据"
-    if (state.demo) return "演示数据 · 非实时 · 标记仅本次有效"
-    val date = snapshot.queryDate.format(DateTimeFormatter.ofPattern("M月d日"))
-    val time = snapshot.fetchedAt.atZone(SchoolZone).format(DateTimeFormatter.ofPattern("HH:mm"))
-    return when {
-        state.stale -> "$date 的历史缓存 · 不用于今日筛选"
-        state.fromCache -> "查询日 $date · $time 缓存 · 非实时"
-        else -> "查询日 $date · $time 获取"
     }
 }

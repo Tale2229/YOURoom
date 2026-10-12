@@ -3,6 +3,10 @@ package com.example.youroom.ui
 import android.content.res.Configuration
 import androidx.compose.animation.*
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import com.example.youroom.ui.theme.campusBadgeColor
@@ -31,44 +35,75 @@ import com.example.youroom.ui.theme.YouRoomTheme
 @Composable
 fun ClassroomScreen(state: YouRoomState, onFilters: (SearchFilters) -> Unit,
     onRefresh: () -> Unit, onRoom: (String?) -> Unit, onFavorite: (Classroom) -> Unit,
-    onCampus: (Campus) -> Unit = {}, onAddTag: (String) -> Unit = {}) {
+    onCampus: (Campus) -> Unit = {}, onAddTag: (String) -> Unit = {},
+    onRemoveTag: (String) -> Unit = {}, onTagOrder: (List<String>) -> Unit = {}) {
     val westList = androidx.compose.foundation.lazy.rememberLazyListState()
     val shaheList = androidx.compose.foundation.lazy.rememberLazyListState()
     val viewportDates = remember { mutableMapOf<Pair<Campus, Boolean>, java.time.LocalDate>() }
     val pages = remember { mutableMapOf<Campus, YouRoomState>() }
     pages[state.campus] = state
     val listState = if (state.campus == Campus.XITUCHENG) westList else shaheList
-    LaunchedEffect(state.campus, state.campusSnapshot?.queryDate, state.demo) {
-        state.campusSnapshot?.queryDate?.let { date ->
+    val pager = rememberPagerState(initialPage = state.campus.ordinal) { Campus.entries.size }
+    val desiredPage by rememberUpdatedState(state.campus.ordinal)
+    val moving by remember(pager) { derivedStateOf {
+        pager.isScrollInProgress || pager.settledPage != desiredPage
+    } }
+    LaunchedEffect(state.campus, state.campusSnapshot?.queryDate, state.demo, moving) {
+        if (!moving) state.campusSnapshot?.queryDate?.let { date ->
             val previous = viewportDates.put(state.campus to state.demo, date)
             if (previous != null && previous != date) listState.scrollToItem(0)
         }
     }
-    AnimatedContent(state.campus, modifier = Modifier.fillMaxSize().clipToBounds(),
-        transitionSpec = {
-            val direction = if (targetState == Campus.SHAHE) AnimatedContentTransitionScope.SlideDirection.Left
-                else AnimatedContentTransitionScope.SlideDirection.Right
-            slideIntoContainer(direction, tween(320)) togetherWith slideOutOfContainer(direction, tween(320))
-        }, label = "campus_page") { displayed ->
-        val page = if (displayed == state.campus) state else pages.getValue(displayed)
+    LaunchedEffect(state.campus) {
+        if (pager.currentPage != state.campus.ordinal || pager.currentPageOffsetFraction != 0f) {
+            pager.animateScrollToPage(state.campus.ordinal, animationSpec = tween(320))
+        }
+    }
+    HorizontalPager(state = pager, beyondViewportPageCount = 1, userScrollEnabled = false,
+        modifier = Modifier.fillMaxSize().clipToBounds().testTag("campus_pager"),
+        key = { Campus.entries[it].dataKey }) { index ->
+        val displayed = Campus.entries[index]
+        val observed = if (displayed == state.campus) state else pages[displayed] ?: state.copy(
+            campus = displayed, snapshot = state.campusSnapshots[displayed],
+            filters = state.filters.copy(buildings = emptySet()), fromCache = !state.demo,
+            refreshing = false, error = null, selectedRoomId = null)
+        // Keep the warmed offscreen page stable; editing the visible grid must not
+        // run a second set of selection animations on the hidden campus.
+        pages.putIfAbsent(displayed, observed)
+        // A response arriving mid-slide must not rebuild rows and start item animations
+        // at the same time as page movement. Apply it as soon as the movement settles.
+        var held by remember(displayed) { mutableStateOf(observed) }
+        val page = if (moving) held else observed
+        SideEffect { if (!moving) held = observed }
+        val active = displayed == state.campus && !moving
+        val pageModifier = if (pager.currentPage == index) Modifier else Modifier.clearAndSetSemantics {}
         YouRoomTheme(campus = displayed) {
-            Surface(Modifier.fillMaxSize()) {
-                ClassroomPage(page, if (displayed == Campus.XITUCHENG) westList else shaheList,
-                    { if (displayed == state.campus) onFilters(it) }, onRefresh, onRoom, onFavorite, onCampus, onAddTag)
+            Surface(Modifier.fillMaxSize().then(pageModifier).graphicsLayer()) {
+                ClassroomPage(page, if (displayed == Campus.XITUCHENG) westList else shaheList, active, moving,
+                    { if (active) onFilters(it) }, { if (active) onRefresh() },
+                    { if (active) onRoom(it) }, { if (active) onFavorite(it) }, onCampus,
+                    { if (active) onAddTag(it) }, { if (active) onRemoveTag(it) },
+                    { if (active) onTagOrder(it) })
             }
         }
     }
 }
 
 @Composable
-private fun ClassroomPage(state: YouRoomState, listState: LazyListState, onFilters: (SearchFilters) -> Unit,
+private fun ClassroomPage(state: YouRoomState, listState: LazyListState, active: Boolean, moving: Boolean,
+    onFilters: (SearchFilters) -> Unit,
     onRefresh: () -> Unit, onRoom: (String?) -> Unit, onFavorite: (Classroom) -> Unit,
-    onCampus: (Campus) -> Unit, onAddTag: (String) -> Unit) {
+    onCampus: (Campus) -> Unit, onAddTag: (String) -> Unit,
+    onRemoveTag: (String) -> Unit, onTagOrder: (List<String>) -> Unit) {
     var showFilters by remember { mutableStateOf(false) }
     val snapshot = state.campusSnapshot
-    val result = state.result
+    val search = rememberClassroomSearch(state, enabled = active)
+    val result = search.result
+    val waiting = search.pending || (snapshot == null && (state.refreshing || moving))
     val slots = snapshot?.slots.orEmpty()
-    if (showFilters) FilterDialog(state, { showFilters = false }, onFilters, onAddTag)
+    val slotNumbers = remember(slots) { slots.map { it.number } }
+    LaunchedEffect(active) { if (!active) showFilters = false }
+    if (showFilters && active) FilterDialog(state, { showFilters = false }, onFilters, onAddTag, onRemoveTag, onTagOrder)
     Column(Modifier.fillMaxSize().imePadding()) {
         CampusHeader(state, onRefresh, onCampus)
         HorizontalDivider(Modifier.padding(horizontal = 24.dp))
@@ -79,7 +114,7 @@ private fun ClassroomPage(state: YouRoomState, listState: LazyListState, onFilte
             item {
                 Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    SlotPicker(state.campus, snapshot?.queryDate, state.demo, state.filters, slots, onFilters)
+                    SlotPicker(state.campus, snapshot?.queryDate, state.demo, state.filters, slots, onFilters, enabled = active)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(state.filters.query, { onFilters(state.filters.copy(query = it)) },
                             Modifier.weight(1f).testTag("room_search"), placeholder = { Text("搜索教室或备注") },
@@ -110,30 +145,29 @@ private fun ClassroomPage(state: YouRoomState, listState: LazyListState, onFilte
                     verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("可选教室", style = MaterialTheme.typography.titleMedium)
-                        Text(snapshotLabel(state), style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    AnimatedContent(result.rooms.size, label = "room_count") {
-                        Text("$it", style = MaterialTheme.typography.headlineMedium,
-                            color = MaterialTheme.colorScheme.primary)
-                    }
+                    if (!waiting) Text("${result.rooms.size}", style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.primary)
                 }
                 if (result.hasUncoveredGaps) Text("只确认所选教学节次空闲，课间与午休不作保证。",
                     Modifier.padding(start = 24.dp, end = 24.dp, bottom = 12.dp),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if (result.rooms.isEmpty()) item {
+            if (waiting) item {
+                if (moving) Text("切换校区…", Modifier.padding(horizontal = 24.dp, vertical = 32.dp),
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                else FilteringIndicator(if (snapshot == null) "正在获取教室…" else "正在筛选教室…")
+            }
+            if (!waiting && result.rooms.isEmpty() && (snapshot == null || state.stale || state.filters.selectedSlots.isNotEmpty())) item {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 36.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(when {
                         state.stale -> "需要刷新今日数据"
                         snapshot == null -> "还没有教室数据"
-                        state.filters.selectedSlots.isEmpty() -> "请选择自习时段"
                         result.missingSlots -> "所选节次数据不完整"
                         else -> "没有符合条件的教室"
                     }, style = MaterialTheme.typography.titleLarge)
                     Text(if (snapshot == null || state.stale) "检查网络后重试，旧缓存不作为今日数据。"
-                        else if (state.filters.selectedSlots.isEmpty()) "点击节次，或按住划过多个格子进行选择。"
                         else "试试缩短时段，或放宽楼宇与个人标记筛选。",
                         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (snapshot == null || state.stale) TextButton(onClick = onRefresh,
@@ -144,29 +178,23 @@ private fun ClassroomPage(state: YouRoomState, listState: LazyListState, onFilte
                 }
             }
             items(result.rooms, key = { it.classroom.id }) { room ->
-                RoomRow(room, slots.map { it.number }, Modifier.animateItem(),
+                RoomRow(room, slotNumbers, if (moving) Modifier else Modifier.animateItem(), terms = state.tagOrder,
                     onClick = { onRoom(room.classroom.id) }, onFavorite = { onFavorite(room.classroom) })
-            }
-            item {
-                HorizontalDivider(Modifier.padding(horizontal = 24.dp, vertical = 20.dp))
-                Text("课表空闲不保证现场有座位或教室开放。学校响应没有日期字段，查询日不代表已验证数据更新。",
-                    Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
 }
 
 @Composable
-private fun RoomRow(match: RoomMatch, slots: List<Int>, modifier: Modifier = Modifier,
+private fun RoomRow(match: RoomMatch, slots: List<Int>, modifier: Modifier = Modifier, terms: List<String>,
     onClick: () -> Unit, onFavorite: () -> Unit) {
     val room = match.classroom
+    val labels = remember(match.profile, terms) { terms.filter { it != PersonalTags.favorite && match.profile.hasTerm(it) } }
     Column(modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(room.name, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(listOfNotNull(room.buildingLabel, room.capacity?.let { "容量 $it" },
-                    if (match.profile.outlets) "有插座" else null).plus(match.profile.allTags.sorted()).joinToString(" · "),
+                Text(listOfNotNull(room.buildingLabel, room.capacity?.let { "容量 $it" }).plus(labels).joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (match.profile.note.isNotBlank()) Text(match.profile.note, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

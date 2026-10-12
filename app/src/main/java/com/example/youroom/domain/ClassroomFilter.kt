@@ -14,15 +14,13 @@ object ClassroomFilter {
         if (selected.map { it.number }.toSet() != numbers) {
             return SearchResult(emptyList(), selected, false, true)
         }
-        val common = selected.map { slot -> slot.classrooms.map { it.id }.toSet() }
+        val index = snapshot.index
+        val common = selected.map { slot -> index.roomsBySlot.getValue(slot.number) }
             .reduce { first, next -> first intersect next }
         val query = filters.query.trim()
-        val matches = snapshot.classrooms.asSequence()
-            .filter { it.id in common }
+        val matches = common.asSequence().mapNotNull(index.roomsById::get)
             .map { room ->
-                RoomMatch(room, profiles[room.id] ?: room.emptyProfile(),
-                    snapshot.slots.filter { slot -> slot.classrooms.any { it.id == room.id } }
-                        .map { it.number }.toSet())
+                RoomMatch(room, profiles[room.id] ?: room.emptyProfile(), index.freeSlotsByRoom.getValue(room.id))
             }
             .filter { !it.profile.excluded }
             .filter { filters.buildings.isEmpty() || it.classroom.building in filters.buildings }

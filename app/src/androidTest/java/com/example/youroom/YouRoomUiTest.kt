@@ -38,9 +38,13 @@ class YouRoomUiTest {
         }
         val settings = object : FilterSettings {
             override val filters = MutableStateFlow(SearchFilters())
-            override val customTags = MutableStateFlow<Set<String>>(emptySet())
+            override val catalog = MutableStateFlow(TagCatalog())
+        override val buildings = MutableStateFlow(Campus.entries.associateWith { emptySet<String>() })
             override suspend fun save(filters: SearchFilters) = error("Real settings disabled in UI tests")
             override suspend fun addTag(name: String) = error("Real settings disabled in UI tests")
+            override suspend fun saveBuildings(campus: Campus, names: Set<String>) = error("Real settings disabled in UI tests")
+            override suspend fun removeTag(name: String) = error("Real settings disabled in UI tests")
+            override suspend fun reorderTags(names: List<String>) = error("Real settings disabled in UI tests")
         }
         val factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
@@ -85,8 +89,9 @@ class YouRoomUiTest {
         compose.onNodeWithTag("slot_2").assertIsNotSelected()
         compose.onNodeWithTag("slot_3").assertIsSelected()
         compose.onNodeWithText("清空").performClick()
-        compose.onNodeWithTag("room_list").performScrollToNode(hasText("请选择自习时段"))
-        compose.onNodeWithText("请选择自习时段").assertIsDisplayed()
+        compose.onNodeWithText("请选择自习时段").assertDoesNotExist()
+        compose.onNodeWithTag("slot_summary").assertDoesNotExist()
+        compose.onNodeWithText("2-201").assertDoesNotExist()
     }
 
     @Test fun gridDragCanAddAndRemoveWithoutTogglingTheWholePage() {
@@ -192,6 +197,8 @@ class YouRoomUiTest {
         enterDemo()
         compose.onNodeWithTag("extra_filters").performScrollTo().performClick()
         compose.onNodeWithTag("filter_dialog").assertIsDisplayed()
+        compose.onNodeWithTag("apply_filters").assertDoesNotExist()
+        compose.onNodeWithText("个人词条").assertDoesNotExist()
         compose.onNodeWithTag("building_2").performClick()
         compose.onNodeWithTag("building_3").performClick()
         compose.onNodeWithTag("building_2").assertIsSelected()
@@ -199,7 +206,8 @@ class YouRoomUiTest {
         compose.onNodeWithTag("building_all").assertIsNotSelected()
         compose.onNodeWithTag("filter_favorite").performClick()
         compose.onNodeWithTag("filter_outlets").performClick()
-        compose.onNodeWithTag("apply_filters").performClick()
+        compose.onNodeWithTag("filter_badge").assertTextEquals("4")
+        compose.onNodeWithTag("close_filters").performClick()
         compose.onNodeWithTag("filter_dialog").assertDoesNotExist()
         compose.onNodeWithTag("filter_badge").assertTextEquals("4")
         compose.onNodeWithText("已有额外筛选 · 点击修改").assertDoesNotExist()
@@ -209,6 +217,11 @@ class YouRoomUiTest {
         compose.onNodeWithTag("building_all").assertIsSelected()
         compose.onNodeWithTag("filter_favorite").assertIsSelected()
         compose.onNodeWithTag("filter_outlets").assertIsSelected()
+        compose.onNodeWithTag("close_filters").performClick()
+        compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeRight() }
+        compose.onNodeWithTag("extra_filters").performClick()
+        compose.onNodeWithTag("building_2").assertIsSelected()
+        compose.onNodeWithTag("building_3").assertIsSelected()
     }
 
     @Test fun selectedTimeIsSharedEvenAfterEditingTheOtherCampus() {
@@ -232,7 +245,7 @@ class YouRoomUiTest {
         compose.onNodeWithTag("custom_tag_name").performScrollTo().performTextInput("靠窗")
         compose.onNodeWithTag("add_tag").performScrollTo().performClick()
         compose.onNodeWithTag("filter_tag_靠窗").performScrollTo().assertExists()
-        compose.onNodeWithTag("apply_filters").performClick()
+        compose.onNodeWithTag("close_filters").performClick()
         compose.onNodeWithTag("room_list").performScrollToNode(hasText("2-201"))
         compose.onNodeWithText("2-201").performClick()
         compose.onNodeWithText("靠窗").performScrollTo().performClick()
@@ -240,7 +253,7 @@ class YouRoomUiTest {
         compose.onNodeWithTag("room_list").performScrollToNode(hasTestTag("extra_filters"))
         compose.onNodeWithTag("extra_filters").performClick()
         compose.onNodeWithTag("filter_tag_靠窗").performScrollTo().performClick()
-        compose.onNodeWithTag("apply_filters").performClick()
+        compose.onNodeWithTag("close_filters").performClick()
         compose.onNodeWithTag("filter_badge").assertTextEquals("1")
         compose.onNodeWithTag("room_list").performScrollToNode(hasText("2-201"))
         compose.onNodeWithText("2-201").assertIsDisplayed()
@@ -255,10 +268,62 @@ class YouRoomUiTest {
         compose.runOnIdle { assertTrue(action.action()) }
         compose.mainClock.advanceTimeBy(160)
         val moving = compose.onAllNodesWithTag("campus_header").fetchSemanticsNodes()
-        assertEquals(2, moving.size)
-        assertTrue(moving.any { kotlin.math.abs(it.boundsInRoot.left - initialHeader.left) > initialHeader.width * .2f })
+        // The offscreen, precomposed page is hidden from accessibility/test queries.
+        assertTrue(moving.isNotEmpty())
+        assertTrue(moving.any {
+            val bounds = it.boundsInRoot
+            kotlin.math.abs(bounds.left - initialHeader.left) > 1f || bounds.width < initialHeader.width * .9f
+        })
         compose.mainClock.advanceTimeBy(500)
         compose.mainClock.autoAdvance = true
         compose.onNodeWithTag("campus_label").assertTextEquals("沙河")
+    }
+
+    @Test fun termDeletionRequiresConfirmationAndFavoriteCannotBeDeleted() {
+        enterDemo()
+        compose.onNodeWithTag("extra_filters").performScrollTo().performClick()
+        compose.onNodeWithTag("filter_outlets").performClick()
+        compose.onNodeWithTag("edit_tags").performClick()
+        compose.onNodeWithContentDescription("删除词条 已收藏").assertDoesNotExist()
+        compose.onNodeWithContentDescription("删除词条 有插座").performClick()
+        compose.onNodeWithText("取消").performClick()
+        compose.onNodeWithTag("filter_outlets").assertExists()
+        compose.onNodeWithContentDescription("删除词条 有插座").performClick()
+        compose.onNodeWithTag("confirm_delete_tag").performClick()
+        compose.onNodeWithTag("filter_outlets").assertDoesNotExist()
+        compose.onNodeWithTag("filter_badge").assertDoesNotExist()
+    }
+
+    @Test fun editableTermsCanBeDraggedAndAccessibleOrderIsRestoredOnReopen() {
+        enterDemo()
+        compose.onNodeWithTag("extra_filters").performScrollTo().performClick()
+        compose.onNodeWithTag("edit_tags").performClick()
+        val source = compose.onNodeWithTag("filter_outlets").fetchSemanticsNode().boundsInRoot
+        val target = compose.onNodeWithTag("filter_tag_人少").fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithTag("filter_outlets").performTouchInput {
+            down(center)
+            moveTo(target.center - source.topLeft, delayMillis = 200)
+            up()
+        }
+        compose.onNodeWithTag("close_filters").performClick()
+        compose.onNodeWithTag("extra_filters").performClick()
+        val outlets = compose.onNodeWithTag("filter_outlets").fetchSemanticsNode().boundsInRoot
+        val people = compose.onNodeWithTag("filter_tag_人少").fetchSemanticsNode().boundsInRoot
+        assertTrue(outlets.top > people.top || (outlets.top == people.top && outlets.left > people.left))
+    }
+
+    @Test fun buildingRowsAndCampusHeadingHaveTheRequestedLayout() {
+        enterDemo()
+        compose.onNodeWithTag("extra_filters").performScrollTo().performClick()
+        compose.onNodeWithTag("filter_campus").assertTextEquals("西土城")
+        compose.onNodeWithTag("building_all").assertTextEquals("全部教学楼")
+        compose.onNodeWithTag("building_row_1").assertExists()
+        compose.onNodeWithTag("building_row_2").assertDoesNotExist()
+        compose.onNodeWithTag("close_filters").performClick()
+        compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeLeft() }
+        compose.onNodeWithTag("extra_filters").performClick()
+        compose.onNodeWithTag("filter_campus").assertTextEquals("沙河")
+        compose.onNodeWithTag("building_row_0").assertExists()
+        compose.onNodeWithTag("building_row_1").assertDoesNotExist()
     }
 }

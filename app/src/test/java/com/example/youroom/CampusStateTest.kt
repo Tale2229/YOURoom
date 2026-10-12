@@ -3,7 +3,6 @@ package com.example.youroom
 import com.example.youroom.data.DemoData
 import com.example.youroom.domain.*
 import com.example.youroom.ui.YouRoomState
-import com.example.youroom.ui.snapshotLabel
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -23,7 +22,6 @@ class CampusStateTest {
         assertTrue(state.result.rooms.isEmpty())
         assertNull(state.selectedRoom)
         assertFalse(state.stale)
-        assertTrue(snapshotLabel(state).contains("尚未获取"))
     }
 
     @Test fun demoSnapshotsHaveDisjointRoomIdentitiesAndExplicitDemoFlags() {
@@ -40,7 +38,7 @@ class CampusStateTest {
             snapshot = DemoData.snapshot(Campus.SHAHE), filters = SearchFilters((1..2).toSet()))
         assertTrue(state.result.rooms.isNotEmpty())
         assertTrue(state.result.rooms.all { it.classroom.id.startsWith("04:") })
-        assertTrue(snapshotLabel(state).contains("演示数据"))
+        assertTrue(state.campusSnapshot!!.isDemo)
     }
 
     @Test fun personalProfilesAreScopedToTheVisibleCampus() {

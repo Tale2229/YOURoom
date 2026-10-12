@@ -36,7 +36,7 @@ class YouRoomViewModelTest {
         finally { store.clear(); Dispatchers.resetMain() }
     }
 
-    @Test fun switchKeepsTimeAndTagsButClearsBuildings() = checkModel { model, source, _ ->
+    @Test fun switchSharesTimeAndTagsAndRestoresCampusBuildings() = checkModel { model, source, _ ->
         model.setFilters(model.state.value.filters.copy(buildings = setOf("2"), selectedSlots = (4..6).toSet()))
         runCurrent()
         model.setCampus(Campus.SHAHE)
@@ -48,7 +48,7 @@ class YouRoomViewModelTest {
         model.setFilters(model.state.value.filters.copy(tags = setOf(PersonalTags.comfortable)))
         runCurrent()
         model.setCampus(Campus.XITUCHENG)
-        assertTrue(model.state.value.filters.buildings.isEmpty())
+        assertEquals(setOf("2"), model.state.value.filters.buildings)
         assertEquals(setOf(4, 5, 6), model.state.value.filters.selectedSlots)
         assertTrue(PersonalTags.comfortable in model.state.value.filters.tags)
         model.setCampus(Campus.SHAHE)
@@ -99,7 +99,7 @@ class YouRoomViewModelTest {
         model.toggleFavorite(room)
         model.setCampus(Campus.SHAHE)
         model.setCampus(Campus.XITUCHENG)
-        assertTrue(model.state.value.filters.buildings.isEmpty())
+        assertEquals(setOf("2"), model.state.value.filters.buildings)
         assertEquals(setOf(4, 5), model.state.value.filters.selectedSlots)
         assertTrue(model.state.value.profiles[room.id]!!.favorite)
         runCurrent()
@@ -116,6 +116,18 @@ class YouRoomViewModelTest {
         model.setCampus(Campus.XITUCHENG); runCurrent()
         model.setCampus(Campus.SHAHE); runCurrent()
         assertEquals(2, source.requests.size)
+    }
+
+    @Test fun pagePrewarmingSnapshotsStayScopedAndAreIsolatedFromDemo() = checkModel { model, _, _ ->
+        assertEquals(setOf(Campus.XITUCHENG), model.state.value.campusSnapshots.keys)
+        model.setCampus(Campus.SHAHE); runCurrent()
+        assertEquals(setOf(Campus.XITUCHENG, Campus.SHAHE), model.state.value.campusSnapshots.keys)
+        assertEquals("01", model.state.value.campusSnapshots.getValue(Campus.XITUCHENG).campusId)
+        assertEquals("04", model.state.value.campusSnapshots.getValue(Campus.SHAHE).campusId)
+        model.showDemo()
+        assertTrue(model.state.value.campusSnapshots.values.all { it.isDemo })
+        model.openLogin()
+        assertTrue(model.state.value.campusSnapshots.values.none { it.isDemo })
     }
 
     @Test fun offlineUserCanOpenShaheCacheEvenWhenThereIsNoWestCache() = checkModel(false,
@@ -194,6 +206,57 @@ class YouRoomViewModelTest {
         override fun instant() = value
     }
 
+    @Test fun bothCampusBuildingsPersistAndRestoreWhileTimesRemainShared() = checkModel { model, _, settings ->
+        model.setFilters(model.state.value.filters.copy(buildings = setOf("2", "3"), selectedSlots = setOf(1, 6)))
+        runCurrent()
+        model.setCampus(Campus.SHAHE); runCurrent()
+        assertTrue(model.state.value.filters.buildings.isEmpty())
+        model.setFilters(model.state.value.filters.copy(buildings = setOf("教一"), selectedSlots = setOf(6)))
+        runCurrent()
+        model.setCampus(Campus.XITUCHENG)
+        assertEquals(setOf("2", "3"), model.state.value.filters.buildings)
+        assertEquals(setOf(6), model.state.value.filters.selectedSlots)
+        model.setCampus(Campus.SHAHE)
+        assertEquals(setOf("教一"), model.state.value.filters.buildings)
+        assertEquals(listOf(Campus.XITUCHENG to setOf("2", "3"), Campus.SHAHE to setOf("教一")), settings.savedBuildings)
+    }
+
+    @Test fun deletingTermCancelsItsFilterButNeverDeletesRoomAnnotations() = checkModel { model, source, settings ->
+        val room = snapshot(Campus.XITUCHENG).classrooms.first()
+        val profile = room.emptyProfile().copy(outlets = true, tags = setOf(PersonalTags.comfortable))
+        source.profiles.value = mapOf(room.id to profile); runCurrent()
+        model.setFilters(model.state.value.filters.copy(outletsOnly = true, tags = setOf(PersonalTags.comfortable)))
+        runCurrent()
+        model.removePersonalTag(PersonalTags.outlets); runCurrent()
+        assertFalse(model.state.value.filters.outletsOnly)
+        assertFalse(PersonalTags.outlets in model.state.value.tagOrder)
+        assertTrue(source.profiles.value.getValue(room.id).outlets)
+        assertFalse(PersonalTags.outlets in settings.catalog.value.available())
+        model.removePersonalTag(PersonalTags.favorite); runCurrent()
+        assertEquals(PersonalTags.favorite, model.state.value.tagOrder.first())
+        model.addCustomTag(PersonalTags.outlets); runCurrent()
+        assertTrue(PersonalTags.outlets in model.state.value.tagOrder)
+        model.removePersonalTag(PersonalTags.comfortable); runCurrent()
+        assertTrue(model.state.value.filters.tags.isEmpty())
+        assertTrue(PersonalTags.comfortable in source.profiles.value.getValue(room.id).tags)
+    }
+
+    @Test fun orderedTermsPersistAndDemoEditingIsIsolated() = checkModel { model, _, settings ->
+        model.addCustomTag("靠窗"); runCurrent()
+        val order = listOf("已收藏", "靠窗", "人少", "有插座", "桌椅舒适")
+        model.reorderPersonalTags(order); runCurrent()
+        assertEquals(order, model.state.value.tagOrder)
+        assertEquals(order, settings.catalog.value.available())
+        model.showDemo()
+        model.removePersonalTag(PersonalTags.outlets)
+        model.addCustomTag("前排")
+        model.reorderPersonalTags(listOf("人少", "前排", "已收藏", "桌椅舒适")); runCurrent()
+        assertEquals(PersonalTags.favorite, model.state.value.tagOrder.first())
+        assertEquals(order, settings.catalog.value.available())
+        model.openLogin()
+        assertEquals(order, model.state.value.tagOrder)
+    }
+
     @Test fun emptySelectionSurvivesFirstQueryOnOtherCampusAndReturn() = checkModel { model, _, _ ->
         model.setFilters(model.state.value.filters.copy(selectedSlots = emptySet()))
         model.setCampus(Campus.SHAHE); runCurrent()
@@ -203,7 +266,7 @@ class YouRoomViewModelTest {
         assertTrue(model.state.value.filters.selectedSlots.isEmpty())
     }
 
-    @Test fun sharedAttributesPersistButSwitchingBuildingsDoesNotWriteSettings() = checkModel { model, _, settings ->
+    @Test fun sharedAttributesAndSeparateBuildingsPersistWithoutExtraWritesOnSwitch() = checkModel { model, _, settings ->
         model.setFilters(model.state.value.filters.copy(buildings = setOf("2", "3")))
         runCurrent()
         assertTrue(settings.saved.isEmpty())
@@ -219,11 +282,11 @@ class YouRoomViewModelTest {
 
     @Test fun customTagDefinitionsPersistInRealModeButNotDemoMode() = checkModel { model, _, settings ->
         model.addCustomTag("靠窗"); runCurrent()
-        assertEquals(setOf("靠窗"), settings.customTags.value)
+        assertEquals(setOf("靠窗"), settings.catalog.value.available().filterNot { it in PersonalTags.builtIn }.toSet())
         model.showDemo()
         model.addCustomTag("前排"); runCurrent()
         assertEquals(setOf("前排"), model.state.value.customTags)
-        assertEquals(setOf("靠窗"), settings.customTags.value)
+        assertEquals(setOf("靠窗"), settings.catalog.value.available().filterNot { it in PersonalTags.builtIn }.toSet())
         model.openLogin()
         assertEquals(setOf("靠窗"), model.state.value.customTags)
     }
@@ -251,12 +314,36 @@ class YouRoomViewModelTest {
 
     private class FakeSettings : FilterSettings {
         override val filters = MutableStateFlow(SearchFilters())
-        override val customTags = MutableStateFlow<Set<String>>(emptySet())
+        override val catalog = MutableStateFlow(TagCatalog())
+        override val buildings = MutableStateFlow(Campus.entries.associateWith { emptySet<String>() })
         val saved = mutableListOf<SearchFilters>()
+        var saveGate: CompletableDeferred<Unit>? = null
         override suspend fun save(filters: SearchFilters) {
+            saveGate?.await()
             saved += filters
             this.filters.value = filters
         }
-        override suspend fun addTag(name: String) { customTags.value += name }
+        val savedBuildings = mutableListOf<Pair<Campus, Set<String>>>()
+        override suspend fun saveBuildings(campus: Campus, names: Set<String>) {
+            savedBuildings += campus to names
+            buildings.value += campus to names
+        }
+        override suspend fun addTag(name: String) { catalog.value = catalog.value.added(name) }
+        override suspend fun removeTag(name: String) {
+            catalog.value = catalog.value.deleted(name)
+            filters.value = filters.value.withoutTerm(name)
+        }
+        override suspend fun reorderTags(names: List<String>) { catalog.value = catalog.value.reordered(names) }
+    }
+
+    @Test fun immediateFilteringIsNotOverwrittenByOlderPreferenceEmissions() = checkModel { model, _, settings ->
+        settings.saveGate = CompletableDeferred()
+        model.setFilters(model.state.value.filters.copy(favoritesOnly = true)); runCurrent()
+        settings.filters.value = SearchFilters(outletsOnly = true); runCurrent()
+        assertTrue(model.state.value.filters.favoritesOnly)
+        assertFalse(model.state.value.filters.outletsOnly)
+        settings.saveGate!!.complete(Unit); runCurrent()
+        assertTrue(model.state.value.filters.favoritesOnly)
+        assertFalse(model.state.value.filters.outletsOnly)
     }
 }

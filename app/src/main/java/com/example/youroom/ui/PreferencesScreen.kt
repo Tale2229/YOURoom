@@ -14,6 +14,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.youroom.domain.allTags
+import com.example.youroom.domain.PersonalTags
+import com.example.youroom.domain.hasTerm
 
 @Composable
 fun PreferencesScreen(state: YouRoomState, onRoom: (String?) -> Unit,
@@ -21,7 +23,7 @@ fun PreferencesScreen(state: YouRoomState, onRoom: (String?) -> Unit,
     var confirmExit by remember { mutableStateOf(false) }
     var clearId by remember { mutableStateOf<String?>(null) }
     val profiles = state.campusProfiles.filter {
-        it.favorite || it.excluded || it.allTags.isNotEmpty() || it.outlets || it.note.isNotBlank()
+        it.favorite || it.excluded || state.tagOrder.any(it::hasTerm) || it.note.isNotBlank()
     }.sortedWith(compareByDescending<com.example.youroom.domain.RoomProfile> { it.favorite }.thenBy { it.name })
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
@@ -47,8 +49,8 @@ fun PreferencesScreen(state: YouRoomState, onRoom: (String?) -> Unit,
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(profile.name, style = MaterialTheme.typography.titleLarge)
                         Text(listOfNotNull(if (profile.favorite) "已收藏" else null,
-                            if (profile.excluded) "已排除" else null,
-                            if (profile.outlets) "有插座" else null).plus(profile.allTags.sorted()).joinToString(" · ").ifBlank { "个人备注" },
+                            if (profile.excluded) "已排除" else null).plus(
+                            state.tagOrder.filter { it != PersonalTags.favorite && profile.hasTerm(it) }).joinToString(" · ").ifBlank { "个人备注" },
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                         if (profile.note.isNotBlank()) Text(profile.note, maxLines = 2, overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -71,7 +73,7 @@ fun PreferencesScreen(state: YouRoomState, onRoom: (String?) -> Unit,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                     Text(if (state.demo) "结束演示" else if (state.viewingCache) "返回登录" else "退出登录")
                 }
-                Text("YouRoom 1.3 · 非学校官方应用", style = MaterialTheme.typography.labelSmall,
+                Text("YouRoom 1.4 · 非学校官方应用", style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }

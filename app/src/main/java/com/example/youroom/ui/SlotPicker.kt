@@ -26,32 +26,38 @@ import androidx.compose.ui.unit.dp
 import com.example.youroom.domain.*
 import java.time.LocalDate
 
+private class SlotPointerGeometry {
+    var origin: Offset = Offset.Zero
+    val bounds = mutableMapOf<Int, SlotBounds>()
+}
+
 @Composable
 fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: SearchFilters,
-    slots: List<LessonSlot>, onFilters: (SearchFilters) -> Unit) {
+    slots: List<LessonSlot>, onFilters: (SearchFilters) -> Unit, enabled: Boolean = true) {
     val context = Triple(campus, queryDate, demo)
     val latestContext by rememberUpdatedState(context)
     val latestFilters by rememberUpdatedState(filters)
     val latestCallback by rememberUpdatedState(onFilters)
-    val available = slots.map { it.number }
-    val bounds = remember(context, available) { mutableMapOf<Int, SlotBounds>() }
-    var origin by remember { mutableStateOf(Offset.Zero) }
-    val chosen = slots.filter { it.number in filters.selectedSlots }
+    val available = remember(slots) { slots.map { it.number } }
+    // Coordinates are read only by pointer events. Writing Compose state here causes
+    // a fresh grid composition on every frame as its containing page slides.
+    val geometry = remember(context, available) { SlotPointerGeometry() }
+    val bounds = geometry.bounds
+    val chosen = remember(slots, filters.selectedSlots) { slots.filter { it.number in filters.selectedSlots } }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("自习时段", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            Text("已选 ${filters.selectedSlots.size} 节", style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary)
             TextButton(onClick = { onFilters(filters.copy(selectedSlots = emptySet())) },
-                shape = MaterialTheme.shapes.small, enabled = filters.selectedSlots.isNotEmpty()) { Text("清空") }
+                shape = MaterialTheme.shapes.small, enabled = enabled && filters.selectedSlots.isNotEmpty()) { Text("清空") }
         }
-        BoxWithConstraints(Modifier.fillMaxWidth().testTag("slot_grid").onGloballyPositioned { origin = it.positionInRoot() }) {
+        BoxWithConstraints(Modifier.fillMaxWidth().testTag("slot_grid").onGloballyPositioned { geometry.origin = it.positionInRoot() }) {
             val columns = ((maxWidth.value + 4f) / 52f).toInt().coerceIn(1, 7)
-            Column(Modifier.fillMaxWidth().pointerInput(context, columns, available) {
+            Column(Modifier.fillMaxWidth().pointerInput(context, columns, available, enabled) {
                 // Initial-pass consumption owns grid painting, not the surrounding LazyColumn.
                 awaitEachGesture {
                     val down = awaitFirstDown(pass = PointerEventPass.Initial)
-                    val firstPosition = down.position + origin
+                    if (!enabled) { down.consume(); return@awaitEachGesture }
+                    val firstPosition = down.position + geometry.origin
                     val first = SlotGridGeometry.hit(bounds.values, firstPosition.x, firstPosition.y)
                         ?: return@awaitEachGesture
                     val drag = SlotDragSelection(latestFilters.selectedSlots, first)
@@ -68,7 +74,7 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                             }
                             val change = event.changes.firstOrNull { it.id == down.id } ?: break
                             if (change.isConsumed) break
-                            val position = change.position + origin
+                            val position = change.position + geometry.origin
                             val crossed = SlotGridGeometry.crossed(bounds.values, previous.x, previous.y, position.x, position.y)
                             val before = drag.selection
                             drag.visit(crossed)
@@ -99,7 +105,7 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                                         val rect = it.boundsInRoot()
                                         bounds[slot.number] = SlotBounds(slot.number, rect.left, rect.top, rect.right, rect.bottom)
                                     }
-                                    .toggleable(value = isSelected, role = Role.Checkbox, onValueChange = {
+                                    .toggleable(value = isSelected, enabled = enabled, role = Role.Checkbox, onValueChange = {
                                         onFilters(filters.copy(selectedSlots = SlotSelection.toggle(filters.selectedSlots, slot.number)))
                                     })
                                     .semantics {
@@ -119,7 +125,5 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
         }
         if (chosen.isNotEmpty()) Text(SlotSelection.summary(chosen), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.primary, modifier = Modifier.testTag("slot_summary"))
-        Text("点击切换；从未选中格子划过可增选，从已选中格子划过可取消。",
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

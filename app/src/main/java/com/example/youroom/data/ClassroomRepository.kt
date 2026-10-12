@@ -3,6 +3,7 @@ package com.example.youroom.data
 import com.example.youroom.data.local.*
 import com.example.youroom.domain.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.time.Clock
@@ -29,9 +30,14 @@ class ClassroomRepository(
     override suspend fun cached(campus: Campus): ClassroomSnapshot? {
         val cached = dao.snapshot(campus.dataKey) ?: return null
         return try {
-            SchoolJson.snapshot(cached.responseJson, cached.campusId,
-                LocalDate.parse(cached.queryDate), Instant.ofEpochMilli(cached.fetchedAtMillis))
-        } catch (_: Exception) { null }
+            withContext(Dispatchers.Default) {
+                SchoolJson.snapshot(cached.responseJson, cached.campusId,
+                    LocalDate.parse(cached.queryDate), Instant.ofEpochMilli(cached.fetchedAtMillis)).also { it.index }
+            }
+        } catch (error: Exception) {
+            if (error is CancellationException) throw error
+            null
+        }
     }
 
     override suspend fun refresh(campus: Campus): ClassroomSnapshot {
@@ -46,7 +52,9 @@ class ClassroomRepository(
         if (now.atZone(SchoolZone).toLocalDate() != date) {
             throw SchoolRequestFailed("查询跨越了午夜，请重新刷新今日数据。")
         }
-        val snapshot = SchoolJson.snapshot(json, campus.dataKey, date, now)
+        val snapshot = withContext(Dispatchers.Default) {
+            SchoolJson.snapshot(json, campus.dataKey, date, now).also { it.index }
+        }
         // Replace only after full validation; failures preserve the previous snapshot.
         dao.saveSnapshot(SnapshotEntity(campus.dataKey, date.toString(), now.toEpochMilli(), json))
         return snapshot

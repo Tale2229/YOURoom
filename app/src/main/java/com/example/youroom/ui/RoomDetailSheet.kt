@@ -62,11 +62,10 @@ fun RoomDetailSheet(room: RoomMatch, state: YouRoomState, onDismiss: () -> Unit,
             Text("我的标记", style = MaterialTheme.typography.titleMedium)
             ProfileToggle("已收藏", draft.favorite) { draft = draft.copy(favorite = it) }
             ProfileToggle("从筛选结果中排除", draft.excluded) { draft = draft.copy(excluded = it) }
-            ProfileToggle("有插座", draft.outlets) { draft = draft.copy(outlets = it) }
-            (listOf(PersonalTags.comfortable, PersonalTags.uncrowded) +
-                (state.customTags + draft.tags).filterNot { it in PersonalTags.builtIn }.sorted()).distinct().forEach { tag ->
-                ProfileToggle(tag, tag in draft.tags) { selected ->
-                    draft = draft.copy(tags = if (selected) draft.tags + tag else draft.tags - tag)
+            state.tagOrder.filterNot { it == PersonalTags.favorite }.forEach { tag ->
+                ProfileToggle(tag, if (tag == PersonalTags.outlets) draft.outlets else tag in draft.tags) { selected ->
+                    draft = if (tag == PersonalTags.outlets) draft.copy(outlets = selected) else
+                        draft.copy(tags = if (selected) draft.tags + tag else draft.tags - tag)
                 }
             }
             Text("标签仅依据个人经验；未勾选表示未标记，不代表没有。",

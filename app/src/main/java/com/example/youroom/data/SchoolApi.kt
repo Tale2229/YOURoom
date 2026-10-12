@@ -1,6 +1,8 @@
 package com.example.youroom.data
 
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.*
@@ -24,7 +26,7 @@ class SchoolApi(
             .addQueryParameter("captchaData", "")
             .addQueryParameter("codeVal", "").build()
         val response = execute(request(url))
-        val root = SchoolJson.response(response.body)
+        val root = withContext(Dispatchers.Default) { SchoolJson.response(response.body) }
         if (response.status !in 200..299 || root["code"]?.jsonPrimitive?.content != "1") {
             val message = root["Msg"]?.jsonPrimitive?.content.orEmpty()
             throw SchoolRequestFailed(when {
@@ -45,7 +47,7 @@ class SchoolApi(
             .addQueryParameter("campusId", campusId).build()
         val response = execute(request(url).newBuilder().header("Token", token).build())
         if (response.status == 401) throw AuthenticationRequired()
-        val root = SchoolJson.response(response.body)
+        val root = withContext(Dispatchers.Default) { SchoolJson.response(response.body) }
         // This service reports missing/expired credentials as HTTP 500 + business code 401.
         if (root["code"]?.jsonPrimitive?.content == "401") {
             throw AuthenticationRequired()

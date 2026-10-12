@@ -41,8 +41,8 @@ class SharedFiltersTest {
 
     @Test fun customTagValidationRejectsBlankDuplicatesBuiltInsAndOverlongNames() {
         assertNull(PersonalTags.validate(" 靠窗 ", emptySet()))
-        listOf("", "已收藏", "有插座", "桌椅舒适", "人少", "全部楼宇", "靠窗", "a".repeat(21), "前排\n后排")
-            .forEach { assertNotNull(PersonalTags.validate(it, setOf("靠窗"))) }
+        listOf("", "已收藏", "有插座", "桌椅舒适", "人少", "全部楼宇", "全部教学楼", "＋", "靠窗", "a".repeat(21), "前排\n后排")
+            .forEach { assertNotNull(PersonalTags.validate(it, PersonalTags.builtIn + "靠窗")) }
     }
 
     @Test fun newTagsRoundTripWithoutLosingExistingProfileFields() {

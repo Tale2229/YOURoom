@@ -1,11 +1,9 @@
 package com.example.youroom.ui.theme
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import com.example.youroom.domain.Campus
 
@@ -56,15 +54,11 @@ fun YouRoomTheme(
     campus: Campus = Campus.XITUCHENG,
     content: @Composable () -> Unit
 ) {
-    val target = campusColorScheme(campus, darkTheme)
-    val primary by animateColorAsState(target.primary, tween(180), label = "campus_primary")
-    val container by animateColorAsState(target.primaryContainer, tween(180), label = "campus_container")
-    val onPrimary by animateColorAsState(target.onPrimary, tween(180), label = "campus_on_primary")
-
+    // The page movement is the campus transition; a second, frame-by-frame MaterialTheme
+    // animation would invalidate every consumer on both pages during that same movement.
+    val colors = remember(campus, darkTheme) { campusColorScheme(campus, darkTheme) }
     MaterialTheme(
-        colorScheme = target.copy(primary = primary, secondary = primary,
-            primaryContainer = container, secondaryContainer = container,
-            onPrimaryContainer = primary, onSecondaryContainer = primary, onPrimary = onPrimary),
+        colorScheme = colors,
         typography = Typography,
         shapes = YouRoomShapes,
         content = content

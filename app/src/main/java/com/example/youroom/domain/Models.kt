@@ -27,7 +27,8 @@ data class ClassroomSnapshot(
     val slots: List<LessonSlot>,
     val isDemo: Boolean = false,
 ) {
-    val classrooms: List<Classroom> get() = slots.flatMap { it.classrooms }.distinctBy { it.id }
+    val index: ClassroomIndex by lazy(LazyThreadSafetyMode.PUBLICATION) { ClassroomIndex(slots) }
+    val classrooms: List<Classroom> get() = index.classrooms
     fun isCurrentOn(date: LocalDate) = queryDate == date
 }
 

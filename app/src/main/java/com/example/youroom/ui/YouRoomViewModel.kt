@@ -23,6 +23,7 @@ data class YouRoomState(
     val loggingIn: Boolean = false,
     val refreshing: Boolean = false,
     val snapshot: ClassroomSnapshot? = null,
+    val campusSnapshots: Map<Campus, ClassroomSnapshot> = emptyMap(),
     val fromCache: Boolean = false,
     val viewingCache: Boolean = false,
     val demo: Boolean = false,
@@ -31,10 +32,14 @@ data class YouRoomState(
     val today: LocalDate = LocalDate.now(SchoolZone),
     val filters: SearchFilters = SearchFilters(),
     val profiles: Map<String, RoomProfile> = emptyMap(),
-    val customTags: Set<String> = emptySet(),
+    val tagCatalog: TagCatalog = TagCatalog(),
     val error: String? = null,
     val selectedRoomId: String? = null,
 ) {
+    val tagOrder: List<String> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        tagCatalog.available(profiles.values.flatMap { it.allTags })
+    }
+    val customTags: Set<String> get() = tagOrder.filterNot { it in PersonalTags.builtIn }.toSet()
     val showWorkspace: Boolean get() = loggedIn || demo || viewingCache
     val campusSnapshot: ClassroomSnapshot? get() = snapshot?.takeIf {
         it.campusId == campus.dataKey && it.isDemo == demo
@@ -50,11 +55,10 @@ data class YouRoomState(
         // Demo snapshots must not leak into an authenticated or cached workspace.
         if (snapshot?.isDemo == true && !demo) return null
         val profile = profiles[id]
-        val room = campusSnapshot?.classrooms?.find { it.id == id }
+        val room = campusSnapshot?.index?.roomsById?.get(id)
             ?: profile?.let { Classroom(it.roomId, it.name, it.building, null) } ?: return null
         return RoomMatch(room, profile ?: room.emptyProfile(),
-            if (stale) emptySet() else campusSnapshot?.slots?.filter { slot -> slot.classrooms.any { it.id == id } }
-                ?.map { it.number }?.toSet().orEmpty())
+            if (stale) emptySet() else campusSnapshot?.index?.freeSlotsByRoom?.get(id).orEmpty())
     }
 }
 
@@ -75,7 +79,12 @@ class YouRoomViewModel(
     private var realWorkspaces = Campus.entries.associateWith { CampusWorkspace() }
     private var demoWorkspaces = emptyMap<Campus, CampusWorkspace>()
     private var storedProfiles: Map<String, RoomProfile> = emptyMap()
-    private var storedCustomTags: Set<String> = emptySet()
+    private var storedCatalog = TagCatalog()
+    private var pendingCatalog: TagCatalog? = null
+    private var pendingSharedFilters: SearchFilters? = null
+    private var realBuildings = Campus.entries.associateWith { emptySet<String>() }
+    private var demoBuildings = Campus.entries.associateWith { emptySet<String>() }
+    private val pendingBuildings = mutableMapOf<Campus, Set<String>>()
     private var realFilters = SearchFilters()
     private var demoFilters = SearchFilters()
     private var realSelectionDate: LocalDate? = null
@@ -87,20 +96,39 @@ class YouRoomViewModel(
         viewModelScope.launch {
             repository.profiles.catch { showError("无法读取个人偏好，请重新启动 App。") }.collect { profiles ->
                 storedProfiles = profiles
-                mutableState.update { if (it.demo) it else it.copy(profiles = profiles, customTags = realCustomTags()) }
+                mutableState.update { if (it.demo) it else it.copy(profiles = profiles) }
             }
         }
         viewModelScope.launch {
             settings.filters.catch { showError("无法读取筛选设置。") }.collect { saved ->
-                realFilters = saved.copy(selectedSlots = realFilters.selectedSlots,
-                    query = realFilters.query, buildings = realFilters.buildings)
+                val cleaned = storedCatalog.removed.fold(saved) { filters, name -> filters.withoutTerm(name) }
+                if (pendingSharedFilters != null && pendingSharedFilters != sharedConditions(cleaned)) return@collect
+                pendingSharedFilters = null
+                realFilters = cleaned.copy(selectedSlots = realFilters.selectedSlots, query = realFilters.query,
+                        buildings = realBuildings.getValue(state.value.campus))
                 if (!state.value.demo) mutableState.update { it.copy(filters = realFilters) }
             }
         }
         viewModelScope.launch {
-            settings.customTags.catch { showError("无法读取自定义词条。") }.collect { tags ->
-                storedCustomTags = tags
-                if (!state.value.demo) mutableState.update { it.copy(customTags = realCustomTags()) }
+            settings.catalog.catch { showError("无法读取词条。") }.collect { catalog ->
+                if (pendingCatalog != null && pendingCatalog != catalog) return@collect
+                pendingCatalog = null
+                storedCatalog = catalog
+                realFilters = catalog.removed.fold(realFilters) { filters, name -> filters.withoutTerm(name) }
+                if (!state.value.demo) mutableState.update { it.copy(tagCatalog = catalog, filters = realFilters) }
+            }
+        }
+        viewModelScope.launch {
+            settings.buildings.catch { showError("无法读取教学楼筛选。") }.collect { values ->
+                realBuildings = Campus.entries.associateWith { campus ->
+                    val saved = values[campus].orEmpty()
+                    val pending = pendingBuildings[campus]
+                    if (pending != null && pending != saved) pending else {
+                        pendingBuildings.remove(campus); saved
+                    }
+                }
+                realFilters = realFilters.copy(buildings = realBuildings.getValue(state.value.campus))
+                if (!state.value.demo) mutableState.update { it.copy(filters = realFilters) }
             }
         }
         viewModelScope.launch {
@@ -179,11 +207,12 @@ class YouRoomViewModel(
     fun showDemo() {
         cancelRefresh()
         demoFilters = SearchFilters(setOf(1, 2))
+        demoBuildings = Campus.entries.associateWith { emptySet() }
         demoSelectionDate = today()
         demoWorkspaces = Campus.entries.associateWith { campus ->
             CampusWorkspace(snapshot = DemoData.snapshot(campus, clock))
         }
-        mutableState.update { it.copy(demo = true, loggedIn = false, viewingCache = false, profiles = emptyMap(), customTags = emptySet()) }
+        mutableState.update { it.copy(demo = true, loggedIn = false, viewingCache = false, profiles = emptyMap(), tagCatalog = TagCatalog()) }
         restoreWorkspace(Campus.XITUCHENG)
     }
 
@@ -197,7 +226,7 @@ class YouRoomViewModel(
     fun openLogin() {
         cancelRefresh()
         demoWorkspaces = emptyMap()
-        mutableState.update { it.copy(demo = false, loggedIn = false, viewingCache = false, profiles = storedProfiles, customTags = realCustomTags()) }
+        mutableState.update { it.copy(demo = false, loggedIn = false, viewingCache = false, profiles = storedProfiles, tagCatalog = storedCatalog) }
         restoreWorkspace(Campus.XITUCHENG)
         mutableState.update { it.copy(error = null) }
     }
@@ -206,9 +235,9 @@ class YouRoomViewModel(
         updateToday()
         if (state.value.campus == campus) return
         captureWorkspace()
-        // Time and attribute criteria are shared; buildings belong only to the current campus.
-        if (state.value.demo) demoFilters = demoFilters.copy(buildings = emptySet())
-        else realFilters = realFilters.copy(buildings = emptySet())
+        // Time/attribute criteria are shared; each campus restores its own building choices.
+        if (state.value.demo) demoFilters = demoFilters.copy(buildings = demoBuildings.getValue(campus))
+        else realFilters = realFilters.copy(buildings = realBuildings.getValue(campus))
         cancelRefresh()
         restoreWorkspace(campus)
         if (!state.value.demo && state.value.loggedIn && needsRefresh(state.value.campusSnapshot)) refresh()
@@ -234,32 +263,81 @@ class YouRoomViewModel(
         val current = state.value
         mutableState.update { it.copy(filters = filters) }
         captureWorkspace()
+        if (!current.demo && current.filters.buildings != filters.buildings) {
+            val campus = current.campus
+            pendingBuildings[campus] = filters.buildings
+            viewModelScope.launch {
+                try { settings.saveBuildings(campus, filters.buildings) }
+                catch (error: Exception) {
+                    if (error is CancellationException) throw error
+                    pendingBuildings.remove(campus)
+                    updateWorkspace(campus) { it.copy(error = "教学楼筛选已生效，但保存失败。") }
+                }
+            }
+        }
         if (!current.demo && current.filters.copy(selectedSlots = emptySet(), query = "", buildings = emptySet()) !=
             filters.copy(selectedSlots = emptySet(), query = "", buildings = emptySet())) {
+            pendingSharedFilters = sharedConditions(filters)
             val campus = current.campus
             viewModelScope.launch {
                 try { settings.save(filters) }
                 catch (error: Exception) {
                     if (error is CancellationException) throw error
+                    if (pendingSharedFilters == sharedConditions(filters)) pendingSharedFilters = null
                     updateWorkspace(campus) { it.copy(error = "筛选已生效，但设置保存失败。") }
                 }
             }
         }
     }
 
-    private fun realCustomTags() = storedCustomTags +
-        storedProfiles.values.flatMap { it.allTags }.filterNot { it in PersonalTags.builtIn }
+    private fun updateCatalog(catalog: TagCatalog) {
+        if (!state.value.demo) {
+            storedCatalog = catalog
+            pendingCatalog = catalog
+        }
+        mutableState.update { it.copy(tagCatalog = catalog) }
+    }
+
+    private fun sharedConditions(filters: SearchFilters) = filters.copy(selectedSlots = emptySet(), query = "", buildings = emptySet())
 
     fun addCustomTag(raw: String) {
         val name = raw.trim()
-        PersonalTags.validate(raw, state.value.customTags)?.let { showError(it); return }
-        if (state.value.demo) {
-            mutableState.update { it.copy(customTags = it.customTags + name) }
-        } else viewModelScope.launch {
+        PersonalTags.validate(raw, state.value.tagOrder.toSet())?.let { showError(it); return }
+        updateCatalog(state.value.tagCatalog.added(name))
+        if (!state.value.demo) viewModelScope.launch {
             try { settings.addTag(name) }
             catch (error: Exception) {
                 if (error is CancellationException) throw error
-                showError("词条保存失败，请重试。")
+                pendingCatalog = null; showError("词条已添加，但保存失败，请重试。")
+            }
+        }
+    }
+
+    fun removePersonalTag(name: String) {
+        if (name == PersonalTags.favorite || name !in state.value.tagOrder) return
+        updateCatalog(state.value.tagCatalog.deleted(name))
+        mutableState.update { it.copy(filters = it.filters.withoutTerm(name)) }
+        captureWorkspace()
+        if (!state.value.demo) pendingSharedFilters = sharedConditions(state.value.filters)
+        if (!state.value.demo) viewModelScope.launch {
+            try { settings.removeTag(name) }
+            catch (error: Exception) {
+                if (error is CancellationException) throw error
+                pendingCatalog = null; showError("词条已隐藏，但保存失败，请重试。")
+            }
+        }
+    }
+
+    fun reorderPersonalTags(names: List<String>) {
+        val valid = names.filter { it in state.value.tagOrder }
+        val catalog = state.value.tagCatalog.reordered(valid)
+        if (catalog == state.value.tagCatalog) return
+        updateCatalog(catalog)
+        if (!state.value.demo) viewModelScope.launch {
+            try { settings.reorderTags(valid) }
+            catch (error: Exception) {
+                if (error is CancellationException) throw error
+                pendingCatalog = null; showError("词条顺序已调整，但保存失败。")
             }
         }
     }
@@ -335,16 +413,23 @@ class YouRoomViewModel(
         val workspace = CampusWorkspace(current.snapshot, current.fromCache, current.refreshing, current.error)
         if (current.demo) {
             demoFilters = current.filters
+            demoBuildings = demoBuildings + (current.campus to current.filters.buildings)
             demoWorkspaces = demoWorkspaces + (current.campus to workspace)
         } else {
             realFilters = current.filters
+            realBuildings = realBuildings + (current.campus to current.filters.buildings)
             realWorkspaces = realWorkspaces + (current.campus to workspace)
         }
     }
 
     private fun restoreWorkspace(campus: Campus) {
         val workspace = (if (state.value.demo) demoWorkspaces else realWorkspaces).getValue(campus)
+        if (state.value.demo) demoFilters = demoFilters.copy(buildings = demoBuildings.getValue(campus))
+        else realFilters = realFilters.copy(buildings = realBuildings.getValue(campus))
         mutableState.update { it.copy(campus = campus, snapshot = workspace.snapshot, filters = if (it.demo) demoFilters else realFilters,
+            campusSnapshots = (if (it.demo) demoWorkspaces else realWorkspaces).mapNotNull { (key, value) ->
+                value.snapshot?.let { snapshot -> key to snapshot }
+            }.toMap(),
             fromCache = workspace.fromCache, refreshing = workspace.refreshing, error = workspace.error,
             today = today(), selectedRoomId = null) }
     }
