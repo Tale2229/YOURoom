@@ -3,7 +3,6 @@ package com.example.youroom.ui
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -13,6 +12,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.*
@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -29,15 +30,12 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.input.ImeAction
 import com.example.youroom.ui.theme.campusBadgeColor
 import com.example.youroom.domain.*
@@ -58,7 +56,6 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
     val latestCallback by rememberUpdatedState(onFilters)
     val available = remember(slots) { slots.map { it.number } }
     val rows = remember(available) { StudyGridLayout.rows(available) }
-    val markers = remember(rows, slots) { StudyGridLayout.markers(rows, slots) }
     // Coordinates are read only by pointer events. Writing Compose state here causes
     // a fresh grid composition on every frame as its containing page slides.
     val geometry = remember(context, available) { SlotPointerGeometry() }
@@ -117,8 +114,7 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                     }
                 }
             }) {
-                rows.forEachIndexed { rowIndex, row ->
-                    TimeMarkerBand(markers[rowIndex], cellWidth)
+                rows.forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         row.forEachIndexed { cellIndex, cell -> key(cell.kind, cell.number, cellIndex) {
                             val modifier = Modifier.width(cellWidth * cell.span + 4.dp * (cell.span - 1))
@@ -141,7 +137,7 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                                             stateDescription = if (isSelected) "已选中" else "未选中"
                                         }, contentAlignment = Alignment.Center) {
                                         Surface(Modifier.fillMaxWidth().height(36.dp).testTag("slot_face_${slot.number}"),
-                                            shape = MaterialTheme.shapes.small, color = background,
+                                            shape = RectangleShape, color = background,
                                             contentColor = if (isSelected) colors.onPrimary else colors.onSurfaceVariant) {
                                             Box(contentAlignment = Alignment.Center) {
                                                 Text("${slot.number}", style = MaterialTheme.typography.labelLarge)
@@ -158,48 +154,10 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                         } }
                     }
                 }
-                TimeMarkerBand(markers.last(), cellWidth)
             }
         }
         if (chosen.isNotEmpty()) Text(SlotSelection.summary(chosen), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.primary, modifier = Modifier.testTag("slot_summary"))
-    }
-}
-
-@Composable
-private fun TimeMarkerBand(markers: List<StudyTimeMarker?>, cellWidth: Dp) {
-    if (markers.none { it != null }) return
-    val bandHeight = with(LocalDensity.current) { maxOf(12.dp, 12.sp.toDp()) }
-    Row(Modifier.fillMaxWidth().height(bandHeight), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        markers.forEach { marker ->
-            Box(Modifier.width(cellWidth).fillMaxHeight(), contentAlignment =
-                if (marker?.start == false) Alignment.CenterEnd else Alignment.CenterStart) {
-                if (marker != null) Row(Modifier.testTag("time_marker_${marker.number}").semantics(mergeDescendants = true) {
-                    contentDescription = "第 ${marker.number} 节${if (marker.start) "开始" else "结束"}，${marker.label}"
-                }.height(bandHeight).padding(start = if (marker.start) 4.dp else 0.dp,
-                    end = if (marker.start) 0.dp else 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (marker.start) TimeMarkerLine(marker)
-                    Text(marker.label, Modifier.offset(y = if (marker.start) 2.dp else (-2).dp)
-                        .testTag("time_marker_label_${marker.number}"),
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 12.sp), maxLines = 1,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (!marker.start) TimeMarkerLine(marker)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TimeMarkerLine(marker: StudyTimeMarker) {
-    val color = MaterialTheme.colorScheme.primary
-    Canvas(Modifier.width(1.dp).fillMaxHeight().testTag("time_marker_line_${marker.number}")) {
-        val range = timeMarkerLineRange(marker.start, size.height, 48.dp.roundToPx(), 36.dp.roundToPx(), 2.dp.toPx())
-        // Draw outside the label band into the 48dp target's transparent inset.
-        // Pixel-rounded insets keep the endpoint flush with the 36dp rectangle.
-        drawLine(color, Offset(size.width / 2, range.start), Offset(size.width / 2, range.endInclusive),
-            strokeWidth = size.width)
     }
 }
 
@@ -222,6 +180,10 @@ private fun CompactRoomSearch(query: String, onQuery: (String) -> Unit, modifier
                         horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Icon(Icons.Outlined.Search, null, Modifier.size(16.dp), tint = colors.onSurfaceVariant)
                         Box(Modifier.weight(1f)) { inner() }
+                        if (query.isNotEmpty()) IconButton(onClick = { onQuery("") }, enabled = enabled,
+                            modifier = Modifier.width(24.dp).fillMaxHeight().testTag("clear_room_search")) {
+                            Icon(Icons.Outlined.Close, "清空教室搜索", Modifier.size(16.dp), tint = colors.onSurfaceVariant)
+                        }
                     }
                 })
         }

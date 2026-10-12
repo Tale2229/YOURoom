@@ -6,21 +6,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.youroom.data.DemoData
 import com.example.youroom.domain.*
 import com.example.youroom.ui.SlotPicker
-import com.example.youroom.ui.timeMarkerLineRange
 import com.example.youroom.ui.theme.YouRoomTheme
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
-import kotlin.math.roundToInt
 
 class SlotPickerUiTest {
     @get:Rule val compose = createComposeRule()
@@ -113,24 +108,28 @@ class SlotPickerUiTest {
         assertEquals(setOf(6), filters.selectedSlots)
     }
 
-    @Test fun timeGuideEndpointsMeetTheSlotFacesAndTextIsTenSp() {
+    @Test fun numericFacesHaveSquareCornersAndTimeMarkersAreAbsent() {
         render()
         for (number in listOf(1, 6, 7, 12, 13, 14)) {
-            val target = compose.onNodeWithTag("slot_$number").fetchSemanticsNode().boundsInRoot
-            val face = compose.onNodeWithTag("slot_face_$number", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-            val line = compose.onNodeWithTag("time_marker_line_$number", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-            val start = number in listOf(1, 7, 13)
-            val range = timeMarkerLineRange(start, line.height, target.height.roundToInt(), face.height.roundToInt(),
-                target.height / 48f * 2f)
-            if (start) assertEquals(face.top, line.top + range.endInclusive, 1f)
-            else assertEquals(face.bottom, line.top + range.start, 1f)
-            val text = compose.onNodeWithTag("time_marker_label_$number", useUnmergedTree = true)
-            val layout = mutableListOf<TextLayoutResult>()
-            text.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layout) }
-            assertEquals(10.sp, layout.single().layoutInput.style.fontSize)
-            val gap = if (start) face.top - text.fetchSemanticsNode().boundsInRoot.bottom else
-                text.fetchSemanticsNode().boundsInRoot.top - face.bottom
-            assertTrue("The time label must sit within 4dp of period $number", gap <= target.height / 48f * 4f + 1f)
+            compose.onNodeWithTag("time_marker_$number").assertDoesNotExist()
+            compose.onNodeWithTag("time_marker_line_$number", useUnmergedTree = true).assertDoesNotExist()
+            assertSquareCorners(compose.onNodeWithTag("slot_face_$number", useUnmergedTree = true))
         }
+    }
+
+    @Test fun inlineClearOnlyChangesTheQueryAndDisappearsWhenEmpty() {
+        filters = filters.copy(query = "201", buildings = setOf("2"), favoritesOnly = true, tags = setOf("人少"))
+        val original = filters
+        render()
+        val frame = compose.onNodeWithTag("room_search_frame").fetchSemanticsNode().boundsInRoot
+        val clear = compose.onNodeWithTag("clear_room_search")
+        val button = clear.fetchSemanticsNode().boundsInRoot
+        assertTrue(frame.contains(button.center))
+        assertTrue(button.center.x > frame.center.x)
+        clear.assertContentDescriptionEquals("清空教室搜索").performTouchInput { click() }
+        assertEquals(listOf(original.copy(query = "")), changes)
+        assertEquals(original.copy(query = ""), filters)
+        compose.onNodeWithTag("clear_room_search").assertDoesNotExist()
+        compose.onNodeWithTag("slot_6").assertIsSelected()
     }
 }

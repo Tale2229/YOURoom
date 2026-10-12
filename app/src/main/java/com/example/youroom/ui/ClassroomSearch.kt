@@ -27,5 +27,8 @@ fun rememberClassroomSearch(state: YouRoomState, enabled: Boolean): ClassroomSea
     }
     if (request == null) return ClassroomSearchPresentation(EmptySearch, false)
     val result = completed?.takeIf { it.request == request }?.result ?: cache.peek(request)
-    return ClassroomSearchPresentation(result ?: EmptySearch, result == null)
+    // Retain the visible list during local filtering instead of replacing it with
+    // a loading placeholder. Never retain results across snapshots or stale dates.
+    val previous = completed?.takeIf { it.request.snapshot === request.snapshot }?.result
+    return ClassroomSearchPresentation(result ?: previous ?: EmptySearch, result == null)
 }

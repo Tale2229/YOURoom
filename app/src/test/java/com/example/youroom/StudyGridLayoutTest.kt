@@ -1,10 +1,8 @@
 package com.example.youroom
 
-import com.example.youroom.data.DemoData
 import com.example.youroom.domain.*
 import org.junit.Assert.*
 import org.junit.Test
-import java.time.LocalTime
 
 class StudyGridLayoutTest {
     @Test fun fourteenPeriodsKeepSearchInColumnsFourAndFiveAndFilterInSix() {
@@ -29,27 +27,5 @@ class StudyGridLayoutTest {
             assertEquals(3, rows.last().takeWhile { it.kind != StudyGridCellKind.SEARCH }.sumOf { it.span })
         }
         assertEquals(listOf(1, 6, 14), StudyGridLayout.rows(listOf(14, 6, 1, 6)).flatten().mapNotNull { it.number })
-    }
-
-    @Test fun sixBoundaryMarkersHaveTheRequestedTimesAndPositions() {
-        val slots = DemoData.snapshot().slots
-        val rows = StudyGridLayout.rows(slots.map { it.number })
-        val bands = StudyGridLayout.markers(rows, slots)
-        assertEquals(6, bands.flatten().count { it != null })
-        assertEquals(StudyTimeMarker(1, true, "8:00"), bands[0][0])
-        assertEquals(StudyTimeMarker(6, false, "13:45"), bands[1][5])
-        assertEquals(StudyTimeMarker(7, true, "13:50"), bands[1][0])
-        assertEquals(StudyTimeMarker(12, false, "19:15"), bands[2][5])
-        assertEquals(StudyTimeMarker(13, true, "19:20"), bands[2][0])
-        assertEquals(StudyTimeMarker(14, false, "20:55"), bands[3][1])
-    }
-
-    @Test fun campusTimetableAndMissingBoundaryPeriodsAreRespected() {
-        val slots = DemoData.snapshot(Campus.SHAHE).slots.filterNot { it.number == 6 }.map {
-            if (it.number == 7) it.copy(start = LocalTime.of(14, 5)) else it
-        }
-        val bands = StudyGridLayout.markers(StudyGridLayout.rows(slots.map { it.number }), slots)
-        assertEquals("14:05", bands.flatten().filterNotNull().single { it.number == 7 }.label)
-        assertFalse(bands.flatten().filterNotNull().any { it.number == 6 })
     }
 }

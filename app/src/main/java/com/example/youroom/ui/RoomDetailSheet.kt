@@ -12,6 +12,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -57,7 +58,7 @@ fun RoomDetailSheet(room: RoomMatch, state: YouRoomState, onDismiss: () -> Unit,
                                 contentDescription = "第 ${slot.number} 节，${if (free) "课表空闲" else "未列为空闲"}"
                             }.background(
                                 availabilityColor(free),
-                                MaterialTheme.shapes.small), contentAlignment = Alignment.Center) {
+                                RectangleShape), contentAlignment = Alignment.Center) {
                                 Text("${slot.number}", style = MaterialTheme.typography.labelLarge,
                                     color = if (free) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
                             }

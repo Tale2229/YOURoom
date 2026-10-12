@@ -124,14 +124,9 @@ private fun ClassroomPage(state: YouRoomState, listState: LazyListState, active:
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("可选教室", style = MaterialTheme.typography.titleMedium)
                     }
-                    if (!waiting) Text("${result.rooms.size}", style = MaterialTheme.typography.headlineMedium,
+                    if (!waiting || result.rooms.isNotEmpty()) Text("${result.rooms.size}", style = MaterialTheme.typography.headlineMedium,
                         color = MaterialTheme.colorScheme.primary)
                 }
-            }
-            if (waiting) item {
-                if (moving) Text("切换校区…", Modifier.padding(horizontal = 24.dp, vertical = 32.dp),
-                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                else FilteringIndicator(if (snapshot == null) "正在获取教室…" else "正在筛选教室…")
             }
             if (!waiting && result.rooms.isEmpty()) item {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 36.dp),

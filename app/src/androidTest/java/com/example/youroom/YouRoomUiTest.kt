@@ -290,7 +290,7 @@ class YouRoomUiTest {
         compose.onNodeWithTag("slot_3").assertIsSelected()
     }
 
-    @Test fun compactGridAlignsTheSearchFilterAndSixTimeMarkers() {
+    @Test fun compactGridAlignsSearchAndFilterWithoutTimeMarkers() {
         enterDemo()
         val first = compose.onNodeWithTag("slot_1").fetchSemanticsNode().boundsInRoot
         val sixth = compose.onNodeWithTag("slot_6").fetchSemanticsNode().boundsInRoot
@@ -317,13 +317,11 @@ class YouRoomUiTest {
         val face = compose.onAllNodesWithTag("slot_face_1", useUnmergedTree = true).fetchSemanticsNodes()
             .single { it.boundsInRoot.width > 0f && first.contains(it.boundsInRoot.center) }.boundsInRoot
         assertEquals(first.height * .75f, face.height, 1f)
-        mapOf(1 to "8:00", 6 to "13:45", 7 to "13:50", 12 to "19:15", 13 to "19:20", 14 to "20:55")
-            .forEach { (number, label) -> compose.onNodeWithTag("time_marker_$number").assertTextEquals(label) }
-        val start = compose.onNodeWithTag("time_marker_1").fetchSemanticsNode().boundsInRoot
-        val end = compose.onNodeWithTag("time_marker_14").fetchSemanticsNode().boundsInRoot
-        assertTrue(start.bottom <= first.top)
-        assertTrue(end.top >= fourteenth.bottom)
-        assertEquals(fourteenth.right, end.right, 1f)
+        for (number in listOf(1, 6, 7, 12, 13, 14)) {
+            compose.onNodeWithTag("time_marker_$number").assertDoesNotExist()
+        }
+        compose.onNodeWithTag("filtering_indicator").assertDoesNotExist()
+        compose.onNodeWithText("正在筛选教室", substring = true).assertDoesNotExist()
         compose.onNodeWithText("搜索教室或备注").assertDoesNotExist()
         compose.onNodeWithText("只确认所选教学节次空闲，课间与午休不作保证。").assertDoesNotExist()
     }
@@ -340,6 +338,42 @@ class YouRoomUiTest {
         compose.onNodeWithTag("slot_1").assertIsSelected()
         compose.onNodeWithTag("slot_2").assertIsSelected()
         compose.onNodeWithTag("slot_14").assertIsNotSelected()
+    }
+
+    @Test fun searchClearRestoresRoomsWithoutChangingPeriodsOrSelectedBuildings() {
+        enterDemo()
+        compose.onNodeWithTag("extra_filters").performClick()
+        compose.onNodeWithTag("building_2").performClick()
+        compose.onNodeWithTag("close_filters").performClick()
+        compose.onNodeWithTag("room_search").performTextInput("不存在的教室")
+        compose.onNodeWithTag("room_search").performImeAction()
+        compose.waitUntil(10_000) {
+            compose.onAllNodesWithText("没有符合条件的教室").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("clear_room_search").performTouchInput { click() }
+        compose.onNodeWithTag("clear_room_search").assertDoesNotExist()
+        compose.onNodeWithTag("slot_1").assertIsSelected()
+        compose.onNodeWithTag("slot_2").assertIsSelected()
+        compose.onNodeWithTag("filter_badge").assertTextEquals("1")
+        compose.waitUntil(10_000) {
+            compose.onAllNodesWithText("2-201").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("2-201").assertExists()
+        compose.onNodeWithTag("filtering_indicator").assertDoesNotExist()
+    }
+
+    @Test fun detailPeriodRectanglesHaveSquareCornersInBothCampusThemes() {
+        enterDemo()
+        compose.onNodeWithTag("room_list").performScrollToNode(hasText("2-201"))
+        compose.onNodeWithText("2-201").performClick()
+        assertSquareCorners(compose.onNodeWithTag("detail_slot_1"))
+        assertSquareCorners(compose.onNodeWithTag("detail_slot_14"))
+        compose.onNodeWithTag("close_room_detail").performClick()
+        compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeLeft() }
+        compose.onNodeWithTag("room_list").performScrollToNode(hasText("演示楼-A101"))
+        compose.onNodeWithText("演示楼-A101").performClick()
+        assertSquareCorners(compose.onNodeWithTag("detail_slot_1"))
+        assertSquareCorners(compose.onNodeWithTag("detail_slot_14"))
     }
 
     @Test fun roomDetailsUpdateMarksAndNotesWithoutSavingOrDismissing() {
