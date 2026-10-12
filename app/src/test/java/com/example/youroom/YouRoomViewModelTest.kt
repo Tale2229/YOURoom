@@ -25,11 +25,12 @@ class YouRoomViewModelTest {
 
     private fun checkModel(authenticated: Boolean = true,
         setupSource: FakeSource.() -> Unit = {},
+        testClock: Clock = clock,
         block: suspend TestScope.(YouRoomViewModel, FakeSource, FakeSettings) -> Unit) = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val source = FakeSource(authenticated).apply(setupSource)
         val settings = FakeSettings()
-        val model = YouRoomViewModel(source, settings, clock)
+        val model = YouRoomViewModel(source, settings, testClock)
         val store = ViewModelStore().apply { put("test", model) }
         try { runCurrent(); block(model, source, settings) }
         finally { store.clear(); Dispatchers.resetMain() }
@@ -151,6 +152,45 @@ class YouRoomViewModelTest {
         val shahe = model.state.value.filters
         model.setFiltersFor(Campus.XITUCHENG, west)
         assertEquals(shahe, model.state.value.filters)
+    }
+
+    @Test fun newDayRefreshReinitializesSlotsAndPreservesPersonalFilters() {
+        val time = TestClock(instant)
+        checkModel(testClock = time) { model, source, _ ->
+            model.setFilters(model.state.value.filters.copy(selectedSlots = setOf(4, 6), building = "2"))
+            runCurrent()
+            time.value = instant.plusSeconds(86_400)
+            source.loader = { snapshot(it).copy(queryDate = LocalDate.of(2026, 10, 13), fetchedAt = time.value) }
+            model.onForeground(); runCurrent()
+            assertEquals(setOf(1), model.state.value.filters.selectedSlots)
+            assertEquals("2", model.state.value.filters.building)
+            assertFalse(model.state.value.stale)
+        }
+    }
+
+    @Test fun overnightDemoReinitializesBothCampusesWithoutNetworkOrPersistence() {
+        val time = TestClock(instant)
+        checkModel(false, testClock = time) { model, source, settings ->
+            model.showDemo()
+            model.setFilters(model.state.value.filters.copy(selectedSlots = setOf(4, 6)))
+            model.setCampus(Campus.SHAHE)
+            model.setFilters(model.state.value.filters.copy(selectedSlots = setOf(7, 9)))
+            time.value = instant.plusSeconds(86_400)
+            model.onForeground()
+            assertFalse(model.state.value.stale)
+            assertEquals(setOf(1), model.state.value.filters.selectedSlots)
+            model.setCampus(Campus.XITUCHENG)
+            assertEquals(setOf(1), model.state.value.filters.selectedSlots)
+            runCurrent()
+            assertTrue(source.requests.isEmpty())
+            assertTrue(settings.saved.isEmpty())
+        }
+    }
+
+    private class TestClock(var value: Instant) : Clock() {
+        override fun getZone() = SchoolZone
+        override fun withZone(zone: java.time.ZoneId): Clock = this
+        override fun instant() = value
     }
 
     private inner class FakeSource(var authenticated: Boolean) : ClassroomDataSource {

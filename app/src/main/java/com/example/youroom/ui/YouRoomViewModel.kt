@@ -116,7 +116,7 @@ class YouRoomViewModel(
         viewModelScope.launch {
             while (true) {
                 delay(30_000)
-                mutableState.update { it.copy(today = today()) }
+                updateToday()
             }
         }
     }
@@ -164,7 +164,7 @@ class YouRoomViewModel(
     }
 
     fun onForeground() {
-        mutableState.update { it.copy(today = today()) }
+        updateToday()
         val current = state.value
         if (!current.initializing && !current.demo && current.loggedIn && needsRefresh(current.campusSnapshot)) refresh()
     }
@@ -275,6 +275,17 @@ class YouRoomViewModel(
     private fun showError(text: String) { mutableState.update { it.copy(error = text) }; captureWorkspace() }
 
     private fun today() = LocalDate.now(clock.withZone(SchoolZone))
+    private fun updateToday() {
+        val date = today()
+        if (state.value.today == date) return
+        mutableState.update { it.copy(today = date) }
+        if (state.value.demo) {
+            demoWorkspaces = demoWorkspaces.mapValues { (campus, workspace) ->
+                withSnapshot(workspace, DemoData.snapshot(campus, clock), false)
+            }
+            restoreWorkspace(state.value.campus)
+        }
+    }
     private fun needsRefresh(snapshot: ClassroomSnapshot?) = snapshot == null || !snapshot.isCurrentOn(today()) ||
         Duration.between(snapshot.fetchedAt, clock.instant()).toMinutes() >= 10
 

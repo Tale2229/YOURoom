@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.Login
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,10 +24,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -45,31 +40,21 @@ fun ClassroomScreen(state: YouRoomState, onFilters: (SearchFilters) -> Unit,
     val snapshot = state.campusSnapshot
     val result = state.result
     val slots = snapshot?.slots.orEmpty()
-    LazyColumn(Modifier.fillMaxSize().imePadding().testTag("room_list"),
-        contentPadding = PaddingValues(bottom = 24.dp)) {
-        item {
-            Column(Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 16.dp)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("YouRoom", style = MaterialTheme.typography.headlineMedium)
-                        Text(state.campus.label, modifier = Modifier.testTag("campus_label"), style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    if (state.refreshing) {
-                        CircularProgressIndicator(Modifier.padding(12.dp).size(24.dp), strokeWidth = 2.dp)
-                    } else {
-                        IconAction(onClick = onRefresh, enabled = !state.demo) {
-                            Icon(if (state.viewingCache) Icons.AutoMirrored.Outlined.Login else Icons.Outlined.Refresh,
-                                if (state.viewingCache) "登录并刷新" else "刷新教室", Modifier.size(22.dp))
-                        }
-                    }
-                }
-                Spacer(Modifier.height(16.dp))
-                CampusTabs(state.campus, onCampus, state.demo)
-            }
-            HorizontalDivider(Modifier.padding(horizontal = 24.dp))
+    val westList = androidx.compose.foundation.lazy.rememberLazyListState()
+    val shaheList = androidx.compose.foundation.lazy.rememberLazyListState()
+    val listState = if (state.campus == Campus.XITUCHENG) westList else shaheList
+    val viewportDates = remember { mutableMapOf<Pair<Campus, Boolean>, java.time.LocalDate>() }
+    LaunchedEffect(state.campus, snapshot?.queryDate, state.demo) {
+        snapshot?.queryDate?.let { date ->
+            val previous = viewportDates.put(state.campus to state.demo, date)
+            if (previous != null && previous != date) listState.scrollToItem(0)
         }
-        run {
+    }
+    Column(Modifier.fillMaxSize().imePadding()) {
+        CampusHeader(state, onRefresh, onCampus)
+        HorizontalDivider(Modifier.padding(horizontal = 24.dp))
+        LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("room_list"), state = listState,
+            contentPadding = PaddingValues(bottom = 24.dp)) {
             if (state.demo) item { StatusNotice("演示数据 · 空闲安排为虚构，个人标记仅本次有效。") }
             if (state.stale) item { StatusNotice("缓存已跨日，刷新后才能筛选今天的教室。", isError = true) }
             item {
@@ -138,12 +123,12 @@ fun ClassroomScreen(state: YouRoomState, onFilters: (SearchFilters) -> Unit,
                 RoomRow(room, slots.map { it.number }, Modifier.animateItem(),
                     onClick = { onRoom(room.classroom.id) }, onFavorite = { onFavorite(room.classroom) })
             }
-        }
-        item {
-            HorizontalDivider(Modifier.padding(horizontal = 24.dp, vertical = 20.dp))
-            Text("课表空闲不保证现场有座位或教室开放。学校响应没有日期字段，查询日不代表已验证数据更新。",
-                Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            item {
+                HorizontalDivider(Modifier.padding(horizontal = 24.dp, vertical = 20.dp))
+                Text("课表空闲不保证现场有座位或教室开放。学校响应没有日期字段，查询日不代表已验证数据更新。",
+                    Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }

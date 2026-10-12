@@ -3,6 +3,7 @@ package com.example.youroom
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
@@ -15,6 +16,7 @@ import com.example.youroom.ui.YouRoomApp
 import com.example.youroom.ui.YouRoomViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -53,7 +55,7 @@ class YouRoomUiTest {
         compose.onNodeWithTag("campus_label").assertTextEquals("西土城")
         val west = mutableListOf<TextLayoutResult>()
         compose.onNodeWithTag("campus_label").performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(west) }
-        compose.onNodeWithTag("campus_SHAHE").performClick()
+        compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeLeft() }
         compose.onNodeWithTag("campus_label").assertTextEquals("沙河")
         val shahe = mutableListOf<TextLayoutResult>()
         compose.onNodeWithTag("campus_label").performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(shahe) }
@@ -99,7 +101,7 @@ class YouRoomUiTest {
         compose.onNodeWithTag("slot_1").assertIsSelected()
         compose.onNodeWithTag("slot_2").assertIsSelected()
         compose.onNodeWithTag("slot_3").assertIsSelected()
-        compose.onNodeWithTag("campus_XITUCHENG").assertIsSelected()
+        compose.onNodeWithTag("campus_label").assertTextEquals("西土城")
         compose.onNodeWithTag("slot_grid").performTouchInput {
             down(first)
             moveTo(third)
@@ -123,16 +125,64 @@ class YouRoomUiTest {
 
     @Test fun campusDemoSwitchDoesNotCarryWestClassroomsIntoShahe() {
         enterDemo()
-        compose.onNodeWithTag("campus_SHAHE").performScrollTo().performClick()
-        compose.onNodeWithTag("campus_SHAHE").assertIsSelected()
-        compose.onNodeWithText("演示楼-A101").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeLeft() }
+        compose.onNodeWithTag("campus_label").assertTextEquals("沙河")
+        compose.onNodeWithTag("room_list").performScrollToNode(hasText("演示楼-A101"))
+        compose.onNodeWithText("演示楼-A101").assertIsDisplayed()
         compose.onNodeWithText("2-201").assertDoesNotExist()
-        compose.onNodeWithTag("campus_XITUCHENG").performScrollTo().performClick()
-        compose.onNodeWithText("2-201").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeRight() }
+        compose.onNodeWithTag("room_list").performScrollToNode(hasText("2-201"))
+        compose.onNodeWithText("2-201").assertIsDisplayed()
     }
 
     private fun enterDemo() {
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("demo").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("demo").performScrollTo().performClick()
+    }
+
+    @Test fun fixedHeaderAndIndependentScrollPositionsSurviveCampusSwitch() {
+        enterDemo()
+        val header = compose.onNodeWithTag("campus_header").fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithTag("room_list").performScrollToNode(hasText("未来学习大楼-202-203"))
+        val scroll = compose.onNodeWithTag("room_list").fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange].value()
+        assertTrue(scroll > 0f)
+        assertEquals(header, compose.onNodeWithTag("campus_header").fetchSemanticsNode().boundsInRoot)
+        compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeLeft() }
+        compose.onNodeWithTag("campus_label").assertTextEquals("沙河")
+        compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeRight() }
+        compose.onNodeWithTag("campus_label").assertTextEquals("西土城")
+        assertEquals(scroll, compose.onNodeWithTag("room_list").fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange].value())
+        compose.onNodeWithTag("campus_SHAHE").assertDoesNotExist()
+        compose.onNodeWithTag("campus_XITUCHENG").assertDoesNotExist()
+    }
+
+    @Test fun verticalOrOutwardHeaderSwipesDoNotSwitchCampuses() {
+        enterDemo()
+        compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeRight() }
+        compose.onNodeWithTag("campus_label").assertTextEquals("西土城")
+        compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeDown() }
+        compose.onNodeWithTag("campus_label").assertTextEquals("西土城")
+        compose.onNodeWithTag("refresh_rooms").performTouchInput { swipeLeft() }
+        compose.onNodeWithTag("campus_label").assertTextEquals("西土城")
+    }
+
+    @Test fun campusCanBeSwitchedUsingTheAccessibilityAction() {
+        enterDemo()
+        val action = compose.onNodeWithTag("campus_swipe_region").fetchSemanticsNode().config[SemanticsActions.CustomActions].single()
+        assertEquals("切换到沙河校区", action.label)
+        compose.runOnIdle { assertTrue(action.action()) }
+        compose.onNodeWithTag("campus_label").assertTextEquals("沙河")
+    }
+
+    @Test fun listScrollingDoesNotPaintOrSwitchCampus() {
+        enterDemo()
+        compose.onNodeWithTag("room_list").performTouchInput {
+            swipeUp(startY = height * .9f, endY = height * .1f)
+        }
+        compose.onNodeWithTag("campus_label").assertTextEquals("西土城")
+        compose.onNodeWithTag("room_list").performScrollToIndex(1)
+        compose.onNodeWithTag("slot_1").assertIsSelected()
+        compose.onNodeWithTag("slot_2").assertIsSelected()
+        compose.onNodeWithTag("slot_3").assertIsNotSelected()
     }
 }

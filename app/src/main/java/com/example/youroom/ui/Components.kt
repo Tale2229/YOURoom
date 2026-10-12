@@ -27,7 +27,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import java.time.format.DateTimeFormatter
 import com.example.youroom.domain.SchoolZone
-import com.example.youroom.domain.Campus
 
 @Composable
 fun AppMark(modifier: Modifier = Modifier) {
@@ -49,25 +48,6 @@ fun IconAction(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Bool
         color = if (filled) MaterialTheme.colorScheme.surfaceContainer else Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else .38f)) {
         Box(contentAlignment = Alignment.Center) { content() }
-    }
-}
-
-@Composable
-fun CampusTabs(campus: Campus, onCampus: (Campus) -> Unit, demo: Boolean, modifier: Modifier = Modifier) {
-    Row(modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-        Campus.entries.forEach { option ->
-            val selected = campus == option
-            Column(Modifier.weight(1f).testTag("campus_${option.name}")
-                .selectable(selected, role = Role.Tab, onClick = { onCampus(option) })) {
-                Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(option.label, style = MaterialTheme.typography.titleMedium,
-                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                val lineWidth by animateDpAsState(if (selected) 32.dp else 0.dp, tween(160), label = "campus_line")
-                Box(Modifier.width(lineWidth).height(2.dp).background(MaterialTheme.colorScheme.primary))
-            }
-        }
     }
 }
 
