@@ -4,11 +4,17 @@ import com.example.youroom.domain.Campus
 import com.example.youroom.ui.theme.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.sp
 import org.junit.Assert.*
 import org.junit.Test
 import kotlin.math.pow
 
 class CampusThemeTest {
+    @Test fun campusSubtitleRetainsTheOriginalBodySmallTypography() {
+        assertEquals(12.sp, Typography.bodySmall.fontSize)
+        assertEquals(FontFamily.Default, Typography.bodySmall.fontFamily)
+    }
     @Test fun lightThemesUseTheAgreedCampusColors() {
         assertEquals(0xFF263D59.toInt(), campusColorScheme(Campus.XITUCHENG, false).primary.toArgb())
         assertEquals(0xFF315C4E.toInt(), campusColorScheme(Campus.SHAHE, false).primary.toArgb())

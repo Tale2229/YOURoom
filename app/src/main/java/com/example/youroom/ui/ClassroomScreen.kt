@@ -52,7 +52,7 @@ fun ClassroomScreen(state: YouRoomState, onFilters: (SearchFilters) -> Unit,
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("YouRoom", style = MaterialTheme.typography.headlineMedium)
-                        Text("今日空闲教室", style = MaterialTheme.typography.bodySmall,
+                        Text(state.campus.label, modifier = Modifier.testTag("campus_label"), style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     if (state.refreshing) {
