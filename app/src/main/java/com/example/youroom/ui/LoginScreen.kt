@@ -91,11 +91,11 @@ fun LoginScreen(state: YouRoomState, onLogin: (String, String) -> Unit,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("demo")) {
             Text("先看看演示")
         }
-        AnimatedVisibility(state.snapshot != null && !state.loggingIn) {
+        AnimatedVisibility(state.cachedCampuses.isNotEmpty() && !state.loggingIn) {
             TextButton(onClick = onCache, shape = MaterialTheme.shapes.small,
                 modifier = Modifier.fillMaxWidth()) { Text("查看本地缓存（非实时）") }
         }
-        Text("个人工具 · 非学校官方应用 · 首版支持西土城校区",
+        Text("个人工具 · 非学校官方应用 · 西土城 / 沙河校区",
             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(24.dp))
     }

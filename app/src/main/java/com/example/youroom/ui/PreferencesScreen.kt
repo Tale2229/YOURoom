@@ -64,7 +64,7 @@ fun PreferencesScreen(state: YouRoomState, onRoom: (String?) -> Unit,
                 Text("关于数据", style = MaterialTheme.typography.titleMedium)
                 Text("安静、插座等标签由你标记，不来自学校接口。未标记不代表没有。教务课表空闲也不等于现场可用。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("首版仅接入已验证的西土城校区。校外访问能力取决于校园网络与 VPN 配置。",
+                Text("支持西土城与沙河校区，个人标记按校区区分。校外访问取决于校园网络与 VPN 配置。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedButton(onClick = { confirmExit = true }, shape = MaterialTheme.shapes.small,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {

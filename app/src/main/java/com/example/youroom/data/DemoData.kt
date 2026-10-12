@@ -2,12 +2,13 @@ package com.example.youroom.data
 
 import com.example.youroom.domain.*
 import java.time.Instant
+import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalTime
 
 /** Deliberately synthetic availability. Never persisted or presented as school data. */
 object DemoData {
-    fun snapshot(campus: Campus = Campus.XITUCHENG): ClassroomSnapshot {
+    fun snapshot(campus: Campus = Campus.XITUCHENG, clock: Clock = Clock.system(SchoolZone)): ClassroomSnapshot {
         val names = if (campus == Campus.SHAHE) listOf("演示楼-A101(60)", "演示楼-A102(80)",
             "演示楼-A201(100)", "演示楼-A202(60)", "演示楼-B101(80)", "演示楼-B102(60)")
         else listOf("2-201(180)", "2-240(180)", "2-306(64)", "2-435(58)",
@@ -22,6 +23,6 @@ object DemoData {
             LessonSlot(index + 1, LocalTime.parse(start), LocalTime.parse(end),
                 rooms.filterIndexed { roomIndex, _ -> roomIndex < 3 || (roomIndex + index) % 4 != 0 })
         }
-        return ClassroomSnapshot(campus.dataKey, LocalDate.now(SchoolZone), Instant.now(), slots, isDemo = true)
+        return ClassroomSnapshot(campus.dataKey, LocalDate.now(clock.withZone(SchoolZone)), clock.instant(), slots, isDemo = true)
     }
 }

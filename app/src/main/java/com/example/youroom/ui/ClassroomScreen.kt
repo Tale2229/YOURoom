@@ -55,10 +55,10 @@ fun ClassroomScreen(state: YouRoomState, onFilters: (SearchFilters) -> Unit,
                         Text("今日空闲教室", style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    if (state.refreshing && !state.campusUnavailable) {
+                    if (state.refreshing) {
                         CircularProgressIndicator(Modifier.padding(12.dp).size(24.dp), strokeWidth = 2.dp)
                     } else {
-                        IconAction(onClick = onRefresh, enabled = !state.demo && !state.campusUnavailable) {
+                        IconAction(onClick = onRefresh, enabled = !state.demo) {
                             Icon(if (state.viewingCache) Icons.AutoMirrored.Outlined.Login else Icons.Outlined.Refresh,
                                 if (state.viewingCache) "登录并刷新" else "刷新教室", Modifier.size(22.dp))
                         }
@@ -69,20 +69,7 @@ fun ClassroomScreen(state: YouRoomState, onFilters: (SearchFilters) -> Unit,
             }
             HorizontalDivider(Modifier.padding(horizontal = 24.dp))
         }
-        if (state.campusUnavailable) {
-            item {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 52.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text("沙河校区待接入", style = MaterialTheme.typography.headlineMedium)
-                    Text("此校区接口尚未验证，不显示西土城的教室数据。",
-                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    OutlinedButton(onClick = { onCampus(Campus.XITUCHENG) },
-                        shape = MaterialTheme.shapes.small, modifier = Modifier.heightIn(min = 48.dp)) {
-                        Text("返回西土城")
-                    }
-                }
-            }
-        } else {
+        run {
             if (state.demo) item { StatusNotice("演示数据 · 空闲安排为虚构，个人标记仅本次有效。") }
             if (state.stale) item { StatusNotice("缓存已跨日，刷新后才能筛选今天的教室。", isError = true) }
             item {

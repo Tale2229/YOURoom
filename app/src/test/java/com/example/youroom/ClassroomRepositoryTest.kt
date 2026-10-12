@@ -3,6 +3,7 @@ package com.example.youroom
 import com.example.youroom.data.*
 import com.example.youroom.data.local.*
 import com.example.youroom.domain.SchoolZone
+import com.example.youroom.domain.Campus
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -38,9 +39,32 @@ class ClassroomRepositoryTest {
 
     @After fun tearDown() { server.shutdown() }
 
+    @Test fun shaheUses04AndDoesNotReplaceWestCampusCache() = runBlocking {
+        val original = oldSnapshot()
+        dao.savedSnapshot = original
+        server.enqueue(MockResponse().setBody(VALID_RESPONSE))
+        val snapshot = repository.refresh(Campus.SHAHE)
+        assertEquals("04", snapshot.campusId)
+        assertTrue(snapshot.classrooms.all { it.id.startsWith("04:") })
+        assertEquals("04", server.takeRequest().requestUrl!!.queryParameter("campusId"))
+        assertEquals(original, dao.savedSnapshot)
+        assertNotNull(dao.snapshots["04"])
+        assertEquals("04", repository.cached(Campus.SHAHE)!!.campusId)
+    }
+
+    @Test fun shaheFailureLeavesBothCampusCachesIntact() = runBlocking {
+        dao.savedSnapshot = oldSnapshot()
+        dao.snapshots["04"] = oldSnapshot().copy(campusId = "04")
+        val original = dao.snapshots.toMap()
+        server.enqueue(MockResponse().setResponseCode(500).setBody("""{"code":"500"}"""))
+        try { repository.refresh(Campus.SHAHE); fail("Expected service failure") }
+        catch (_: SchoolRequestFailed) { }
+        assertEquals(original, dao.snapshots)
+    }
+
     @Test fun successfulRefreshPersistsValidatedSnapshotWithSchoolQueryDate() = runBlocking {
         server.enqueue(MockResponse().setBody(VALID_RESPONSE))
-        val snapshot = repository.refresh()
+        val snapshot = repository.refresh(Campus.XITUCHENG)
         assertEquals(LocalDate.of(2026, 10, 11), snapshot.queryDate)
         assertEquals(now.get(), snapshot.fetchedAt)
         assertEquals("2026-10-11", dao.savedSnapshot!!.queryDate)
@@ -52,7 +76,7 @@ class ClassroomRepositoryTest {
         val original = oldSnapshot()
         dao.savedSnapshot = original
         server.enqueue(MockResponse().setBody("""{"code":"1","data":[{"renamed":"unexpected"}]}"""))
-        try { repository.refresh(); fail("Expected schema failure") }
+        try { repository.refresh(Campus.XITUCHENG); fail("Expected schema failure") }
         catch (_: InvalidSchoolResponse) { }
         assertEquals(original, dao.savedSnapshot)
         assertEquals("dummy-test-token", session.token)
@@ -62,7 +86,7 @@ class ClassroomRepositoryTest {
         val original = oldSnapshot()
         dao.savedSnapshot = original
         server.enqueue(MockResponse().setResponseCode(500).setBody("""{"code":"500","Msg":"failed"}"""))
-        try { repository.refresh(); fail("Expected service failure") }
+        try { repository.refresh(Campus.XITUCHENG); fail("Expected service failure") }
         catch (_: SchoolRequestFailed) { }
         assertEquals(original, dao.savedSnapshot)
         assertEquals("dummy-test-token", session.token)
@@ -72,7 +96,7 @@ class ClassroomRepositoryTest {
         val original = oldSnapshot()
         dao.savedSnapshot = original
         server.enqueue(MockResponse().setResponseCode(500).setBody("""{"code":"401","Msg":"非法访问"}"""))
-        try { repository.refresh(); fail("Expected authentication failure") }
+        try { repository.refresh(Campus.XITUCHENG); fail("Expected authentication failure") }
         catch (_: AuthenticationRequired) { }
         assertNull(session.token)
         assertEquals(original, dao.savedSnapshot)
@@ -82,7 +106,7 @@ class ClassroomRepositoryTest {
         for (token in listOf(null, "", "  ")) {
             session.token = token
             assertFalse(repository.hasSession())
-            try { repository.refresh(); fail("Expected authentication failure") }
+            try { repository.refresh(Campus.XITUCHENG); fail("Expected authentication failure") }
             catch (_: AuthenticationRequired) { }
         }
         assertEquals(0, server.requestCount)
@@ -98,14 +122,14 @@ class ClassroomRepositoryTest {
                 return MockResponse().setBody(VALID_RESPONSE)
             }
         }
-        try { repository.refresh(); fail("Expected midnight rejection") }
+        try { repository.refresh(Campus.XITUCHENG); fail("Expected midnight rejection") }
         catch (error: SchoolRequestFailed) { assertTrue(error.userMessage.contains("午夜")) }
         assertEquals(original, dao.savedSnapshot)
     }
 
     @Test fun cacheRetainsItsOriginalQueryDateRatherThanRelabelingAsToday() = runBlocking {
         dao.savedSnapshot = oldSnapshot()
-        val cached = repository.cached()!!
+        val cached = repository.cached(Campus.XITUCHENG)!!
         assertEquals(LocalDate.of(2026, 10, 10), cached.queryDate)
         assertFalse(cached.isCurrentOn(LocalDate.of(2026, 10, 11)))
         assertEquals(0, server.requestCount)
@@ -113,7 +137,7 @@ class ClassroomRepositoryTest {
 
     @Test fun corruptCacheIsIgnoredWithoutAnExternalRequest() = runBlocking {
         dao.savedSnapshot = oldSnapshot().copy(responseJson = "corrupted-json")
-        assertNull(repository.cached())
+        assertNull(repository.cached(Campus.XITUCHENG))
         assertEquals(0, server.requestCount)
     }
 
@@ -136,10 +160,13 @@ class ClassroomRepositoryTest {
     }
 
     private class MemoryDao : YouRoomDao {
-        var savedSnapshot: SnapshotEntity? = null
+        val snapshots = mutableMapOf<String, SnapshotEntity>()
+        var savedSnapshot: SnapshotEntity?
+            get() = snapshots["01"]
+            set(value) { if (value == null) snapshots.remove("01") else snapshots["01"] = value }
         val profileRows = MutableStateFlow<List<ProfileEntity>>(emptyList())
-        override suspend fun snapshot(campusId: String) = savedSnapshot?.takeIf { it.campusId == campusId }
-        override suspend fun saveSnapshot(snapshot: SnapshotEntity) { savedSnapshot = snapshot }
+        override suspend fun snapshot(campusId: String) = snapshots[campusId]
+        override suspend fun saveSnapshot(snapshot: SnapshotEntity) { snapshots[snapshot.campusId] = snapshot }
         override fun profiles(): Flow<List<ProfileEntity>> = profileRows
         override suspend fun saveProfile(profile: ProfileEntity) {
             profileRows.value = profileRows.value.filterNot { it.roomId == profile.roomId } + profile

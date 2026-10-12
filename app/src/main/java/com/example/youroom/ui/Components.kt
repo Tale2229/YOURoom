@@ -63,8 +63,6 @@ fun CampusTabs(campus: Campus, onCampus: (Campus) -> Unit, demo: Boolean, modifi
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(option.label, style = MaterialTheme.typography.titleMedium,
                         color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (!demo && !option.connected) Text("待接入", style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 val lineWidth by animateDpAsState(if (selected) 32.dp else 0.dp, tween(160), label = "campus_line")
                 Box(Modifier.width(lineWidth).height(2.dp).background(MaterialTheme.colorScheme.primary))
@@ -134,7 +132,6 @@ fun AvailabilityStrip(freeSlots: Set<Int>, allSlots: List<Int>, modifier: Modifi
 }
 
 fun snapshotLabel(state: YouRoomState): String {
-    if (state.campusUnavailable) return "沙河数据待接入 · 未发起学校接口请求"
     val snapshot = state.campusSnapshot ?: return "尚未获取教室数据"
     if (state.demo) return "演示数据 · 非实时 · 标记仅本次有效"
     val date = snapshot.queryDate.format(DateTimeFormatter.ofPattern("M月d日"))
