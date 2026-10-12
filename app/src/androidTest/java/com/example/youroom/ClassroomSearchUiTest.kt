@@ -23,6 +23,27 @@ import java.util.concurrent.atomic.AtomicInteger
 class ClassroomSearchUiTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun emptySelectionRunsSearchAndStaleDataRemainsBlocked() {
+        val date = LocalDate.of(2026, 10, 12)
+        val first = Classroom("04:教一-101", "教一-101", "教一", 60)
+        val second = Classroom("04:教二-201", "教二-201", "教二", 100)
+        val snapshot = ClassroomSnapshot("04", date, Instant.EPOCH, listOf(
+            LessonSlot(1, LocalTime.of(8, 0), LocalTime.of(8, 45), listOf(first)),
+            LessonSlot(2, LocalTime.of(8, 50), LocalTime.of(9, 35), listOf(second))))
+        var today by mutableStateOf(date)
+        compose.setContent {
+            YouRoomTheme(campus = Campus.SHAHE) {
+                val presentation = rememberClassroomSearch(YouRoomState(campus = Campus.SHAHE,
+                    snapshot = snapshot, today = today, filters = SearchFilters()), enabled = true)
+                Text(if (presentation.pending) "等待筛选" else "${presentation.result.rooms.size}",
+                    Modifier.testTag("search_state"))
+            }
+        }
+        compose.waitUntil(10_000) { compose.onAllNodes(hasText("2")).fetchSemanticsNodes().isNotEmpty() }
+        compose.runOnIdle { today = date.plusDays(1) }
+        compose.onNodeWithTag("search_state").assertTextEquals("0")
+    }
+
     @Test fun filteringWaitsForPageSettlementAndDoesNotScanRoomsOnTheMainThread() {
         val reads = AtomicInteger()
         val mainThreadRead = AtomicBoolean(false)

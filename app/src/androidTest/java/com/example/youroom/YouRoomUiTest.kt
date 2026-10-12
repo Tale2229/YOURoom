@@ -91,7 +91,8 @@ class YouRoomUiTest {
         compose.onNodeWithText("清空").performClick()
         compose.onNodeWithText("请选择自习时段").assertDoesNotExist()
         compose.onNodeWithTag("slot_summary").assertDoesNotExist()
-        compose.onNodeWithText("2-201").assertDoesNotExist()
+        compose.onNodeWithTag("room_list").performScrollToNode(hasText("2-201"))
+        compose.onNodeWithText("2-201").assertIsDisplayed()
     }
 
     @Test fun gridDragCanAddAndRemoveWithoutTogglingTheWholePage() {
@@ -222,6 +223,57 @@ class YouRoomUiTest {
         compose.onNodeWithTag("extra_filters").performClick()
         compose.onNodeWithTag("building_2").assertIsSelected()
         compose.onNodeWithTag("building_3").assertIsSelected()
+    }
+
+    @Test fun filtersHaveNoCapacityFieldAndResetAndCloseShareTheFooter() {
+        enterDemo()
+        compose.onNodeWithTag("extra_filters").performScrollTo().performClick()
+        compose.onNodeWithText("最低标注容量").assertDoesNotExist()
+        compose.onNodeWithText("重置筛选").assertDoesNotExist()
+        compose.onNodeWithTag("reset_filters").assertTextEquals("重置")
+        compose.onNodeWithTag("close_filters").assertTextEquals("关闭")
+        val reset = compose.onNodeWithTag("reset_filters").fetchSemanticsNode().boundsInRoot
+        val close = compose.onNodeWithTag("close_filters").fetchSemanticsNode().boundsInRoot
+        val campus = compose.onNodeWithTag("filter_campus").fetchSemanticsNode().boundsInRoot
+        assertTrue(reset.right <= close.left)
+        assertEquals(reset.center.y, close.center.y, 1f)
+        assertTrue(close.top > campus.bottom)
+        compose.onNodeWithTag("building_2").performClick()
+        compose.onNodeWithTag("filter_favorite").performClick()
+        compose.onNodeWithTag("reset_filters").performClick()
+        compose.onNodeWithTag("building_all").assertIsSelected()
+        compose.onNodeWithTag("filter_favorite").assertIsNotSelected()
+        compose.onNodeWithTag("filter_badge").assertDoesNotExist()
+        compose.onNodeWithTag("filter_dialog").assertIsDisplayed()
+        compose.onNodeWithTag("close_filters").performClick()
+        compose.onNodeWithTag("filter_dialog").assertDoesNotExist()
+    }
+
+    @Test fun addTermButtonIsToTheRightOfTheNameField() {
+        enterDemo()
+        compose.onNodeWithTag("extra_filters").performScrollTo().performClick()
+        compose.onNodeWithTag("edit_tags").performClick()
+        val input = compose.onNodeWithTag("custom_tag_name").fetchSemanticsNode().boundsInRoot
+        val add = compose.onNodeWithTag("add_tag").fetchSemanticsNode().boundsInRoot
+        assertTrue(add.left >= input.right)
+        assertTrue(add.center.y in input.top..input.bottom)
+        compose.onNodeWithTag("custom_tag_name").performTextInput("靠窗")
+        compose.onNodeWithTag("close_filters").assertIsDisplayed()
+        compose.onNodeWithTag("add_tag").performClick()
+        compose.onNodeWithTag("filter_tag_靠窗").assertExists()
+    }
+
+    @Test fun emptyTimeSelectionStillAllowsExtraFiltersAndReset() {
+        enterDemo()
+        compose.onNodeWithText("清空").performScrollTo().performClick()
+        compose.onNodeWithTag("extra_filters").performScrollTo().performClick()
+        compose.onNodeWithTag("filter_favorite").performClick()
+        compose.onNodeWithTag("close_filters").performClick()
+        compose.onNodeWithText("没有符合条件的教室").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("清除额外筛选").performScrollTo().performClick()
+        compose.onNodeWithTag("room_list").performScrollToNode(hasText("2-201"))
+        compose.onNodeWithText("2-201").assertIsDisplayed()
+        compose.onNodeWithText("请选择自习时段").assertDoesNotExist()
     }
 
     @Test fun selectedTimeIsSharedEvenAfterEditingTheOtherCampus() {

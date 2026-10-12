@@ -5,6 +5,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -103,13 +104,16 @@ fun TagEditor(state: YouRoomState, onFilters: (SearchFilters) -> Unit, onAdd: (S
             }
         }
         if (editing) {
-            OutlinedTextField(name, { name = it; error = null }, singleLine = true, label = { Text("词条名称") },
-                modifier = Modifier.fillMaxWidth().testTag("custom_tag_name"), isError = error != null,
-                supportingText = if (error != null) ({ Text(error.orEmpty()) }) else null)
-            TextButton(onClick = {
-                error = PersonalTags.validate(name, state.tagOrder.toSet())
-                if (error == null) { onAdd(name.trim()); name = "" }
-            }, modifier = Modifier.testTag("add_tag")) { Text("添加") }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(name, { name = it; error = null }, singleLine = true, label = { Text("词条名称") },
+                    modifier = Modifier.weight(1f).testTag("custom_tag_name"), isError = error != null,
+                    supportingText = if (error != null) ({ Text(error.orEmpty()) }) else null)
+                TextButton(onClick = {
+                    error = PersonalTags.validate(name, state.tagOrder.toSet())
+                    if (error == null) { onAdd(name.trim()); name = "" }
+                }, modifier = Modifier.testTag("add_tag")) { Text("添加") }
+            }
         }
     }
     removal?.let { tag -> AlertDialog(onDismissRequest = { removal = null },

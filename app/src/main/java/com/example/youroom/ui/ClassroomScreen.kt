@@ -158,7 +158,7 @@ private fun ClassroomPage(state: YouRoomState, listState: LazyListState, active:
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 else FilteringIndicator(if (snapshot == null) "正在获取教室…" else "正在筛选教室…")
             }
-            if (!waiting && result.rooms.isEmpty() && (snapshot == null || state.stale || state.filters.selectedSlots.isNotEmpty())) item {
+            if (!waiting && result.rooms.isEmpty()) item {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 36.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(when {
@@ -173,7 +173,7 @@ private fun ClassroomPage(state: YouRoomState, listState: LazyListState, active:
                     if (snapshot == null || state.stale) TextButton(onClick = onRefresh,
                         shape = MaterialTheme.shapes.small, enabled = !state.refreshing && !state.demo) {
                         Text(if (state.viewingCache) "登录并刷新" else "重新获取")
-                    } else if (state.filters.selectedSlots.isNotEmpty()) TextButton(onClick = { onFilters(SearchFilters(selectedSlots = state.filters.selectedSlots)) },
+                    } else TextButton(onClick = { onFilters(SearchFilters(selectedSlots = state.filters.selectedSlots)) },
                         shape = MaterialTheme.shapes.small) { Text("清除额外筛选") }
                 }
             }

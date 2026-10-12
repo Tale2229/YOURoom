@@ -26,7 +26,8 @@ class SharedFiltersTest {
         assertTrue(shared.buildings.isEmpty())
         assertTrue(shared.favoritesOnly && shared.outletsOnly)
         assertEquals(setOf(PersonalTags.legacyQuiet), shared.tags)
-        assertEquals(60, shared.minimumCapacity)
+        assertEquals(0, shared.minimumCapacity)
+        assertNull(migrated[SharedFilterPreferences.capacity])
         assertEquals(setOf(PersonalTags.legacyQuiet), migrated[SharedFilterPreferences.definitions])
         assertEquals("2", migrated[CampusFilterPreferences.building(Campus.XITUCHENG)])
         assertFalse(migration.shouldMigrate(migrated))
@@ -37,6 +38,16 @@ class SharedFiltersTest {
         SharedFilterPreferences.write(values, SearchFilters(setOf(1, 3), buildings = setOf("2"), query = "201",
             favoritesOnly = true, tags = setOf("靠窗")))
         assertEquals(SearchFilters(favoritesOnly = true, tags = setOf("靠窗")), SharedFilterPreferences.read(values))
+    }
+
+    @Test fun retiredCapacityIsIgnoredAndRemovedWithoutLosingOtherPreferences() {
+        val values = mutablePreferencesOf(SharedFilterPreferences.capacity to 100,
+            SharedFilterPreferences.favorites to true, SharedFilterPreferences.tags to setOf("靠窗"))
+        val filters = SharedFilterPreferences.read(values)
+        assertEquals(SearchFilters(favoritesOnly = true, tags = setOf("靠窗")), filters)
+        SharedFilterPreferences.write(values, filters.copy(minimumCapacity = 200))
+        assertNull(values[SharedFilterPreferences.capacity])
+        assertEquals(filters, SharedFilterPreferences.read(values))
     }
 
     @Test fun customTagValidationRejectsBlankDuplicatesBuiltInsAndOverlongNames() {

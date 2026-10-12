@@ -14,7 +14,7 @@ fun rememberClassroomSearch(state: YouRoomState, enabled: Boolean): ClassroomSea
     val snapshot = state.campusSnapshot
     val cache = remember { ClassroomSearchCache() }
     val request = remember(snapshot, state.filters, state.profiles, state.stale) {
-        snapshot?.takeUnless { state.stale || state.filters.selectedSlots.isEmpty() }
+        snapshot?.takeUnless { state.stale }
             ?.let { ClassroomSearchRequest(it, state.filters, state.profiles) }
     }
     val completed by produceState<CompletedSearch?>(null, request, enabled) {

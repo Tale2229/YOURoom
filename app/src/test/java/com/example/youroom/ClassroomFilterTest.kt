@@ -29,11 +29,37 @@ class ClassroomFilterTest {
         assertEquals(listOf(1, 3), result.selectedSlots.map { it.number })
     }
 
-    @Test fun emptySelectionDoesNotReturnAllRooms() {
-        val result = ClassroomFilter.search(snapshot, SearchFilters(emptySet()), emptyMap())
-        assertTrue(result.rooms.isEmpty())
+    @Test fun emptySelectionReturnsEveryUniqueRoomAcrossTheSnapshot() {
+        val differentAvailability = snapshot.copy(slots = snapshot.slots.map {
+            if (it.number == 1) it.copy(classrooms = listOf(a, c)) else it
+        })
+        val result = ClassroomFilter.search(differentAvailability, SearchFilters(emptySet()), emptyMap())
+        assertEquals(listOf(a.id, b.id, c.id), result.rooms.map { it.classroom.id })
+        assertEquals(setOf(1, 2), result.rooms.first { it.classroom.id == a.id }.freeSlots)
+        assertEquals(setOf(3), result.rooms.first { it.classroom.id == b.id }.freeSlots)
+        assertEquals(setOf(1, 2, 3), result.rooms.first { it.classroom.id == c.id }.freeSlots)
         assertTrue(result.selectedSlots.isEmpty())
         assertFalse(result.missingSlots)
+        assertFalse(result.hasUncoveredGaps)
+    }
+
+    @Test fun emptySelectionStillAppliesBuildingsQueryAndAllPersonalConditions() {
+        val profiles = mapOf(a.id to a.emptyProfile().copy(favorite = true, outlets = true,
+            note = "后排靠窗", tags = setOf(PersonalTags.comfortable)),
+            b.id to b.emptyProfile().copy(favorite = true),
+            c.id to c.emptyProfile().copy(favorite = true, outlets = true, note = "靠窗"))
+        val filters = SearchFilters(buildings = setOf("2", "3"), query = "靠窗", favoritesOnly = true,
+            outletsOnly = true, tags = setOf(PersonalTags.comfortable))
+        assertEquals(listOf(a.id), ClassroomFilter.search(snapshot, filters, profiles).rooms.map { it.classroom.id })
+        assertTrue(ClassroomFilter.search(snapshot, filters, profiles +
+            (a.id to profiles.getValue(a.id).copy(excluded = true))).rooms.isEmpty())
+    }
+
+    @Test fun emptySelectionAndEmptySnapshotProduceAnEmptyValidResult() {
+        val result = ClassroomFilter.search(snapshot.copy(slots = emptyList()), SearchFilters(), emptyMap())
+        assertTrue(result.rooms.isEmpty())
+        assertFalse(result.missingSlots)
+        assertFalse(result.hasUncoveredGaps)
     }
 
     @Test fun compoundRoomIdentifierIsPreserved() {

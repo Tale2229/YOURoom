@@ -156,7 +156,8 @@ class YouRoomViewModelTest {
         model.setFilters(model.state.value.filters.copy(selectedSlots = emptySet()))
         model.refresh(); runCurrent()
         assertTrue(model.state.value.filters.selectedSlots.isEmpty())
-        assertTrue(model.state.value.result.rooms.isEmpty())
+        assertEquals(snapshot(Campus.XITUCHENG).classrooms.map { it.id }.toSet(),
+            model.state.value.result.rooms.map { it.classroom.id }.toSet())
     }
 
     @Test fun outgoingPickerCannotRestoreItsSelectionIntoAnotherCampus() = checkModel { model, _, _ ->
@@ -261,9 +262,12 @@ class YouRoomViewModelTest {
         model.setFilters(model.state.value.filters.copy(selectedSlots = emptySet()))
         model.setCampus(Campus.SHAHE); runCurrent()
         assertTrue(model.state.value.filters.selectedSlots.isEmpty())
-        assertTrue(model.state.value.result.rooms.isEmpty())
+        assertEquals(snapshot(Campus.SHAHE).classrooms.map { it.id }.toSet(),
+            model.state.value.result.rooms.map { it.classroom.id }.toSet())
         model.setCampus(Campus.XITUCHENG); runCurrent()
         assertTrue(model.state.value.filters.selectedSlots.isEmpty())
+        assertEquals(snapshot(Campus.XITUCHENG).classrooms.map { it.id }.toSet(),
+            model.state.value.result.rooms.map { it.classroom.id }.toSet())
     }
 
     @Test fun sharedAttributesAndSeparateBuildingsPersistWithoutExtraWritesOnSwitch() = checkModel { model, _, settings ->

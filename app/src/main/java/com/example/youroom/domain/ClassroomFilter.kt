@@ -1,6 +1,6 @@
 package com.example.youroom.domain
 
-/** All selected teaching periods must be free. Breaks are deliberately not inferred. */
+/** Selected periods must all be free; no selection lists all rooms in this snapshot. */
 object ClassroomFilter {
     fun search(
         snapshot: ClassroomSnapshot,
@@ -8,14 +8,14 @@ object ClassroomFilter {
         profiles: Map<String, RoomProfile>,
     ): SearchResult {
         val numbers = filters.selectedSlots
-        if (numbers.isEmpty()) return SearchResult(emptyList(), emptyList(), false)
         if (numbers.any { it <= 0 }) return SearchResult(emptyList(), emptyList(), false, true)
         val selected = snapshot.slots.filter { it.number in numbers }.sortedBy { it.number }
         if (selected.map { it.number }.toSet() != numbers) {
             return SearchResult(emptyList(), selected, false, true)
         }
         val index = snapshot.index
-        val common = selected.map { slot -> index.roomsBySlot.getValue(slot.number) }
+        val common = if (selected.isEmpty()) index.roomsById.keys else selected
+            .map { slot -> index.roomsBySlot.getValue(slot.number) }
             .reduce { first, next -> first intersect next }
         val query = filters.query.trim()
         val matches = common.asSequence().mapNotNull(index.roomsById::get)

@@ -32,12 +32,13 @@ object SharedFilterPreferences {
     val capacity = intPreferencesKey("shared.capacity")
     fun read(values: Preferences) = SearchFilters(
         favoritesOnly = values[favorites] ?: false, outletsOnly = values[outlets] ?: false,
-        tags = values[tags].orEmpty(), minimumCapacity = values[capacity] ?: 0)
+        tags = values[tags].orEmpty())
     fun write(values: MutablePreferences, filters: SearchFilters) {
         values[favorites] = filters.favoritesOnly
         values[outlets] = filters.outletsOnly
         values[tags] = filters.tags
-        values[capacity] = filters.minimumCapacity
+        // The capacity control was retired; do not retain an invisible constraint.
+        values.remove(capacity)
     }
 }
 
