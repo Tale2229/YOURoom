@@ -97,13 +97,16 @@ fun StatusNotice(text: String, isError: Boolean = false, onDismiss: (() -> Unit)
 }
 
 @Composable
+fun availabilityColor(free: Boolean): Color =
+    if (free) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+
+@Composable
 fun AvailabilityStrip(freeSlots: Set<Int>, allSlots: List<Int>, modifier: Modifier = Modifier) {
-    val colors = MaterialTheme.colorScheme
     Row(modifier.semantics { contentDescription = "课表空闲节次：${freeSlots.sorted().joinToString()}" },
         horizontalArrangement = Arrangement.spacedBy(3.dp)) {
         allSlots.forEach { number ->
             Box(Modifier.weight(1f).height(5.dp).background(
-                if (number in freeSlots) colors.primary else colors.outlineVariant,
+                availabilityColor(number in freeSlots),
                 RectangleShape))
         }
     }

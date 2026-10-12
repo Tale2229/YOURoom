@@ -69,6 +69,9 @@ private data class CampusWorkspace(
     val error: String? = null,
 )
 
+private data class ProfileChange(val id: String, val profile: RoomProfile?, val campus: Campus,
+    val revision: Long, val persisted: Boolean = false)
+
 class YouRoomViewModel(
     private val repository: ClassroomDataSource,
     private val settings: FilterSettings,
@@ -79,6 +82,10 @@ class YouRoomViewModel(
     private var realWorkspaces = Campus.entries.associateWith { CampusWorkspace() }
     private var demoWorkspaces = emptyMap<Campus, CampusWorkspace>()
     private var storedProfiles: Map<String, RoomProfile> = emptyMap()
+    private val pendingProfileChanges = linkedMapOf<String, ProfileChange>()
+    private val queuedProfileChanges = linkedMapOf<String, ProfileChange>()
+    private var profileRevision = 0L
+    private var profileWriteJob: Job? = null
     private var storedCatalog = TagCatalog()
     private var pendingCatalog: TagCatalog? = null
     private var pendingSharedFilters: SearchFilters? = null
@@ -96,7 +103,12 @@ class YouRoomViewModel(
         viewModelScope.launch {
             repository.profiles.catch { showError("无法读取个人偏好，请重新启动 App。") }.collect { profiles ->
                 storedProfiles = profiles
-                mutableState.update { if (it.demo) it else it.copy(profiles = profiles) }
+                // A prior Room emission must not undo a newer tap or text edit. Only
+                // release the optimistic overlay after the latest write is confirmed.
+                pendingProfileChanges.entries.removeAll { (_, change) ->
+                    change.persisted && profiles[change.id] == change.profile
+                }
+                publishRealProfiles()
             }
         }
         viewModelScope.launch {
@@ -226,7 +238,8 @@ class YouRoomViewModel(
     fun openLogin() {
         cancelRefresh()
         demoWorkspaces = emptyMap()
-        mutableState.update { it.copy(demo = false, loggedIn = false, viewingCache = false, profiles = storedProfiles, tagCatalog = storedCatalog) }
+        mutableState.update { it.copy(demo = false, loggedIn = false, viewingCache = false,
+            profiles = realProfiles(), tagCatalog = storedCatalog) }
         restoreWorkspace(Campus.XITUCHENG)
         mutableState.update { it.copy(error = null) }
     }
@@ -354,14 +367,7 @@ class YouRoomViewModel(
             mutableState.update { it.copy(profiles = it.profiles + (profile.roomId to profile)) }
             return
         }
-        val campus = state.value.campus
-        viewModelScope.launch {
-            try { repository.saveProfile(profile) }
-            catch (error: Exception) {
-                if (error is CancellationException) throw error
-                updateWorkspace(campus) { it.copy(error = "个人标记保存失败，请重试。") }
-            }
-        }
+        queueProfileChange(profile.roomId, profile)
     }
 
     fun clearProfile(id: String) {
@@ -369,13 +375,45 @@ class YouRoomViewModel(
             mutableState.update { it.copy(profiles = it.profiles - id) }
             return
         }
-        val campus = state.value.campus
-        viewModelScope.launch {
-            try { repository.deleteProfile(id) }
-            catch (error: Exception) {
-                if (error is CancellationException) throw error
-                updateWorkspace(campus) { it.copy(error = "个人标记清除失败，请重试。") }
-            }
+        queueProfileChange(id, null)
+    }
+
+    private fun realProfiles(): Map<String, RoomProfile> = storedProfiles.toMutableMap().apply {
+        pendingProfileChanges.values.forEach { change ->
+            if (change.profile == null) remove(change.id) else put(change.id, change.profile)
+        }
+    }
+
+    private fun publishRealProfiles() {
+        mutableState.update { if (it.demo) it else it.copy(profiles = realProfiles()) }
+    }
+
+    private fun queueProfileChange(id: String, profile: RoomProfile?) {
+        val campus = Campus.entries.firstOrNull { id.startsWith("${it.dataKey}:") } ?: return
+        val change = ProfileChange(id, profile, campus, ++profileRevision)
+        pendingProfileChanges[id] = change
+        queuedProfileChanges[id] = change
+        publishRealProfiles()
+        if (profileWriteJob?.isActive == true) return
+        profileWriteJob = viewModelScope.launch {
+            try {
+                while (queuedProfileChanges.isNotEmpty()) {
+                    val next = queuedProfileChanges.values.first()
+                    queuedProfileChanges.remove(next.id)
+                    try {
+                        if (next.profile == null) repository.deleteProfile(next.id)
+                        else repository.saveProfile(next.profile)
+                        if (pendingProfileChanges[next.id]?.revision == next.revision) {
+                            pendingProfileChanges[next.id] = next.copy(persisted = true)
+                        }
+                    } catch (error: Exception) {
+                        if (error is CancellationException) throw error
+                        updateWorkspace(next.campus) { it.copy(error =
+                            if (next.profile == null) "个人标记清除失败，请重试。"
+                            else "个人标记已更新，但保存失败，请再次修改重试。") }
+                    }
+                }
+            } finally { profileWriteJob = null }
         }
     }
 

@@ -53,10 +53,7 @@ fun YouRoomApp(model: YouRoomViewModel) {
             }
         }
         state.selectedRoom?.let { room ->
-            RoomDetailSheet(room, state, { model.selectRoom(null) }) { profile ->
-                model.saveProfile(profile)
-                model.selectRoom(null)
-            }
+            RoomDetailSheet(room, state, { model.selectRoom(null) }, model::saveProfile)
         }
     }
 }

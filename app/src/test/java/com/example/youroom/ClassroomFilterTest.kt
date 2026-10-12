@@ -48,7 +48,7 @@ class ClassroomFilterTest {
             note = "后排靠窗", tags = setOf(PersonalTags.comfortable)),
             b.id to b.emptyProfile().copy(favorite = true),
             c.id to c.emptyProfile().copy(favorite = true, outlets = true, note = "靠窗"))
-        val filters = SearchFilters(buildings = setOf("2", "3"), query = "靠窗", favoritesOnly = true,
+        val filters = SearchFilters(buildings = setOf("2", "3"), query = "201", favoritesOnly = true,
             outletsOnly = true, tags = setOf(PersonalTags.comfortable))
         assertEquals(listOf(a.id), ClassroomFilter.search(snapshot, filters, profiles).rooms.map { it.classroom.id })
         assertTrue(ClassroomFilter.search(snapshot, filters, profiles +
@@ -81,10 +81,21 @@ class ClassroomFilterTest {
             SearchFilters((1..1).toSet(), tags = setOf(PersonalTags.comfortable), outletsOnly = true), profiles).rooms.map { it.classroom.id })
     }
 
-    @Test fun capacityBuildingAndPersonalNoteCanFilter() {
+    @Test fun capacityBuildingAndClassroomNameCanFilter() {
         val profiles = mapOf(a.id to a.emptyProfile().copy(note = "后排靠窗"))
         assertEquals(listOf(a.id), ClassroomFilter.search(snapshot,
-            SearchFilters((1..1).toSet(), buildings = setOf("2"), query = "靠窗", minimumCapacity = 100), profiles).rooms.map { it.classroom.id })
+            SearchFilters((1..1).toSet(), buildings = setOf("2"), query = "201", minimumCapacity = 100), profiles).rooms.map { it.classroom.id })
+    }
+
+    @Test fun searchMatchesOnlyClassroomNamesAndNeverNotes() {
+        val profiles = mapOf(a.id to a.emptyProfile().copy(note = "后排靠窗"))
+        assertTrue(ClassroomFilter.search(snapshot, SearchFilters(query = "靠窗"), profiles).rooms.isEmpty())
+        assertEquals(listOf(a.id), ClassroomFilter.search(snapshot, SearchFilters(query = " 201 "), profiles)
+            .rooms.map { it.classroom.id })
+        val englishRoom = a.copy(name = "Lab-A101")
+        val englishSnapshot = snapshot.copy(slots = listOf(snapshot.slots.first().copy(classrooms = listOf(englishRoom))))
+        assertEquals(listOf(englishRoom.id), ClassroomFilter.search(englishSnapshot, SearchFilters(query = "lab-a"), emptyMap())
+            .rooms.map { it.classroom.id })
     }
 
     @Test fun missingOrInvalidPeriodsCannotProduceAvailability() {

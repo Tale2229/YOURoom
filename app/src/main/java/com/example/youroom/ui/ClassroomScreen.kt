@@ -8,8 +8,6 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.Color
-import com.example.youroom.ui.theme.campusBadgeColor
 import com.example.youroom.domain.allTags
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
@@ -22,8 +20,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -112,30 +108,12 @@ private fun ClassroomPage(state: YouRoomState, listState: LazyListState, active:
             if (state.demo) item { StatusNotice("演示数据 · 空闲安排为虚构，个人标记仅本次有效。") }
             if (state.stale) item { StatusNotice("缓存已跨日，刷新后才能筛选今天的教室。", isError = true) }
             item {
-                Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    SlotPicker(state.campus, snapshot?.queryDate, state.demo, state.filters, slots, onFilters, enabled = active)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(state.filters.query, { onFilters(state.filters.copy(query = it)) },
-                            Modifier.weight(1f).testTag("room_search"), placeholder = { Text("搜索教室或备注") },
-                            singleLine = true, leadingIcon = { Icon(Icons.Outlined.Search, null, Modifier.size(20.dp)) })
-                        Box {
-                            IconAction(onClick = { showFilters = true }, filled = true,
-                                modifier = Modifier.testTag("extra_filters").semantics {
-                                    contentDescription = "筛选教室，已选 ${state.filters.badgeCount} 个词条"
-                                }) {
-                                Icon(Icons.Outlined.Tune, "筛选教室", Modifier.size(22.dp))
-                            }
-                            if (state.filters.badgeCount > 0) Surface(
-                                modifier = Modifier.align(Alignment.TopEnd).offset(x = 4.dp, y = (-4).dp)
-                                    .testTag("filter_badge"), shape = androidx.compose.foundation.shape.CircleShape,
-                                color = campusBadgeColor(state.campus), contentColor = Color.White) {
-                                Box(Modifier.heightIn(min = 20.dp).widthIn(min = 20.dp).padding(horizontal = 4.dp),
-                                    contentAlignment = Alignment.Center) {
-                                    Text("${state.filters.badgeCount}", style = MaterialTheme.typography.labelSmall)
-                                }
-                            }
-                        }
+                BoxWithConstraints(Modifier.fillMaxWidth()) {
+                    // Keep six columns and 48dp targets even on a 320dp-wide phone.
+                    val gutter = ((maxWidth - 308.dp) / 2).coerceIn(0.dp, 24.dp)
+                    Box(Modifier.padding(horizontal = gutter, vertical = 14.dp)) {
+                        SlotPicker(state.campus, snapshot?.queryDate, state.demo, state.filters, slots, onFilters,
+                            enabled = active, onShowFilters = { showFilters = true })
                     }
                 }
             }
@@ -149,9 +127,6 @@ private fun ClassroomPage(state: YouRoomState, listState: LazyListState, active:
                     if (!waiting) Text("${result.rooms.size}", style = MaterialTheme.typography.headlineMedium,
                         color = MaterialTheme.colorScheme.primary)
                 }
-                if (result.hasUncoveredGaps) Text("只确认所选教学节次空闲，课间与午休不作保证。",
-                    Modifier.padding(start = 24.dp, end = 24.dp, bottom = 12.dp),
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (waiting) item {
                 if (moving) Text("切换校区…", Modifier.padding(horizontal = 24.dp, vertical = 32.dp),

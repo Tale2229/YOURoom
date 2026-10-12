@@ -24,7 +24,7 @@ object ClassroomFilter {
             }
             .filter { !it.profile.excluded }
             .filter { filters.buildings.isEmpty() || it.classroom.building in filters.buildings }
-            .filter { query.isEmpty() || it.classroom.name.contains(query, true) || it.profile.note.contains(query, true) }
+            .filter { query.isEmpty() || it.classroom.name.contains(query, true) }
             .filter { !filters.favoritesOnly || it.profile.favorite }
             .filter { !filters.outletsOnly || it.profile.outlets }
             .filter { it.profile.allTags.containsAll(filters.tags) }

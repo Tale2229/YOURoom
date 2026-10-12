@@ -290,6 +290,86 @@ class YouRoomUiTest {
         compose.onNodeWithTag("slot_3").assertIsSelected()
     }
 
+    @Test fun compactGridAlignsTheSearchFilterAndSixTimeMarkers() {
+        enterDemo()
+        val first = compose.onNodeWithTag("slot_1").fetchSemanticsNode().boundsInRoot
+        val sixth = compose.onNodeWithTag("slot_6").fetchSemanticsNode().boundsInRoot
+        val seventh = compose.onNodeWithTag("slot_7").fetchSemanticsNode().boundsInRoot
+        val tenth = compose.onNodeWithTag("slot_10").fetchSemanticsNode().boundsInRoot
+        val eleventh = compose.onNodeWithTag("slot_11").fetchSemanticsNode().boundsInRoot
+        val twelfth = compose.onNodeWithTag("slot_12").fetchSemanticsNode().boundsInRoot
+        val thirteenth = compose.onNodeWithTag("slot_13").fetchSemanticsNode().boundsInRoot
+        val fourteenth = compose.onNodeWithTag("slot_14").fetchSemanticsNode().boundsInRoot
+        val search = compose.onNodeWithTag("room_search_frame").fetchSemanticsNode().boundsInRoot
+        val filter = compose.onNodeWithTag("extra_filters").fetchSemanticsNode().boundsInRoot
+        assertEquals(first.top, sixth.top, 1f)
+        assertEquals(first.left, seventh.left, 1f)
+        assertEquals(first.left, thirteenth.left, 1f)
+        assertEquals(tenth.left, search.left, 1f)
+        assertEquals(eleventh.right, search.right, 1f)
+        assertEquals(twelfth.left, filter.left, 1f)
+        assertEquals(twelfth.right, filter.right, 1f)
+        assertEquals(fourteenth.center.y, search.center.y, 1f)
+        assertEquals(fourteenth.center.y, filter.center.y, 1f)
+        assertTrue(first.width + 1f >= first.height)
+        // The Pager keeps the other campus precomposed. Ignore that clipped face
+        // when inspecting the unmerged tree; it is hidden from normal semantics.
+        val face = compose.onAllNodesWithTag("slot_face_1", useUnmergedTree = true).fetchSemanticsNodes()
+            .single { it.boundsInRoot.width > 0f && first.contains(it.boundsInRoot.center) }.boundsInRoot
+        assertEquals(first.height * .75f, face.height, 1f)
+        mapOf(1 to "8:00", 6 to "13:45", 7 to "13:50", 12 to "19:15", 13 to "19:20", 14 to "20:55")
+            .forEach { (number, label) -> compose.onNodeWithTag("time_marker_$number").assertTextEquals(label) }
+        val start = compose.onNodeWithTag("time_marker_1").fetchSemanticsNode().boundsInRoot
+        val end = compose.onNodeWithTag("time_marker_14").fetchSemanticsNode().boundsInRoot
+        assertTrue(start.bottom <= first.top)
+        assertTrue(end.top >= fourteenth.bottom)
+        assertEquals(fourteenth.right, end.right, 1f)
+        compose.onNodeWithText("搜索教室或备注").assertDoesNotExist()
+        compose.onNodeWithText("只确认所选教学节次空闲，课间与午休不作保证。").assertDoesNotExist()
+    }
+
+    @Test fun editingSearchAndOpeningFiltersDoesNotPaintPeriods() {
+        enterDemo()
+        compose.onNodeWithTag("room_search").performClick().performTextInput("201")
+        compose.onNodeWithTag("slot_1").assertIsSelected()
+        compose.onNodeWithTag("slot_2").assertIsSelected()
+        compose.onNodeWithTag("slot_13").assertIsNotSelected()
+        compose.onNodeWithTag("extra_filters").performClick()
+        compose.onNodeWithTag("filter_dialog").assertIsDisplayed()
+        compose.onNodeWithTag("close_filters").performClick()
+        compose.onNodeWithTag("slot_1").assertIsSelected()
+        compose.onNodeWithTag("slot_2").assertIsSelected()
+        compose.onNodeWithTag("slot_14").assertIsNotSelected()
+    }
+
+    @Test fun roomDetailsUpdateMarksAndNotesWithoutSavingOrDismissing() {
+        enterDemo()
+        compose.onNodeWithTag("room_list").performScrollToNode(hasText("2-201"))
+        compose.onNodeWithText("2-201").performClick()
+        compose.onNodeWithTag("save_profile").assertDoesNotExist()
+        compose.onNodeWithText("保存个人标记").assertDoesNotExist()
+        compose.onNodeWithText("标注容量 180", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("（非余座）", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("主题色：课表空闲；灰色：未列为空闲。课间与午休不作保证。").assertDoesNotExist()
+        compose.onNodeWithText("已收藏").performScrollTo().performClick()
+        compose.onNodeWithText("有插座").performScrollTo().performClick()
+        compose.onNodeWithTag("room_note").performScrollTo().performTextInput("仅备注关键词")
+        compose.onNodeWithTag("room_detail").assertExists()
+        compose.onNodeWithTag("close_room_detail").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("取消收藏 2-201").performScrollTo().assertExists()
+        compose.onNodeWithTag("room_list").performScrollToNode(hasText("2-201"))
+        compose.onNodeWithText("2-201").performClick()
+        compose.onNodeWithTag("room_note").performScrollTo().assertTextContains("仅备注关键词")
+        compose.onNodeWithText("有插座").performScrollTo().assertHasClickAction()
+        compose.onNodeWithTag("close_room_detail").performScrollTo().performClick()
+        compose.onNodeWithTag("room_search").performScrollTo().performTextInput("仅备注关键词")
+        compose.onNodeWithTag("room_search").performImeAction()
+        compose.waitUntil(10_000) {
+            compose.onAllNodesWithText("没有符合条件的教室").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("没有符合条件的教室").performScrollTo().assertIsDisplayed()
+    }
+
     @Test fun customTermCanBeCreatedMarkedAndUsedToFilter() {
         enterDemo()
         compose.onNodeWithTag("extra_filters").performScrollTo().performClick()
@@ -301,7 +381,8 @@ class YouRoomUiTest {
         compose.onNodeWithTag("room_list").performScrollToNode(hasText("2-201"))
         compose.onNodeWithText("2-201").performClick()
         compose.onNodeWithText("靠窗").performScrollTo().performClick()
-        compose.onNodeWithTag("save_profile").performScrollTo().performClick()
+        compose.onNodeWithTag("save_profile").assertDoesNotExist()
+        compose.onNodeWithTag("close_room_detail").performScrollTo().performClick()
         compose.onNodeWithTag("room_list").performScrollToNode(hasTestTag("extra_filters"))
         compose.onNodeWithTag("extra_filters").performClick()
         compose.onNodeWithTag("filter_tag_靠窗").performScrollTo().performClick()

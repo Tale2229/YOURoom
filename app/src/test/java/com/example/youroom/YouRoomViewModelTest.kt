@@ -302,18 +302,114 @@ class YouRoomViewModelTest {
         assertTrue(PersonalTags.legacyQuiet in model.state.value.customTags)
     }
 
+    @Test fun rapidProfileEditsAreImmediateAndOlderDatabaseValuesCannotUndoThem() = checkModel { model, source, _ ->
+        val room = snapshot(Campus.XITUCHENG).classrooms.first()
+        val gate = CompletableDeferred<Unit>()
+        source.profileSaver = { profile ->
+            if (source.profileWrites.size == 1) gate.await()
+            source.profiles.value += profile.roomId to profile
+        }
+        model.selectRoom(room.id)
+        val first = room.emptyProfile().copy(favorite = true, note = "初稿")
+        model.saveProfile(first)
+        assertEquals(first, model.state.value.profiles[room.id])
+        runCurrent()
+        model.saveProfile(first.copy(outlets = true, note = "第二稿"))
+        val latest = first.copy(outlets = true, note = "最终备注 ", tags = setOf(PersonalTags.comfortable))
+        model.saveProfile(latest)
+        source.profiles.value = mapOf(room.id to first)
+        runCurrent()
+        assertEquals(latest, model.state.value.profiles[room.id])
+        assertEquals(room.id, model.state.value.selectedRoomId)
+        gate.complete(Unit); runCurrent()
+        assertEquals(listOf(first, latest), source.profileWrites)
+        assertEquals(latest, source.profiles.value[room.id])
+        assertEquals(latest, model.state.value.profiles[room.id])
+        assertEquals(room.id, model.state.value.selectedRoomId)
+    }
+
+    @Test fun rapidFavoriteTapsUseTheLatestLocalStateAndPreserveOtherMarks() = checkModel { model, source, _ ->
+        val room = snapshot(Campus.XITUCHENG).classrooms.first()
+        val profile = room.emptyProfile().copy(note = "靠窗", outlets = true, tags = setOf("人少"))
+        source.profiles.value = mapOf(room.id to profile); runCurrent()
+        model.toggleFavorite(room)
+        assertTrue(model.state.value.profiles.getValue(room.id).favorite)
+        model.toggleFavorite(room)
+        assertEquals(profile, model.state.value.profiles[room.id])
+        runCurrent()
+        assertEquals(profile, source.profiles.value[room.id])
+    }
+
+    @Test fun clearingAProfileIsSerializedAfterAnInFlightSave() = checkModel { model, source, _ ->
+        val room = snapshot(Campus.XITUCHENG).classrooms.first()
+        val gate = CompletableDeferred<Unit>()
+        source.profileSaver = { profile -> gate.await(); source.profiles.value += profile.roomId to profile }
+        model.saveProfile(room.emptyProfile().copy(note = "编辑中")); runCurrent()
+        model.clearProfile(room.id)
+        assertFalse(model.state.value.profiles.containsKey(room.id))
+        gate.complete(Unit); runCurrent()
+        assertEquals(listOf(room.id), source.profileDeletes)
+        assertFalse(source.profiles.value.containsKey(room.id))
+        assertFalse(model.state.value.profiles.containsKey(room.id))
+    }
+
+    @Test fun failedRealtimeSaveKeepsTheEditAndCanBeRetriedWithoutClosingDetails() = checkModel { model, source, _ ->
+        val room = snapshot(Campus.XITUCHENG).classrooms.first()
+        model.selectRoom(room.id)
+        val profile = room.emptyProfile().copy(favorite = true, note = "保留输入")
+        source.profileSaver = { throw java.io.IOException("Simulated database failure") }
+        model.saveProfile(profile); runCurrent()
+        assertEquals(profile, model.state.value.profiles[room.id])
+        assertTrue(model.state.value.error!!.contains("保存失败"))
+        assertEquals(room.id, model.state.value.selectedRoomId)
+        assertTrue(source.profiles.value.isEmpty())
+        source.profileSaver = { source.profiles.value += it.roomId to it }
+        model.saveProfile(profile.copy(note = "重试后的输入")); runCurrent()
+        assertEquals("重试后的输入", source.profiles.value.getValue(room.id).note)
+    }
+
+    @Test fun aPendingRealSaveCannotModifyDemoProfiles() = checkModel { model, source, _ ->
+        val room = snapshot(Campus.XITUCHENG).classrooms.first()
+        val gate = CompletableDeferred<Unit>()
+        source.profileSaver = { profile -> gate.await(); source.profiles.value += profile.roomId to profile }
+        val profile = room.emptyProfile().copy(outlets = true, note = "真实偏好")
+        model.saveProfile(profile); runCurrent()
+        model.showDemo()
+        gate.complete(Unit); runCurrent()
+        assertTrue(model.state.value.demo)
+        assertTrue(model.state.value.profiles.isEmpty())
+        model.openLogin()
+        assertEquals(profile, model.state.value.profiles[room.id])
+    }
+
+    @Test fun closingDetailsDoesNotCancelTheLatestNoteWrite() = checkModel { model, source, _ ->
+        val room = snapshot(Campus.XITUCHENG).classrooms.first()
+        val gate = CompletableDeferred<Unit>()
+        source.profileSaver = { profile -> gate.await(); source.profiles.value += profile.roomId to profile }
+        model.selectRoom(room.id)
+        val profile = room.emptyProfile().copy(note = "关闭前的最后一笔")
+        model.saveProfile(profile); runCurrent()
+        model.selectRoom(null)
+        gate.complete(Unit); runCurrent()
+        assertNull(model.state.value.selectedRoomId)
+        assertEquals(profile, source.profiles.value[room.id])
+    }
+
     private inner class FakeSource(var authenticated: Boolean) : ClassroomDataSource {
         override val profiles = MutableStateFlow<Map<String, RoomProfile>>(emptyMap())
         val requests = mutableListOf<Campus>()
         val caches = mutableMapOf<Campus, ClassroomSnapshot>()
+        val profileWrites = mutableListOf<RoomProfile>()
+        val profileDeletes = mutableListOf<String>()
+        var profileSaver: suspend (RoomProfile) -> Unit = { profiles.value += it.roomId to it }
         var loader: suspend (Campus) -> ClassroomSnapshot = { snapshot(it) }
         override suspend fun hasSession() = authenticated
         override suspend fun login(account: String, password: String) { authenticated = true }
         override suspend fun logout() { authenticated = false }
         override suspend fun cached(campus: Campus): ClassroomSnapshot? = caches[campus]
         override suspend fun refresh(campus: Campus): ClassroomSnapshot { requests += campus; return loader(campus) }
-        override suspend fun saveProfile(profile: RoomProfile) { profiles.value += profile.roomId to profile }
-        override suspend fun deleteProfile(roomId: String) { profiles.value -= roomId }
+        override suspend fun saveProfile(profile: RoomProfile) { profileWrites += profile; profileSaver(profile) }
+        override suspend fun deleteProfile(roomId: String) { profileDeletes += roomId; profiles.value -= roomId }
     }
 
     private class FakeSettings : FilterSettings {
