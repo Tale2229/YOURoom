@@ -16,8 +16,8 @@ class CampusFilterMigrationTest {
         assertTrue(migration.shouldMigrate(old))
         val migrated = migration.migrate(old)
         val west = CampusFilterPreferences.read(migrated, Campus.XITUCHENG)
-        assertEquals("2", west.building)
-        assertTrue(west.favoritesOnly && west.quietOnly)
+        assertEquals(setOf("2"), west.buildings)
+        assertTrue(west.favoritesOnly && (PersonalTags.legacyQuiet in west.tags))
         assertEquals(100, west.minimumCapacity)
         assertEquals(SearchFilters(), CampusFilterPreferences.read(migrated, Campus.SHAHE))
         assertEquals("2", migrated[stringPreferencesKey("building")])
@@ -26,13 +26,13 @@ class CampusFilterMigrationTest {
 
     @Test fun scopedPreferencesDoNotAffectTheOtherCampus() {
         val values = mutablePreferencesOf()
-        CampusFilterPreferences.write(values, Campus.XITUCHENG, SearchFilters(building = "2", favoritesOnly = true))
-        CampusFilterPreferences.write(values, Campus.SHAHE, SearchFilters(building = "教一", quietOnly = true))
-        assertEquals("2", CampusFilterPreferences.read(values, Campus.XITUCHENG).building)
-        assertEquals("教一", CampusFilterPreferences.read(values, Campus.SHAHE).building)
+        CampusFilterPreferences.write(values, Campus.XITUCHENG, SearchFilters(buildings = setOf("2"), favoritesOnly = true))
+        CampusFilterPreferences.write(values, Campus.SHAHE, SearchFilters(buildings = setOf("教一"), tags = setOf(PersonalTags.legacyQuiet)))
+        assertEquals(setOf("2"), CampusFilterPreferences.read(values, Campus.XITUCHENG).buildings)
+        assertEquals(setOf("教一"), CampusFilterPreferences.read(values, Campus.SHAHE).buildings)
         CampusFilterPreferences.write(values, Campus.XITUCHENG, SearchFilters())
-        assertNull(CampusFilterPreferences.read(values, Campus.XITUCHENG).building)
-        assertEquals("教一", CampusFilterPreferences.read(values, Campus.SHAHE).building)
+        assertTrue(CampusFilterPreferences.read(values, Campus.XITUCHENG).buildings.isEmpty())
+        assertEquals(setOf("教一"), CampusFilterPreferences.read(values, Campus.SHAHE).buildings)
     }
 
     @Test fun migrationWorksWhenThereAreNoLegacyValues() = runTest {

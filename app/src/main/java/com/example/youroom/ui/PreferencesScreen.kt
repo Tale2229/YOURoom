@@ -13,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.youroom.domain.allTags
 
 @Composable
 fun PreferencesScreen(state: YouRoomState, onRoom: (String?) -> Unit,
@@ -20,7 +21,7 @@ fun PreferencesScreen(state: YouRoomState, onRoom: (String?) -> Unit,
     var confirmExit by remember { mutableStateOf(false) }
     var clearId by remember { mutableStateOf<String?>(null) }
     val profiles = state.campusProfiles.filter {
-        it.favorite || it.excluded || it.quiet || it.outlets || it.note.isNotBlank()
+        it.favorite || it.excluded || it.allTags.isNotEmpty() || it.outlets || it.note.isNotBlank()
     }.sortedWith(compareByDescending<com.example.youroom.domain.RoomProfile> { it.favorite }.thenBy { it.name })
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
@@ -46,8 +47,8 @@ fun PreferencesScreen(state: YouRoomState, onRoom: (String?) -> Unit,
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(profile.name, style = MaterialTheme.typography.titleLarge)
                         Text(listOfNotNull(if (profile.favorite) "已收藏" else null,
-                            if (profile.excluded) "已排除" else null, if (profile.quiet) "标记安静" else null,
-                            if (profile.outlets) "标记有插座" else null).joinToString(" · ").ifBlank { "个人备注" },
+                            if (profile.excluded) "已排除" else null,
+                            if (profile.outlets) "有插座" else null).plus(profile.allTags.sorted()).joinToString(" · ").ifBlank { "个人备注" },
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                         if (profile.note.isNotBlank()) Text(profile.note, maxLines = 2, overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -62,7 +63,7 @@ fun PreferencesScreen(state: YouRoomState, onRoom: (String?) -> Unit,
         item {
             Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("关于数据", style = MaterialTheme.typography.titleMedium)
-                Text("安静、插座等标签由你标记，不来自学校接口。未标记不代表没有。教务课表空闲也不等于现场可用。",
+                Text("插座、桌椅舒适、人少及自定义词条由你标记，不来自学校接口；人少不是实时人数。未标记不代表没有。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("支持西土城与沙河校区，个人标记按校区区分。校外访问取决于校园网络与 VPN 配置。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -70,7 +71,7 @@ fun PreferencesScreen(state: YouRoomState, onRoom: (String?) -> Unit,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                     Text(if (state.demo) "结束演示" else if (state.viewingCache) "返回登录" else "退出登录")
                 }
-                Text("YouRoom 1.2 · 非学校官方应用", style = MaterialTheme.typography.labelSmall,
+                Text("YouRoom 1.3 · 非学校官方应用", style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }

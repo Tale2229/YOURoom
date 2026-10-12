@@ -50,15 +50,15 @@ class ClassroomFilterTest {
     }
 
     @Test fun unknownPreferencesDoNotMatchQuietOrOutletRequirements() {
-        val profiles = mapOf(c.id to c.emptyProfile().copy(quiet = true, outlets = true))
+        val profiles = mapOf(c.id to c.emptyProfile().copy(tags = setOf(PersonalTags.comfortable), outlets = true))
         assertEquals(listOf(c.id), ClassroomFilter.search(snapshot,
-            SearchFilters((1..1).toSet(), quietOnly = true, outletsOnly = true), profiles).rooms.map { it.classroom.id })
+            SearchFilters((1..1).toSet(), tags = setOf(PersonalTags.comfortable), outletsOnly = true), profiles).rooms.map { it.classroom.id })
     }
 
     @Test fun capacityBuildingAndPersonalNoteCanFilter() {
         val profiles = mapOf(a.id to a.emptyProfile().copy(note = "后排靠窗"))
         assertEquals(listOf(a.id), ClassroomFilter.search(snapshot,
-            SearchFilters((1..1).toSet(), building = "2", query = "靠窗", minimumCapacity = 100), profiles).rooms.map { it.classroom.id })
+            SearchFilters((1..1).toSet(), buildings = setOf("2"), query = "靠窗", minimumCapacity = 100), profiles).rooms.map { it.classroom.id })
     }
 
     @Test fun missingOrInvalidPeriodsCannotProduceAvailability() {
@@ -75,5 +75,29 @@ class ClassroomFilterTest {
     @Test fun snapshotDoesNotBecomeTodayAfterMidnight() {
         assertTrue(snapshot.isCurrentOn(LocalDate.of(2026, 10, 11)))
         assertFalse(snapshot.isCurrentOn(LocalDate.of(2026, 10, 12)))
+    }
+
+    @Test fun buildingsAreUnionAndTagsAreIntersection() {
+        val profiles = mapOf(a.id to a.emptyProfile().copy(outlets = true,
+            tags = setOf(PersonalTags.comfortable, PersonalTags.uncrowded, "靠窗")),
+            b.id to b.emptyProfile().copy(outlets = true, tags = setOf(PersonalTags.comfortable)))
+        val filters = SearchFilters(setOf(1), buildings = setOf("2", "3"))
+        assertEquals(setOf(a.id, b.id), ClassroomFilter.search(snapshot, filters, profiles).rooms.map { it.classroom.id }.toSet())
+        assertEquals(listOf(a.id), ClassroomFilter.search(snapshot, filters.copy(outletsOnly = true,
+            tags = setOf(PersonalTags.comfortable, PersonalTags.uncrowded, "靠窗")), profiles).rooms.map { it.classroom.id })
+    }
+
+    @Test fun unmarkingLastBuildingRestoresAllBuildings() {
+        val selected = SearchFilters(setOf(1)).toggleBuilding("2").toggleBuilding("3")
+        assertEquals(setOf("2", "3"), selected.buildings)
+        val all = selected.toggleBuilding("2").toggleBuilding("3")
+        assertTrue(all.buildings.isEmpty())
+        assertEquals(3, ClassroomFilter.search(snapshot, all, emptyMap()).rooms.size)
+    }
+
+    @Test fun legacyQuietMarkStillMatchesCustomQuietTag() {
+        val profiles = mapOf(a.id to a.emptyProfile().copy(quiet = true))
+        assertEquals(listOf(a.id), ClassroomFilter.search(snapshot,
+            SearchFilters(setOf(1), tags = setOf(PersonalTags.legacyQuiet)), profiles).rooms.map { it.classroom.id })
     }
 }

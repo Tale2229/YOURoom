@@ -1,7 +1,5 @@
 package com.example.youroom.ui
 
-import androidx.compose.animation.*
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -64,14 +62,8 @@ fun CampusHeader(state: YouRoomState, onRefresh: () -> Unit, onCampus: (Campus) 
             }.padding(start = 24.dp, end = 12.dp, top = 24.dp, bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("YouRoom", style = MaterialTheme.typography.headlineMedium)
-            AnimatedContent(campus, transitionSpec = {
-                val direction = if (targetState == Campus.SHAHE) 1 else -1
-                (fadeIn(tween(150)) + slideInHorizontally(tween(150)) { direction * it / 5 }) togetherWith
-                    (fadeOut(tween(90)) + slideOutHorizontally(tween(90)) { -direction * it / 5 })
-            }, label = "campus_subtitle") { displayed ->
-                Text(displayed.label, modifier = Modifier.testTag("campus_label"), style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            Text(campus.label, modifier = Modifier.testTag("campus_label"), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (state.refreshing) Box(Modifier.padding(end = 24.dp).size(48.dp), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)

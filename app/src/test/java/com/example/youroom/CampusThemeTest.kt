@@ -49,4 +49,8 @@ class CampusThemeTest {
         val y = luminance(b)
         return (maxOf(x, y) + .05) / (minOf(x, y) + .05)
     }
+
+    @Test fun darkCampusBadgeHasReadableWhiteNumbers() {
+        Campus.entries.forEach { assertTrue(contrast(campusBadgeColor(it), Color.White) >= 4.5) }
+    }
 }

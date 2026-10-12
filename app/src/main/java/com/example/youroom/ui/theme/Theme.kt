@@ -9,6 +9,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
 import com.example.youroom.domain.Campus
 
+fun campusBadgeColor(campus: Campus) = if (campus == Campus.XITUCHENG) Color(0xFF1B2C42) else Color(0xFF203F34)
+
 fun campusColorScheme(campus: Campus, darkTheme: Boolean): ColorScheme {
     val west = campus == Campus.XITUCHENG
     val accent = if (west) XituchengBlue else ShaheGreen

@@ -1,30 +1,26 @@
 package com.example.youroom.ui
 
 import android.content.res.Configuration
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.*
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
+import com.example.youroom.ui.theme.campusBadgeColor
+import com.example.youroom.domain.allTags
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -35,21 +31,44 @@ import com.example.youroom.ui.theme.YouRoomTheme
 @Composable
 fun ClassroomScreen(state: YouRoomState, onFilters: (SearchFilters) -> Unit,
     onRefresh: () -> Unit, onRoom: (String?) -> Unit, onFavorite: (Classroom) -> Unit,
-    onCampus: (Campus) -> Unit = {}) {
-    var expanded by rememberSaveable { mutableStateOf(false) }
-    val snapshot = state.campusSnapshot
-    val result = state.result
-    val slots = snapshot?.slots.orEmpty()
+    onCampus: (Campus) -> Unit = {}, onAddTag: (String) -> Unit = {}) {
     val westList = androidx.compose.foundation.lazy.rememberLazyListState()
     val shaheList = androidx.compose.foundation.lazy.rememberLazyListState()
-    val listState = if (state.campus == Campus.XITUCHENG) westList else shaheList
     val viewportDates = remember { mutableMapOf<Pair<Campus, Boolean>, java.time.LocalDate>() }
-    LaunchedEffect(state.campus, snapshot?.queryDate, state.demo) {
-        snapshot?.queryDate?.let { date ->
+    val pages = remember { mutableMapOf<Campus, YouRoomState>() }
+    pages[state.campus] = state
+    val listState = if (state.campus == Campus.XITUCHENG) westList else shaheList
+    LaunchedEffect(state.campus, state.campusSnapshot?.queryDate, state.demo) {
+        state.campusSnapshot?.queryDate?.let { date ->
             val previous = viewportDates.put(state.campus to state.demo, date)
             if (previous != null && previous != date) listState.scrollToItem(0)
         }
     }
+    AnimatedContent(state.campus, modifier = Modifier.fillMaxSize().clipToBounds(),
+        transitionSpec = {
+            val direction = if (targetState == Campus.SHAHE) AnimatedContentTransitionScope.SlideDirection.Left
+                else AnimatedContentTransitionScope.SlideDirection.Right
+            slideIntoContainer(direction, tween(320)) togetherWith slideOutOfContainer(direction, tween(320))
+        }, label = "campus_page") { displayed ->
+        val page = if (displayed == state.campus) state else pages.getValue(displayed)
+        YouRoomTheme(campus = displayed) {
+            Surface(Modifier.fillMaxSize()) {
+                ClassroomPage(page, if (displayed == Campus.XITUCHENG) westList else shaheList,
+                    { if (displayed == state.campus) onFilters(it) }, onRefresh, onRoom, onFavorite, onCampus, onAddTag)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ClassroomPage(state: YouRoomState, listState: LazyListState, onFilters: (SearchFilters) -> Unit,
+    onRefresh: () -> Unit, onRoom: (String?) -> Unit, onFavorite: (Classroom) -> Unit,
+    onCampus: (Campus) -> Unit, onAddTag: (String) -> Unit) {
+    var showFilters by remember { mutableStateOf(false) }
+    val snapshot = state.campusSnapshot
+    val result = state.result
+    val slots = snapshot?.slots.orEmpty()
+    if (showFilters) FilterDialog(state, { showFilters = false }, onFilters, onAddTag)
     Column(Modifier.fillMaxSize().imePadding()) {
         CampusHeader(state, onRefresh, onCampus)
         HorizontalDivider(Modifier.padding(horizontal = 24.dp))
@@ -65,18 +84,23 @@ fun ClassroomScreen(state: YouRoomState, onFilters: (SearchFilters) -> Unit,
                         OutlinedTextField(state.filters.query, { onFilters(state.filters.copy(query = it)) },
                             Modifier.weight(1f).testTag("room_search"), placeholder = { Text("搜索教室或备注") },
                             singleLine = true, leadingIcon = { Icon(Icons.Outlined.Search, null, Modifier.size(20.dp)) })
-                        IconAction(onClick = { expanded = !expanded }, filled = true,
-                            modifier = Modifier.testTag("extra_filters")) {
-                            Icon(Icons.Outlined.Tune, if (expanded) "收起筛选" else "更多筛选", Modifier.size(22.dp))
+                        Box {
+                            IconAction(onClick = { showFilters = true }, filled = true,
+                                modifier = Modifier.testTag("extra_filters").semantics {
+                                    contentDescription = "筛选教室，已选 ${state.filters.badgeCount} 个词条"
+                                }) {
+                                Icon(Icons.Outlined.Tune, "筛选教室", Modifier.size(22.dp))
+                            }
+                            if (state.filters.badgeCount > 0) Surface(
+                                modifier = Modifier.align(Alignment.TopEnd).offset(x = 4.dp, y = (-4).dp)
+                                    .testTag("filter_badge"), shape = androidx.compose.foundation.shape.CircleShape,
+                                color = campusBadgeColor(state.campus), contentColor = Color.White) {
+                                Box(Modifier.heightIn(min = 20.dp).widthIn(min = 20.dp).padding(horizontal = 4.dp),
+                                    contentAlignment = Alignment.Center) {
+                                    Text("${state.filters.badgeCount}", style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
                         }
-                    }
-                    AnimatedVisibility(expanded,
-                        enter = fadeIn(tween(140)) + expandVertically(tween(180)),
-                        exit = fadeOut(tween(90)) + shrinkVertically(tween(140))) { ExtraFilters(state, onFilters) }
-                    if (!expanded && (state.filters.building != null || state.filters.favoritesOnly ||
-                            state.filters.quietOnly || state.filters.outletsOnly || state.filters.minimumCapacity > 0)) {
-                        TextButton(onClick = { expanded = true }, shape = MaterialTheme.shapes.small,
-                            contentPadding = PaddingValues(0.dp)) { Text("已有额外筛选 · 点击修改") }
                     }
                 }
             }
@@ -134,39 +158,6 @@ fun ClassroomScreen(state: YouRoomState, onFilters: (SearchFilters) -> Unit,
 }
 
 @Composable
-private fun ExtraFilters(state: YouRoomState, onFilters: (SearchFilters) -> Unit) {
-    val filters = state.filters
-    val buildings = state.campusSnapshot?.classrooms.orEmpty().map { it.building }.distinct().sorted()
-    var capacityText by remember(filters.minimumCapacity) { mutableStateOf(if (filters.minimumCapacity == 0) "" else "${filters.minimumCapacity}") }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(filters.building == null, { onFilters(filters.copy(building = null)) },
-                shape = MaterialTheme.shapes.small, label = { Text("全部楼宇") })
-            buildings.forEach { building ->
-                FilterChip(filters.building == building, { onFilters(filters.copy(building = building)) },
-                    shape = MaterialTheme.shapes.small,
-                    label = { Text(if (building.all(Char::isDigit)) "教学楼 $building" else building) })
-            }
-        }
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(filters.favoritesOnly, { onFilters(filters.copy(favoritesOnly = !filters.favoritesOnly)) },
-                shape = MaterialTheme.shapes.small, label = { Text("仅收藏") })
-            FilterChip(filters.quietOnly, { onFilters(filters.copy(quietOnly = !filters.quietOnly)) },
-                shape = MaterialTheme.shapes.small, label = { Text("标记安静") })
-            FilterChip(filters.outletsOnly, { onFilters(filters.copy(outletsOnly = !filters.outletsOnly)) },
-                shape = MaterialTheme.shapes.small, label = { Text("标记有插座") })
-        }
-        OutlinedTextField(capacityText, { value ->
-            capacityText = value.filter(Char::isDigit).take(4)
-            onFilters(filters.copy(minimumCapacity = capacityText.toIntOrNull() ?: 0))
-        }, label = { Text("最低标注容量（可不填）") }, singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
-        Text("安静与插座依据个人标记，容量不是实时余座。",
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
 private fun RoomRow(match: RoomMatch, slots: List<Int>, modifier: Modifier = Modifier,
     onClick: () -> Unit, onFavorite: () -> Unit) {
     val room = match.classroom
@@ -175,7 +166,7 @@ private fun RoomRow(match: RoomMatch, slots: List<Int>, modifier: Modifier = Mod
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(room.name, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(listOfNotNull(room.buildingLabel, room.capacity?.let { "容量 $it" },
-                    if (match.profile.quiet) "安静" else null, if (match.profile.outlets) "有插座" else null).joinToString(" · "),
+                    if (match.profile.outlets) "有插座" else null).plus(match.profile.allTags.sorted()).joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (match.profile.note.isNotBlank()) Text(match.profile.note, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

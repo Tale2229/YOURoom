@@ -16,13 +16,19 @@ android {
         applicationId = "com.example.youroom"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.2"
+        versionCode = 4
+        versionName = "1.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
+        debug {
+            // Device tests can use a separate installation without touching the user's app data.
+            if (providers.gradleProperty("youroom.isolatedUiTests").orNull == "true") {
+                applicationIdSuffix = ".uitest"
+            }
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(

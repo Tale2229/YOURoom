@@ -17,12 +17,14 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.example.youroom.domain.RoomMatch
 import com.example.youroom.domain.RoomProfile
+import com.example.youroom.domain.PersonalTags
+import com.example.youroom.domain.allTags
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RoomDetailSheet(room: RoomMatch, state: YouRoomState, onDismiss: () -> Unit,
     onSave: (RoomProfile) -> Unit) {
-    var draft by remember(room.classroom.id) { mutableStateOf(room.profile) }
+    var draft by remember(room.classroom.id) { mutableStateOf(room.profile.copy(tags = room.profile.allTags, quiet = false)) }
     val snapshot = state.campusSnapshot
     ModalBottomSheet(onDismissRequest = onDismiss,
         shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp),
@@ -58,10 +60,15 @@ fun RoomDetailSheet(room: RoomMatch, state: YouRoomState, onDismiss: () -> Unit,
             }
             HorizontalDivider()
             Text("我的标记", style = MaterialTheme.typography.titleMedium)
-            ProfileToggle("收藏此教室", draft.favorite) { draft = draft.copy(favorite = it) }
+            ProfileToggle("已收藏", draft.favorite) { draft = draft.copy(favorite = it) }
             ProfileToggle("从筛选结果中排除", draft.excluded) { draft = draft.copy(excluded = it) }
-            ProfileToggle("我知道这里比较安静", draft.quiet) { draft = draft.copy(quiet = it) }
-            ProfileToggle("我知道这里有插座", draft.outlets) { draft = draft.copy(outlets = it) }
+            ProfileToggle("有插座", draft.outlets) { draft = draft.copy(outlets = it) }
+            (listOf(PersonalTags.comfortable, PersonalTags.uncrowded) +
+                (state.customTags + draft.tags).filterNot { it in PersonalTags.builtIn }.sorted()).distinct().forEach { tag ->
+                ProfileToggle(tag, tag in draft.tags) { selected ->
+                    draft = draft.copy(tags = if (selected) draft.tags + tag else draft.tags - tag)
+                }
+            }
             Text("标签仅依据个人经验；未勾选表示未标记，不代表没有。",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedTextField(draft.note, { draft = draft.copy(note = it.take(500)) },

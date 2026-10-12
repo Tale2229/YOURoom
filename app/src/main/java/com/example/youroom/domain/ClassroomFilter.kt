@@ -25,11 +25,11 @@ object ClassroomFilter {
                         .map { it.number }.toSet())
             }
             .filter { !it.profile.excluded }
-            .filter { filters.building == null || it.classroom.building == filters.building }
+            .filter { filters.buildings.isEmpty() || it.classroom.building in filters.buildings }
             .filter { query.isEmpty() || it.classroom.name.contains(query, true) || it.profile.note.contains(query, true) }
             .filter { !filters.favoritesOnly || it.profile.favorite }
-            .filter { !filters.quietOnly || it.profile.quiet }
             .filter { !filters.outletsOnly || it.profile.outlets }
+            .filter { it.profile.allTags.containsAll(filters.tags) }
             .filter { filters.minimumCapacity == 0 || (it.classroom.capacity ?: 0) >= filters.minimumCapacity }
             .sortedWith(compareByDescending<RoomMatch> { it.profile.favorite }
                 .thenBy { it.classroom.building.toIntOrNull() ?: Int.MAX_VALUE }

@@ -45,7 +45,7 @@ fun YouRoomApp(model: YouRoomViewModel) {
                         "login" -> LoginScreen(state, model::login, { tab = 0; model.showDemo() },
                             { tab = 0; model.viewCache() })
                         "rooms" -> ClassroomScreen(state, { model.setFiltersFor(displayedCampus, it) }, model::refresh,
-                            model::selectRoom, model::toggleFavorite, model::setCampus)
+                            model::selectRoom, model::toggleFavorite, model::setCampus, model::addCustomTag)
                         else -> PreferencesScreen(state, model::selectRoom, model::clearProfile, model::logout)
                     }
                 }

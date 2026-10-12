@@ -13,7 +13,8 @@ class YouRoomApplication : Application() {
 }
 
 class AppContainer(application: Application) {
-    private val database = Room.databaseBuilder(application, YouRoomDatabase::class.java, "youroom.db").build()
+    private val database = Room.databaseBuilder(application, YouRoomDatabase::class.java, "youroom.db")
+        .addMigrations(YouRoomDatabase.MIGRATION_1_2).build()
     val repository = ClassroomRepository(SchoolApi(), database.dao(), SecureSessionStore(application))
     val settings = SettingsStore(application)
 }

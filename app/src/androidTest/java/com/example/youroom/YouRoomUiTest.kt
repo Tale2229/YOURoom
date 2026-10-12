@@ -37,8 +37,10 @@ class YouRoomUiTest {
             override suspend fun deleteProfile(roomId: String) = error("Real persistence disabled in UI tests")
         }
         val settings = object : FilterSettings {
-            override val filters = MutableStateFlow(Campus.entries.associateWith { SearchFilters() })
-            override suspend fun save(campus: Campus, filters: SearchFilters) = error("Real settings disabled in UI tests")
+            override val filters = MutableStateFlow(SearchFilters())
+            override val customTags = MutableStateFlow<Set<String>>(emptySet())
+            override suspend fun save(filters: SearchFilters) = error("Real settings disabled in UI tests")
+            override suspend fun addTag(name: String) = error("Real settings disabled in UI tests")
         }
         val factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
@@ -184,5 +186,79 @@ class YouRoomUiTest {
         compose.onNodeWithTag("slot_1").assertIsSelected()
         compose.onNodeWithTag("slot_2").assertIsSelected()
         compose.onNodeWithTag("slot_3").assertIsNotSelected()
+    }
+
+    @Test fun filterPopupSupportsMultipleBuildingsAndCountsSelectedChips() {
+        enterDemo()
+        compose.onNodeWithTag("extra_filters").performScrollTo().performClick()
+        compose.onNodeWithTag("filter_dialog").assertIsDisplayed()
+        compose.onNodeWithTag("building_2").performClick()
+        compose.onNodeWithTag("building_3").performClick()
+        compose.onNodeWithTag("building_2").assertIsSelected()
+        compose.onNodeWithTag("building_3").assertIsSelected()
+        compose.onNodeWithTag("building_all").assertIsNotSelected()
+        compose.onNodeWithTag("filter_favorite").performClick()
+        compose.onNodeWithTag("filter_outlets").performClick()
+        compose.onNodeWithTag("apply_filters").performClick()
+        compose.onNodeWithTag("filter_dialog").assertDoesNotExist()
+        compose.onNodeWithTag("filter_badge").assertTextEquals("4")
+        compose.onNodeWithText("已有额外筛选 · 点击修改").assertDoesNotExist()
+        compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeLeft() }
+        compose.onNodeWithTag("filter_badge").assertTextEquals("2")
+        compose.onNodeWithTag("extra_filters").performClick()
+        compose.onNodeWithTag("building_all").assertIsSelected()
+        compose.onNodeWithTag("filter_favorite").assertIsSelected()
+        compose.onNodeWithTag("filter_outlets").assertIsSelected()
+    }
+
+    @Test fun selectedTimeIsSharedEvenAfterEditingTheOtherCampus() {
+        enterDemo()
+        compose.onNodeWithText("清空").performScrollTo().performClick()
+        compose.onNodeWithTag("slot_1").performClick()
+        compose.onNodeWithTag("slot_6").performClick()
+        compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeLeft() }
+        compose.onNodeWithTag("slot_1").assertIsSelected()
+        compose.onNodeWithTag("slot_6").assertIsSelected()
+        compose.onNodeWithTag("slot_2").assertIsNotSelected()
+        compose.onNodeWithTag("slot_3").performClick()
+        compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeRight() }
+        compose.onNodeWithTag("slot_3").assertIsSelected()
+    }
+
+    @Test fun customTermCanBeCreatedMarkedAndUsedToFilter() {
+        enterDemo()
+        compose.onNodeWithTag("extra_filters").performScrollTo().performClick()
+        compose.onNodeWithTag("edit_tags").performScrollTo().performClick()
+        compose.onNodeWithTag("custom_tag_name").performScrollTo().performTextInput("靠窗")
+        compose.onNodeWithTag("add_tag").performScrollTo().performClick()
+        compose.onNodeWithTag("filter_tag_靠窗").performScrollTo().assertExists()
+        compose.onNodeWithTag("apply_filters").performClick()
+        compose.onNodeWithTag("room_list").performScrollToNode(hasText("2-201"))
+        compose.onNodeWithText("2-201").performClick()
+        compose.onNodeWithText("靠窗").performScrollTo().performClick()
+        compose.onNodeWithTag("save_profile").performScrollTo().performClick()
+        compose.onNodeWithTag("room_list").performScrollToNode(hasTestTag("extra_filters"))
+        compose.onNodeWithTag("extra_filters").performClick()
+        compose.onNodeWithTag("filter_tag_靠窗").performScrollTo().performClick()
+        compose.onNodeWithTag("apply_filters").performClick()
+        compose.onNodeWithTag("filter_badge").assertTextEquals("1")
+        compose.onNodeWithTag("room_list").performScrollToNode(hasText("2-201"))
+        compose.onNodeWithText("2-201").assertIsDisplayed()
+        compose.onNodeWithText("3-108").assertDoesNotExist()
+    }
+
+    @Test fun campusTransitionMovesTheWholePageAtMidAnimation() {
+        enterDemo()
+        val initialHeader = compose.onNodeWithTag("campus_header").fetchSemanticsNode().boundsInRoot
+        val action = compose.onNodeWithTag("campus_swipe_region").fetchSemanticsNode().config[SemanticsActions.CustomActions].single()
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { assertTrue(action.action()) }
+        compose.mainClock.advanceTimeBy(160)
+        val moving = compose.onAllNodesWithTag("campus_header").fetchSemanticsNodes()
+        assertEquals(2, moving.size)
+        assertTrue(moving.any { kotlin.math.abs(it.boundsInRoot.left - initialHeader.left) > initialHeader.width * .2f })
+        compose.mainClock.advanceTimeBy(500)
+        compose.mainClock.autoAdvance = true
+        compose.onNodeWithTag("campus_label").assertTextEquals("沙河")
     }
 }

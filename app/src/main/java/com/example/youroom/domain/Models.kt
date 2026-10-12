@@ -40,17 +40,24 @@ data class RoomProfile(
     val quiet: Boolean = false,
     val outlets: Boolean = false,
     val note: String = "",
+    val tags: Set<String> = emptySet(),
 )
 
 data class SearchFilters(
     val selectedSlots: Set<Int> = emptySet(),
-    val building: String? = null,
+    val buildings: Set<String> = emptySet(),
     val query: String = "",
     val favoritesOnly: Boolean = false,
-    val quietOnly: Boolean = false,
     val outletsOnly: Boolean = false,
+    val tags: Set<String> = emptySet(),
     val minimumCapacity: Int = 0,
-)
+) {
+    // Capacity is a numeric constraint, not a selected chip.
+    val badgeCount: Int get() = buildings.size + tags.size +
+        (if (favoritesOnly) 1 else 0) + (if (outletsOnly) 1 else 0)
+    fun toggleBuilding(building: String) = copy(buildings =
+        if (building in buildings) buildings - building else buildings + building)
+}
 
 data class RoomMatch(val classroom: Classroom, val profile: RoomProfile, val freeSlots: Set<Int>)
 
