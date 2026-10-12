@@ -75,7 +75,7 @@ fun ClassroomScreen(state: YouRoomState, onFilters: (SearchFilters) -> Unit,
             item {
                 Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    SlotRangePicker(state.campus, state.filters, slots, onFilters)
+                    SlotPicker(state.campus, snapshot?.queryDate, state.demo, state.filters, slots, onFilters)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(state.filters.query, { onFilters(state.filters.copy(query = it)) },
                             Modifier.weight(1f).testTag("room_search"), placeholder = { Text("搜索教室或备注") },
@@ -119,16 +119,18 @@ fun ClassroomScreen(state: YouRoomState, onFilters: (SearchFilters) -> Unit,
                     Text(when {
                         state.stale -> "需要刷新今日数据"
                         snapshot == null -> "还没有教室数据"
+                        state.filters.selectedSlots.isEmpty() -> "请选择自习时段"
                         result.missingSlots -> "所选节次数据不完整"
                         else -> "没有符合条件的教室"
                     }, style = MaterialTheme.typography.titleLarge)
                     Text(if (snapshot == null || state.stale) "检查网络后重试，旧缓存不作为今日数据。"
+                        else if (state.filters.selectedSlots.isEmpty()) "点击节次，或按住划过多个格子进行选择。"
                         else "试试缩短时段，或放宽楼宇与个人标记筛选。",
                         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (snapshot == null || state.stale) TextButton(onClick = onRefresh,
                         shape = MaterialTheme.shapes.small, enabled = !state.refreshing && !state.demo) {
                         Text(if (state.viewingCache) "登录并刷新" else "重新获取")
-                    } else TextButton(onClick = { onFilters(SearchFilters(state.filters.firstSlot, state.filters.lastSlot)) },
+                    } else if (state.filters.selectedSlots.isNotEmpty()) TextButton(onClick = { onFilters(SearchFilters(selectedSlots = state.filters.selectedSlots)) },
                         shape = MaterialTheme.shapes.small) { Text("清除额外筛选") }
                 }
             }
@@ -143,61 +145,6 @@ fun ClassroomScreen(state: YouRoomState, onFilters: (SearchFilters) -> Unit,
                 Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-    }
-}
-
-@Composable
-private fun SlotRangePicker(campus: Campus, filters: SearchFilters, slots: List<LessonSlot>,
-    onFilters: (SearchFilters) -> Unit) {
-    var choosingEnd by rememberSaveable(campus) { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("自习时段", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            val first = slots.find { it.number == filters.firstSlot }
-            val last = slots.find { it.number == filters.lastSlot }
-            Text(if (first != null && last != null) "${first.start}—${last.end}" else "暂无数据",
-                style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-        }
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-            // Every cell retains a 48dp touch target, including small phones and large fonts.
-            val columns = ((maxWidth.value + 4f) / 52f).toInt().coerceIn(1, 7)
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                slots.chunked(columns).forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        row.forEach { slot ->
-                            val inRange = slot.number in filters.firstSlot..filters.lastSlot
-                            val endpoint = inRange && (slot.number == filters.firstSlot || slot.number == filters.lastSlot)
-                            val colors = MaterialTheme.colorScheme
-                            val background by animateColorAsState(
-                                if (endpoint) colors.primary else if (inRange) colors.primaryContainer else colors.surfaceContainer,
-                                tween(140), label = "slot_background")
-                            val foreground = if (endpoint) colors.onPrimary else if (inRange) colors.onPrimaryContainer else colors.onSurfaceVariant
-                            Surface(onClick = {
-                                onFilters(SlotSelection.select(filters, slot.number, choosingEnd))
-                                choosingEnd = !choosingEnd
-                            }, shape = MaterialTheme.shapes.small, color = background, contentColor = foreground,
-                                modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("slot_${slot.number}")
-                                    .semantics {
-                                        selected = inRange
-                                        contentDescription = "第 ${slot.number} 节，${slot.timeLabel}"
-                                        stateDescription = when {
-                                            endpoint -> "时段端点"
-                                            inRange -> "在所选时段内"
-                                            else -> "未选中"
-                                        }
-                                    }) {
-                                Box(Modifier.padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                                    Text("${slot.number}", style = MaterialTheme.typography.labelLarge)
-                                }
-                            }
-                        }
-                        repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
-                    }
-                }
-            }
-        }
-        Text(if (choosingEnd) "再点终点，所选节次均需空闲。" else "点选起点，再点终点；再次点选可重新开始。",
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -267,7 +214,7 @@ private fun RoomRow(match: RoomMatch, slots: List<Int>, modifier: Modifier = Mod
 @Composable
 private fun RoomsPreview() {
     YouRoomTheme { ClassroomScreen(YouRoomState(initializing = false, demo = true,
-        snapshot = DemoData.snapshot(), filters = SearchFilters(1, 2)), {}, {}, {}, {}) }
+        snapshot = DemoData.snapshot(), filters = SearchFilters(setOf(1, 2))), {}, {}, {}, {}) }
 }
 
 @Preview(name = "沙河演示", showBackground = true, widthDp = 390, heightDp = 844)
@@ -275,5 +222,5 @@ private fun RoomsPreview() {
 private fun ShahePreview() {
     YouRoomTheme(campus = Campus.SHAHE) { ClassroomScreen(YouRoomState(initializing = false,
         campus = Campus.SHAHE, demo = true, snapshot = DemoData.snapshot(Campus.SHAHE),
-        filters = SearchFilters(1, 2)), {}, {}, {}, {}) }
+        filters = SearchFilters(setOf(1, 2))), {}, {}, {}, {}) }
 }

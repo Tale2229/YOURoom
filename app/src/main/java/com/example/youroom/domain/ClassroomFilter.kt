@@ -7,8 +7,9 @@ object ClassroomFilter {
         filters: SearchFilters,
         profiles: Map<String, RoomProfile>,
     ): SearchResult {
-        if (filters.firstSlot > filters.lastSlot) return SearchResult(emptyList(), emptyList(), false, true)
-        val numbers = (filters.firstSlot..filters.lastSlot).toSet()
+        val numbers = filters.selectedSlots
+        if (numbers.isEmpty()) return SearchResult(emptyList(), emptyList(), false)
+        if (numbers.any { it <= 0 }) return SearchResult(emptyList(), emptyList(), false, true)
         val selected = snapshot.slots.filter { it.number in numbers }.sortedBy { it.number }
         if (selected.map { it.number }.toSet() != numbers) {
             return SearchResult(emptyList(), selected, false, true)

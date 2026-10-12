@@ -89,8 +89,7 @@ class YouRoomViewModel(
             settings.filters.catch { showError("无法读取筛选设置。") }.collect { values ->
                 realWorkspaces = realWorkspaces.mapValues { (campus, workspace) ->
                     val saved = values[campus] ?: SearchFilters()
-                    workspace.copy(filters = saved.copy(firstSlot = workspace.filters.firstSlot,
-                        lastSlot = workspace.filters.lastSlot, query = workspace.filters.query))
+                    workspace.copy(filters = saved.copy(selectedSlots = workspace.filters.selectedSlots, query = workspace.filters.query))
                 }
                 if (!state.value.demo) mutableState.update {
                     it.copy(filters = realWorkspaces.getValue(it.campus).filters)
@@ -173,7 +172,7 @@ class YouRoomViewModel(
     fun showDemo() {
         cancelRefresh()
         demoWorkspaces = Campus.entries.associateWith { campus ->
-            CampusWorkspace(snapshot = DemoData.snapshot(campus, clock), filters = SearchFilters(1, 2))
+            CampusWorkspace(snapshot = DemoData.snapshot(campus, clock), filters = SearchFilters(setOf(1, 2)))
         }
         mutableState.update { it.copy(demo = true, loggedIn = false, viewingCache = false, profiles = emptyMap()) }
         restoreWorkspace(Campus.XITUCHENG)
@@ -214,12 +213,16 @@ class YouRoomViewModel(
         }
     }
 
+    fun setFiltersFor(campus: Campus, filters: SearchFilters) {
+        if (state.value.campus == campus) setFilters(filters)
+    }
+
     fun setFilters(filters: SearchFilters) {
         val current = state.value
         mutableState.update { it.copy(filters = filters) }
         captureWorkspace()
-        if (!current.demo && current.filters.copy(firstSlot = 1, lastSlot = 1, query = "") !=
-            filters.copy(firstSlot = 1, lastSlot = 1, query = "")) {
+        if (!current.demo && current.filters.copy(selectedSlots = emptySet(), query = "") !=
+            filters.copy(selectedSlots = emptySet(), query = "")) {
             val campus = current.campus
             viewModelScope.launch {
                 try { settings.save(campus, filters) }
@@ -311,11 +314,9 @@ class YouRoomViewModel(
 
     private fun withSnapshot(previous: CampusWorkspace, snapshot: ClassroomSnapshot, fromCache: Boolean): CampusWorkspace {
         val first = snapshot.slots.firstOrNull { it.end > LocalTime.now(clock.withZone(SchoolZone)) } ?: snapshot.slots.firstOrNull()
-        val preserve = previous.snapshot?.queryDate == snapshot.queryDate &&
-            snapshot.slots.any { it.number == previous.filters.firstSlot } &&
-            snapshot.slots.any { it.number == previous.filters.lastSlot }
+        val preserve = previous.snapshot?.queryDate == snapshot.queryDate
         return previous.copy(snapshot = snapshot, fromCache = fromCache, refreshing = false, error = null,
-            filters = if (preserve || first == null) previous.filters else previous.filters.copy(firstSlot = first.number, lastSlot = first.number))
+            filters = if (preserve || first == null) previous.filters else previous.filters.copy(selectedSlots = setOf(first.number)))
     }
 
     private fun message(error: Exception): String = when (error) {

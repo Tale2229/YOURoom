@@ -15,6 +15,7 @@ import com.example.youroom.ui.theme.YouRoomTheme
 @Composable
 fun YouRoomApp(model: YouRoomViewModel) {
     val state by model.state.collectAsStateWithLifecycle()
+    val displayedCampus = state.campus
     var tab by rememberSaveable { mutableIntStateOf(0) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { model.onForeground() }
     YouRoomTheme(campus = state.campus) {
@@ -43,7 +44,7 @@ fun YouRoomApp(model: YouRoomViewModel) {
                         "loading" -> LoadingScreen()
                         "login" -> LoginScreen(state, model::login, { tab = 0; model.showDemo() },
                             { tab = 0; model.viewCache() })
-                        "rooms" -> ClassroomScreen(state, model::setFilters, model::refresh,
+                        "rooms" -> ClassroomScreen(state, { model.setFiltersFor(displayedCampus, it) }, model::refresh,
                             model::selectRoom, model::toggleFavorite, model::setCampus)
                         else -> PreferencesScreen(state, model::selectRoom, model::clearProfile, model::logout)
                     }

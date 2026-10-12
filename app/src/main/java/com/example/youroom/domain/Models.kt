@@ -43,8 +43,7 @@ data class RoomProfile(
 )
 
 data class SearchFilters(
-    val firstSlot: Int = 1,
-    val lastSlot: Int = 1,
+    val selectedSlots: Set<Int> = emptySet(),
     val building: String? = null,
     val query: String = "",
     val favoritesOnly: Boolean = false,

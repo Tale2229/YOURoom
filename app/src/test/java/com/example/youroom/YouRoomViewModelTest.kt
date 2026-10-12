@@ -36,7 +36,7 @@ class YouRoomViewModelTest {
     }
 
     @Test fun switchQueriesTargetCampusAndKeepsFiltersSeparate() = checkModel { model, source, _ ->
-        model.setFilters(model.state.value.filters.copy(building = "2", firstSlot = 4, lastSlot = 6))
+        model.setFilters(model.state.value.filters.copy(building = "2", selectedSlots = (4..6).toSet()))
         runCurrent()
         model.setCampus(Campus.SHAHE)
         runCurrent()
@@ -47,8 +47,7 @@ class YouRoomViewModelTest {
         runCurrent()
         model.setCampus(Campus.XITUCHENG)
         assertEquals("2", model.state.value.filters.building)
-        assertEquals(4, model.state.value.filters.firstSlot)
-        assertEquals(6, model.state.value.filters.lastSlot)
+        assertEquals(setOf(4, 5, 6), model.state.value.filters.selectedSlots)
         assertFalse(model.state.value.filters.quietOnly)
         model.setCampus(Campus.SHAHE)
         assertTrue(model.state.value.filters.quietOnly)
@@ -93,13 +92,13 @@ class YouRoomViewModelTest {
 
     @Test fun demoSwitchRetainsDemoFiltersAndNeverSavesRealPreferences() = checkModel(false) { model, source, settings ->
         model.showDemo()
-        model.setFilters(model.state.value.filters.copy(building = "2", firstSlot = 4, lastSlot = 5))
+        model.setFilters(model.state.value.filters.copy(building = "2", selectedSlots = (4..5).toSet()))
         val room = model.state.value.snapshot!!.classrooms.first()
         model.toggleFavorite(room)
         model.setCampus(Campus.SHAHE)
         model.setCampus(Campus.XITUCHENG)
         assertEquals("2", model.state.value.filters.building)
-        assertEquals(4, model.state.value.filters.firstSlot)
+        assertEquals(setOf(4, 5), model.state.value.filters.selectedSlots)
         assertTrue(model.state.value.profiles[room.id]!!.favorite)
         runCurrent()
         assertTrue(settings.saved.isEmpty())
@@ -137,6 +136,21 @@ class YouRoomViewModelTest {
         assertEquals(previous, model.state.value.snapshot)
         assertEquals("查询失败", model.state.value.error)
         assertFalse(model.state.value.refreshing)
+    }
+
+    @Test fun refreshingSameDayDoesNotFillAnIntentionallyEmptySelection() = checkModel { model, _, _ ->
+        model.setFilters(model.state.value.filters.copy(selectedSlots = emptySet()))
+        model.refresh(); runCurrent()
+        assertTrue(model.state.value.filters.selectedSlots.isEmpty())
+        assertTrue(model.state.value.result.rooms.isEmpty())
+    }
+
+    @Test fun outgoingPickerCannotRestoreItsSelectionIntoAnotherCampus() = checkModel { model, _, _ ->
+        val west = model.state.value.filters.copy(selectedSlots = setOf(3, 5))
+        model.setCampus(Campus.SHAHE); runCurrent()
+        val shahe = model.state.value.filters
+        model.setFiltersFor(Campus.XITUCHENG, west)
+        assertEquals(shahe, model.state.value.filters)
     }
 
     private inner class FakeSource(var authenticated: Boolean) : ClassroomDataSource {

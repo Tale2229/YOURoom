@@ -15,7 +15,7 @@ class YouRoomStateTest {
 
     @Test fun sameDayCacheCanBeFilteredButIsClearlyMarkedAsCache() {
         val state = YouRoomState(initializing = false, snapshot = snapshot,
-            today = date, fromCache = true, viewingCache = true, filters = SearchFilters(1, 1))
+            today = date, fromCache = true, viewingCache = true, filters = SearchFilters((1..1).toSet()))
         assertFalse(state.stale)
         assertTrue(state.showWorkspace)
         assertEquals(1, state.result.rooms.size)
@@ -23,7 +23,7 @@ class YouRoomStateTest {
 
     @Test fun staleCacheIsNeverExposedAsTodayAvailability() {
         val state = YouRoomState(snapshot = snapshot, today = date.plusDays(1),
-            viewingCache = true, selectedRoomId = "01:2-201", filters = SearchFilters(1, 1))
+            viewingCache = true, selectedRoomId = "01:2-201", filters = SearchFilters((1..1).toSet()))
         assertTrue(state.stale)
         assertTrue(state.result.rooms.isEmpty())
         assertTrue(state.selectedRoom!!.freeSlots.isEmpty())

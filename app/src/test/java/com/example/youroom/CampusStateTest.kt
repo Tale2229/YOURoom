@@ -37,7 +37,7 @@ class CampusStateTest {
 
     @Test fun shaheThemeDemoIsFilterableWithoutClaimingRealDataAccess() {
         val state = YouRoomState(campus = Campus.SHAHE, demo = true,
-            snapshot = DemoData.snapshot(Campus.SHAHE), filters = SearchFilters(1, 2))
+            snapshot = DemoData.snapshot(Campus.SHAHE), filters = SearchFilters((1..2).toSet()))
         assertTrue(state.result.rooms.isNotEmpty())
         assertTrue(state.result.rooms.all { it.classroom.id.startsWith("04:") })
         assertTrue(snapshotLabel(state).contains("演示数据"))

@@ -18,9 +18,22 @@ class ClassroomFilterTest {
             LessonSlot(3, LocalTime.of(9, 50), LocalTime.of(10, 35), listOf(b, c))))
 
     @Test fun multipleSlotsUseIntersectionNotUnion() {
-        val result = ClassroomFilter.search(snapshot, SearchFilters(1, 3), emptyMap())
+        val result = ClassroomFilter.search(snapshot, SearchFilters((1..3).toSet()), emptyMap())
         assertEquals(listOf(c.id), result.rooms.map { it.classroom.id })
         assertTrue(result.hasUncoveredGaps)
+    }
+
+    @Test fun nonContiguousSelectionDoesNotRequireTheGapToBeFree() {
+        val result = ClassroomFilter.search(snapshot, SearchFilters(setOf(1, 3)), emptyMap())
+        assertEquals(setOf(b.id, c.id), result.rooms.map { it.classroom.id }.toSet())
+        assertEquals(listOf(1, 3), result.selectedSlots.map { it.number })
+    }
+
+    @Test fun emptySelectionDoesNotReturnAllRooms() {
+        val result = ClassroomFilter.search(snapshot, SearchFilters(emptySet()), emptyMap())
+        assertTrue(result.rooms.isEmpty())
+        assertTrue(result.selectedSlots.isEmpty())
+        assertFalse(result.missingSlots)
     }
 
     @Test fun compoundRoomIdentifierIsPreserved() {
@@ -32,30 +45,30 @@ class ClassroomFilterTest {
 
     @Test fun exclusionsAreHardFiltersAndFavoritesSortFirst() {
         val profiles = mapOf(a.id to a.emptyProfile().copy(excluded = true), b.id to b.emptyProfile().copy(favorite = true))
-        val rooms = ClassroomFilter.search(snapshot, SearchFilters(1, 1), profiles).rooms
+        val rooms = ClassroomFilter.search(snapshot, SearchFilters((1..1).toSet()), profiles).rooms
         assertEquals(listOf(b.id, c.id), rooms.map { it.classroom.id })
     }
 
     @Test fun unknownPreferencesDoNotMatchQuietOrOutletRequirements() {
         val profiles = mapOf(c.id to c.emptyProfile().copy(quiet = true, outlets = true))
         assertEquals(listOf(c.id), ClassroomFilter.search(snapshot,
-            SearchFilters(1, 1, quietOnly = true, outletsOnly = true), profiles).rooms.map { it.classroom.id })
+            SearchFilters((1..1).toSet(), quietOnly = true, outletsOnly = true), profiles).rooms.map { it.classroom.id })
     }
 
     @Test fun capacityBuildingAndPersonalNoteCanFilter() {
         val profiles = mapOf(a.id to a.emptyProfile().copy(note = "后排靠窗"))
         assertEquals(listOf(a.id), ClassroomFilter.search(snapshot,
-            SearchFilters(1, 1, building = "2", query = "靠窗", minimumCapacity = 100), profiles).rooms.map { it.classroom.id })
+            SearchFilters((1..1).toSet(), building = "2", query = "靠窗", minimumCapacity = 100), profiles).rooms.map { it.classroom.id })
     }
 
-    @Test fun missingOrReversedPeriodsCannotProduceAvailability() {
-        assertTrue(ClassroomFilter.search(snapshot, SearchFilters(1, 4), emptyMap()).missingSlots)
-        assertTrue(ClassroomFilter.search(snapshot, SearchFilters(3, 1), emptyMap()).rooms.isEmpty())
+    @Test fun missingOrInvalidPeriodsCannotProduceAvailability() {
+        assertTrue(ClassroomFilter.search(snapshot, SearchFilters((1..4).toSet()), emptyMap()).missingSlots)
+        assertTrue(ClassroomFilter.search(snapshot, SearchFilters(setOf(0)), emptyMap()).rooms.isEmpty())
     }
 
     @Test fun favoriteOnlyReallyRequiresFavorite() {
         val profiles = mapOf(a.id to a.emptyProfile().copy(favorite = true))
-        assertEquals(listOf(a.id), ClassroomFilter.search(snapshot, SearchFilters(1, 1, favoritesOnly = true), profiles)
+        assertEquals(listOf(a.id), ClassroomFilter.search(snapshot, SearchFilters((1..1).toSet(), favoritesOnly = true), profiles)
             .rooms.map { it.classroom.id })
     }
 
