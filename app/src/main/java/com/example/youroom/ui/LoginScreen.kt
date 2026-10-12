@@ -42,14 +42,19 @@ fun LoginScreen(state: YouRoomState, onLogin: (String, String) -> Unit,
     Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState())
         .padding(horizontal = 28.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         Spacer(Modifier.height(32.dp))
-        AppMark()
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically) {
+            AppMark()
+            Text("北邮 · 自习", style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("YouRoom", style = MaterialTheme.typography.headlineLarge)
             Text("北邮空闲教室", style = MaterialTheme.typography.titleLarge)
             Text("登录教务账号，按时段找到合适的自习教室。",
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Spacer(Modifier.height(8.dp))
+        HorizontalDivider(Modifier.padding(vertical = 8.dp))
         OutlinedTextField(account, { account = it }, Modifier.fillMaxWidth().testTag("account"),
             label = { Text("学号 / 工号") }, singleLine = true, enabled = !state.loggingIn,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Next))
@@ -58,11 +63,12 @@ fun LoginScreen(state: YouRoomState, onLogin: (String, String) -> Unit,
             visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { if (!state.loggingIn && account.isNotBlank() && password.isNotEmpty()) submit() }),
-            trailingIcon = { IconButton(onClick = { visible = !visible }) {
+            trailingIcon = { IconAction(onClick = { visible = !visible }) {
                 Icon(if (visible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
                     if (visible) "隐藏密码" else "显示密码")
             } })
         Button(onClick = submit, Modifier.fillMaxWidth().height(52.dp).testTag("login"),
+            shape = MaterialTheme.shapes.small,
             enabled = !state.loggingIn && account.isNotBlank() && password.isNotEmpty()) {
             if (state.loggingIn) CircularProgressIndicator(Modifier.size(20.dp),
                 color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
@@ -81,11 +87,13 @@ fun LoginScreen(state: YouRoomState, onLogin: (String, String) -> Unit,
         Text("连接提示", style = MaterialTheme.typography.titleSmall)
         Text("请使用能够访问教务服务的网络。校外可尝试连接校园 VPN；网页登录式 WebVPN 不一定接管 App 网络。",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton(onClick = onDemo, enabled = !state.loggingIn, modifier = Modifier.align(Alignment.CenterHorizontally).testTag("demo")) {
+        OutlinedButton(onClick = onDemo, enabled = !state.loggingIn, shape = MaterialTheme.shapes.small,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("demo")) {
             Text("先看看演示")
         }
         AnimatedVisibility(state.snapshot != null && !state.loggingIn) {
-            TextButton(onClick = onCache, modifier = Modifier.fillMaxWidth()) { Text("查看本地缓存（非实时）") }
+            TextButton(onClick = onCache, shape = MaterialTheme.shapes.small,
+                modifier = Modifier.fillMaxWidth()) { Text("查看本地缓存（非实时）") }
         }
         Text("个人工具 · 非学校官方应用 · 首版支持西土城校区",
             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

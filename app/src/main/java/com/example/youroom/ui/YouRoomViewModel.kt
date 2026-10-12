@@ -25,6 +25,7 @@ data class YouRoomState(
     val fromCache: Boolean = false,
     val viewingCache: Boolean = false,
     val demo: Boolean = false,
+    val campus: Campus = Campus.XITUCHENG,
     val today: LocalDate = LocalDate.now(SchoolZone),
     val filters: SearchFilters = SearchFilters(),
     val profiles: Map<String, RoomProfile> = emptyMap(),
@@ -32,17 +33,24 @@ data class YouRoomState(
     val selectedRoomId: String? = null,
 ) {
     val showWorkspace: Boolean get() = loggedIn || demo || viewingCache
-    val stale: Boolean get() = snapshot?.isCurrentOn(today) == false
-    val result: SearchResult get() = snapshot?.takeUnless { stale }?.let {
+    val campusSnapshot: ClassroomSnapshot? get() = snapshot?.takeIf {
+        it.campusId == campus.dataKey && (demo || campus.connected)
+    }
+    val campusProfiles: List<RoomProfile> get() = profiles.values.filter { it.roomId.startsWith("${campus.dataKey}:") }
+    val campusUnavailable: Boolean get() = !demo && !campus.connected
+    val stale: Boolean get() = campusSnapshot?.isCurrentOn(today) == false
+    val result: SearchResult get() = campusSnapshot?.takeUnless { stale }?.let {
         ClassroomFilter.search(it, filters, profiles)
     } ?: SearchResult(emptyList(), emptyList(), false)
     val selectedRoom: RoomMatch? get() {
         val id = selectedRoomId ?: return null
+        if (campusUnavailable) return null
+        if (!id.startsWith("${campus.dataKey}:")) return null
         val profile = profiles[id]
-        val room = snapshot?.classrooms?.find { it.id == id }
+        val room = campusSnapshot?.classrooms?.find { it.id == id }
             ?: profile?.let { Classroom(it.roomId, it.name, it.building, null) } ?: return null
         return RoomMatch(room, profile ?: room.emptyProfile(),
-            if (stale) emptySet() else snapshot?.slots?.filter { slot -> slot.classrooms.any { it.id == id } }
+            if (stale) emptySet() else campusSnapshot?.slots?.filter { slot -> slot.classrooms.any { it.id == id } }
                 ?.map { it.number }?.toSet().orEmpty())
     }
 }
@@ -114,7 +122,7 @@ class YouRoomViewModel(private val container: AppContainer) : ViewModel() {
 
     fun refresh() {
         val current = state.value
-        if (current.demo || current.refreshing || current.initializing) return
+        if (current.demo || current.campusUnavailable || current.refreshing || current.initializing) return
         if (!current.loggedIn) { openLogin(); return }
         mutableState.update { it.copy(refreshing = true, error = null) }
         refreshJob = viewModelScope.launch {
@@ -136,7 +144,7 @@ class YouRoomViewModel(private val container: AppContainer) : ViewModel() {
     fun onForeground() {
         mutableState.update { it.copy(today = LocalDate.now(SchoolZone)) }
         val current = state.value
-        if (current.initializing || current.demo || !current.loggedIn) return
+        if (current.initializing || current.demo || current.campusUnavailable || !current.loggedIn) return
         val snapshot = current.snapshot
         if (snapshot == null || current.stale || Duration.between(snapshot.fetchedAt, Instant.now()).toMinutes() >= 10) {
             refresh()
@@ -145,6 +153,7 @@ class YouRoomViewModel(private val container: AppContainer) : ViewModel() {
 
     fun showDemo() {
         mutableState.update { it.copy(demo = true, loggedIn = false, viewingCache = false,
+            campus = Campus.XITUCHENG,
             snapshot = DemoData.snapshot(), profiles = emptyMap(), filters = SearchFilters(firstSlot = 1, lastSlot = 2),
             error = null, fromCache = false, selectedRoomId = null) }
     }
@@ -156,8 +165,18 @@ class YouRoomViewModel(private val container: AppContainer) : ViewModel() {
 
     fun openLogin() {
         mutableState.update { it.copy(demo = false, viewingCache = false, snapshot = cachedSnapshot,
+            campus = Campus.XITUCHENG,
             fromCache = cachedSnapshot != null, profiles = storedProfiles, filters = storedFilters,
             error = null, selectedRoomId = null) }
+    }
+
+    fun setCampus(campus: Campus) {
+        if (state.value.campus == campus) return
+        mutableState.update {
+            if (it.demo) it.copy(campus = campus, snapshot = DemoData.snapshot(campus),
+                filters = SearchFilters(1, 2), selectedRoomId = null, error = null)
+            else it.copy(campus = campus, selectedRoomId = null, error = null)
+        }
     }
 
     fun logout() {
@@ -167,7 +186,8 @@ class YouRoomViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             try {
                 repository.logout()
-                mutableState.update { it.copy(loggedIn = false, viewingCache = false, selectedRoomId = null, error = null) }
+                mutableState.update { it.copy(loggedIn = false, viewingCache = false,
+                    campus = Campus.XITUCHENG, selectedRoomId = null, error = null) }
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 showError("退出未完成，无法清除本机登录状态，请重试。")

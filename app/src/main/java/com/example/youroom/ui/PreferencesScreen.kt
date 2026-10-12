@@ -19,14 +19,14 @@ fun PreferencesScreen(state: YouRoomState, onRoom: (String?) -> Unit,
     onClear: (String) -> Unit, onLogout: () -> Unit) {
     var confirmExit by remember { mutableStateOf(false) }
     var clearId by remember { mutableStateOf<String?>(null) }
-    val profiles = state.profiles.values.filter {
+    val profiles = state.campusProfiles.filter {
         it.favorite || it.excluded || it.quiet || it.outlets || it.note.isNotBlank()
     }.sortedWith(compareByDescending<com.example.youroom.domain.RoomProfile> { it.favorite }.thenBy { it.name })
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
             Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("个人偏好", style = MaterialTheme.typography.headlineMedium)
-                Text("收藏、排除和个人备注都保存在本机。",
+                Text("${state.campus.label}校区 · 收藏、排除与个人备注",
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -52,7 +52,7 @@ fun PreferencesScreen(state: YouRoomState, onRoom: (String?) -> Unit,
                         if (profile.note.isNotBlank()) Text(profile.note, maxLines = 2, overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    IconButton(onClick = { clearId = profile.roomId }) {
+                    IconAction(onClick = { clearId = profile.roomId }) {
                         Icon(Icons.Outlined.DeleteOutline, "清除 ${profile.name} 的个人标记")
                     }
                 }
@@ -66,22 +66,31 @@ fun PreferencesScreen(state: YouRoomState, onRoom: (String?) -> Unit,
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("首版仅接入已验证的西土城校区。校外访问能力取决于校园网络与 VPN 配置。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                OutlinedButton(onClick = { confirmExit = true }, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = { confirmExit = true }, shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                     Text(if (state.demo) "结束演示" else if (state.viewingCache) "返回登录" else "退出登录")
                 }
-                Text("YouRoom 1.0 · 非学校官方应用", style = MaterialTheme.typography.labelSmall,
+                Text("YouRoom 1.1 · 非学校官方应用", style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
     if (confirmExit) AlertDialog(onDismissRequest = { confirmExit = false },
         title = { Text(if (state.demo) "结束演示？" else "返回登录页？") },
-        text = { Text(if (state.demo) "本次演示中的个人标记将丢弃。" else "本地收藏和备注会保留，已保存的登录状态将清除。") },
-        confirmButton = { TextButton(onClick = { confirmExit = false; onLogout() }) { Text("确认") } },
-        dismissButton = { TextButton(onClick = { confirmExit = false }) { Text("取消") } })
+        text = { Text(when {
+            state.demo -> "本次演示中的个人标记将丢弃。"
+            state.viewingCache -> "本地收藏、备注与教室缓存会保留。"
+            else -> "本地收藏和备注会保留，已保存的登录状态将清除。"
+        }) },
+        confirmButton = { TextButton(onClick = { confirmExit = false; onLogout() },
+            shape = MaterialTheme.shapes.small) { Text("确认") } },
+        dismissButton = { TextButton(onClick = { confirmExit = false },
+            shape = MaterialTheme.shapes.small) { Text("取消") } })
     clearId?.let { id -> AlertDialog(onDismissRequest = { clearId = null },
         title = { Text("清除此教室的个人标记？") },
         text = { Text("收藏、排除、标签和备注都会清除，学校数据不受影响。") },
-        confirmButton = { TextButton(onClick = { onClear(id); clearId = null }) { Text("清除") } },
-        dismissButton = { TextButton(onClick = { clearId = null }) { Text("取消") } }) }
+        confirmButton = { TextButton(onClick = { onClear(id); clearId = null },
+            shape = MaterialTheme.shapes.small) { Text("清除") } },
+        dismissButton = { TextButton(onClick = { clearId = null },
+            shape = MaterialTheme.shapes.small) { Text("取消") } }) }
 }

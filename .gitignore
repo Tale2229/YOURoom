@@ -13,3 +13,11 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Machine-local IDE state, caches and signing material.
+/.idea/
+/.kotlin/
+/artifacts/
+*.jks
+*.keystore
+keystore.properties
