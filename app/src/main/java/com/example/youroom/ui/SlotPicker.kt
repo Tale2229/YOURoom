@@ -3,6 +3,7 @@ package com.example.youroom.ui
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -28,6 +29,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -35,6 +37,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.input.ImeAction
 import com.example.youroom.ui.theme.campusBadgeColor
 import com.example.youroom.domain.*
@@ -60,7 +63,9 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
     // a fresh grid composition on every frame as its containing page slides.
     val geometry = remember(context, available) { SlotPointerGeometry() }
     val bounds = geometry.bounds
-    val chosen = remember(slots, filters.selectedSlots) { slots.filter { it.number in filters.selectedSlots } }
+    var previewSelection by remember(context, available) { mutableStateOf<Set<Int>?>(null) }
+    val selection = previewSelection ?: filters.selectedSlots
+    val chosen = remember(slots, selection) { slots.filter { it.number in selection } }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("自习时段", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
@@ -79,9 +84,10 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                         ?: return@awaitEachGesture
                     val drag = SlotDragSelection(latestFilters.selectedSlots, first)
                     var previous = firstPosition
-                    var completed = false
                     down.consume()
-                    latestCallback(latestFilters.copy(selectedSlots = drag.selection))
+                    // Preview stays inside the grid. Do not change the search request
+                    // or animate classroom rows for each cell crossed by the finger.
+                    previewSelection = drag.selection
                     try {
                         while (true) {
                             val event = awaitPointerEvent(PointerEventPass.Initial)
@@ -93,16 +99,21 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                             if (change.isConsumed) break
                             val position = change.position + geometry.origin
                             val crossed = SlotGridGeometry.crossed(bounds.values, previous.x, previous.y, position.x, position.y)
-                            val before = drag.selection
                             drag.visit(crossed)
-                            if (drag.selection != before) latestCallback(latestFilters.copy(selectedSlots = drag.selection))
+                            previewSelection = drag.selection
                             previous = position
                             change.consume()
-                            if (!change.pressed) { completed = true; break }
+                            if (!change.pressed) {
+                                if (latestContext == context && latestFilters.selectedSlots == drag.initial) {
+                                    latestCallback(latestFilters.copy(selectedSlots = drag.selection))
+                                }
+                                break
+                            }
                         }
                     } finally {
-                        // Disposal/campus/date changes must never restore an old selection into a new page.
-                        if (!completed && latestContext == context) latestCallback(latestFilters.copy(selectedSlots = drag.cancel()))
+                        // Cancellation/disposal needs no rollback of committed filters:
+                        // only the local preview has changed, so no search is launched.
+                        previewSelection = null
                     }
                 }
             }) {
@@ -113,7 +124,7 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                             val modifier = Modifier.width(cellWidth * cell.span + 4.dp * (cell.span - 1))
                             when (cell.kind) {
                                 StudyGridCellKind.SLOT -> slots.firstOrNull { it.number == cell.number }?.let { slot ->
-                                    val isSelected = slot.number in filters.selectedSlots
+                                    val isSelected = slot.number in selection
                                     val colors = MaterialTheme.colorScheme
                                     val background by animateColorAsState(
                                         if (isSelected) colors.primary else colors.surfaceContainer,
@@ -158,18 +169,22 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
 @Composable
 private fun TimeMarkerBand(markers: List<StudyTimeMarker?>, cellWidth: Dp) {
     if (markers.none { it != null }) return
-    Row(Modifier.fillMaxWidth().height(16.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    val bandHeight = with(LocalDensity.current) { maxOf(12.dp, 12.sp.toDp()) }
+    Row(Modifier.fillMaxWidth().height(bandHeight), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         markers.forEach { marker ->
             Box(Modifier.width(cellWidth).fillMaxHeight(), contentAlignment =
                 if (marker?.start == false) Alignment.CenterEnd else Alignment.CenterStart) {
                 if (marker != null) Row(Modifier.testTag("time_marker_${marker.number}").semantics(mergeDescendants = true) {
                     contentDescription = "第 ${marker.number} 节${if (marker.start) "开始" else "结束"}，${marker.label}"
-                },
+                }.height(bandHeight).padding(start = if (marker.start) 4.dp else 0.dp,
+                    end = if (marker.start) 0.dp else 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (marker.start) TimeMarkerLine()
-                    Text(marker.label, style = MaterialTheme.typography.labelSmall, maxLines = 1,
+                    if (marker.start) TimeMarkerLine(marker)
+                    Text(marker.label, Modifier.offset(y = if (marker.start) 2.dp else (-2).dp)
+                        .testTag("time_marker_label_${marker.number}"),
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 12.sp), maxLines = 1,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (!marker.start) TimeMarkerLine()
+                    if (!marker.start) TimeMarkerLine(marker)
                 }
             }
         }
@@ -177,8 +192,15 @@ private fun TimeMarkerBand(markers: List<StudyTimeMarker?>, cellWidth: Dp) {
 }
 
 @Composable
-private fun TimeMarkerLine() {
-    Box(Modifier.width(1.dp).height(8.dp).background(MaterialTheme.colorScheme.primary))
+private fun TimeMarkerLine(marker: StudyTimeMarker) {
+    val color = MaterialTheme.colorScheme.primary
+    Canvas(Modifier.width(1.dp).fillMaxHeight().testTag("time_marker_line_${marker.number}")) {
+        val range = timeMarkerLineRange(marker.start, size.height, 48.dp.roundToPx(), 36.dp.roundToPx(), 2.dp.toPx())
+        // Draw outside the label band into the 48dp target's transparent inset.
+        // Pixel-rounded insets keep the endpoint flush with the 36dp rectangle.
+        drawLine(color, Offset(size.width / 2, range.start), Offset(size.width / 2, range.endInclusive),
+            strokeWidth = size.width)
+    }
 }
 
 @Composable

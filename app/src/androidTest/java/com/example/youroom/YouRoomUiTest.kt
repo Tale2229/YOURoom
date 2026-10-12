@@ -348,6 +348,7 @@ class YouRoomUiTest {
         compose.onNodeWithText("2-201").performClick()
         compose.onNodeWithTag("save_profile").assertDoesNotExist()
         compose.onNodeWithText("保存个人标记").assertDoesNotExist()
+        compose.onNodeWithText("标签仅依据个人经验；未勾选表示未标记，不代表没有。").assertDoesNotExist()
         compose.onNodeWithText("标注容量 180", substring = true).assertIsDisplayed()
         compose.onNodeWithText("（非余座）", substring = true).assertDoesNotExist()
         compose.onNodeWithText("主题色：课表空闲；灰色：未列为空闲。课间与午休不作保证。").assertDoesNotExist()

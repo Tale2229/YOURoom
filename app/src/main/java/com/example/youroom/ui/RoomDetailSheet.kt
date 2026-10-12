@@ -75,8 +75,6 @@ fun RoomDetailSheet(room: RoomMatch, state: YouRoomState, onDismiss: () -> Unit,
                         draft.copy(tags = if (selected) draft.tags + tag else draft.tags - tag))
                 }
             }
-            Text("标签仅依据个人经验；未勾选表示未标记，不代表没有。",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedTextField(draft.note, { update(draft.copy(note = it.take(500))) },
                 modifier = Modifier.fillMaxWidth().testTag("room_note"), label = { Text("个人备注") },
                 placeholder = { Text("例如：靠窗、后排插座、周末可能不开门") }, minLines = 2, maxLines = 4)
