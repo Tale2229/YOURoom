@@ -91,6 +91,69 @@ class SlotPickerUiTest {
         assertTrue(changes.isEmpty())
     }
 
+    @Test fun heldInspectionFollowsTheCurrentFaceWithoutSelectingOrSearching() {
+        slots = slots.map { if (it.number == 7) it.copy(start = LocalTime.of(14, 5), end = LocalTime.of(14, 50)) else it }
+        render()
+        hold(1)
+        for (number in listOf(6, 7, 14, 1)) {
+            val target = point(number)
+            compose.onNodeWithTag("slot_grid").performTouchInput { moveTo(target) }
+            val slot = slots.single { it.number == number }
+            compose.onNodeWithTag("slot_time_label_$number").assertTextEquals("${slot.start}—${slot.end}")
+            assertEquals(setOf(6), filters.selectedSlots)
+            assertTrue(changes.isEmpty())
+        }
+        compose.onNodeWithTag("slot_grid").performTouchInput { up() }
+        compose.onNodeWithTag("slot_time_tooltip").assertDoesNotExist()
+        assertTrue(changes.isEmpty())
+    }
+
+    @Test fun leavingFacesHidesTheHintAndReturningResumesInspection() {
+        render()
+        hold(1)
+        val grid = compose.onNodeWithTag("slot_grid").fetchSemanticsNode().boundsInRoot
+        val first = compose.onNodeWithTag("slot_face_1", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val second = compose.onNodeWithTag("slot_face_2", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val gap = Offset((first.right + second.left) / 2, first.center.y) - grid.topLeft
+        compose.onNodeWithTag("slot_grid").performTouchInput { moveTo(gap) }
+        compose.onNodeWithTag("slot_time_tooltip").assertDoesNotExist()
+        val search = compose.onNodeWithTag("room_search_frame", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.center - grid.topLeft
+        compose.onNodeWithTag("slot_grid").performTouchInput { moveTo(search) }
+        compose.onNodeWithTag("slot_time_tooltip").assertDoesNotExist()
+        val seventh = point(7)
+        compose.onNodeWithTag("slot_grid").performTouchInput { moveTo(seventh) }
+        compose.onNodeWithTag("slot_time_label_7").assertExists()
+        compose.onNodeWithTag("slot_grid").performTouchInput { cancel() }
+        compose.onNodeWithTag("slot_time_tooltip").assertDoesNotExist()
+        assertEquals(setOf(6), filters.selectedSlots)
+        assertTrue(changes.isEmpty())
+    }
+
+    @Test fun changingCampusAfterFollowingAnotherFaceEndsInspection() {
+        render()
+        hold(1)
+        val last = point(14)
+        compose.onNodeWithTag("slot_grid").performTouchInput { moveTo(last) }
+        compose.onNodeWithTag("slot_time_label_14").assertExists()
+        compose.runOnIdle { campus = Campus.SHAHE }
+        compose.onNodeWithTag("slot_time_tooltip").assertDoesNotExist()
+        compose.onNodeWithTag("slot_grid").performTouchInput { up() }
+        assertEquals(setOf(6), filters.selectedSlots)
+        assertTrue(changes.isEmpty())
+    }
+
+    @Test fun compactHeaderSpacingKeepsTheOriginalTouchTargetAndSummaryHeight() {
+        render()
+        val header = compose.onNodeWithTag("slot_header").fetchSemanticsNode().boundsInRoot
+        val target = compose.onNodeWithTag("slot_1").fetchSemanticsNode().boundsInRoot
+        val face = compose.onNodeWithTag("slot_face_1", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertEquals(face.height / 9, target.top - header.bottom, 1f)
+        assertTrue(target.height + 1f >= face.height * 48 / 36)
+        val summary = compose.onNodeWithTag("slot_summary_space").fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithText("清空").performClick()
+        assertEquals(summary, compose.onNodeWithTag("slot_summary_space").fetchSemanticsNode().boundsInRoot)
+    }
+
     private fun verifyHintColors(dark: Boolean) {
         render(dark)
         for (target in Campus.entries) {

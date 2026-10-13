@@ -19,6 +19,7 @@ import com.example.youroom.domain.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import java.time.Clock
 
 val PlanningGoalSaver = listSaver<PlanningGoal, Any>(
     save = { listOf(it.start, it.end, it.flexible, it.origin ?: "") },
@@ -35,13 +36,14 @@ private data class FinishedPlanning(val request: PlanningRequest, val result: Pl
 @Composable
 fun StudyPlanningScreen(state: YouRoomState, goal: PlanningGoal, requested: Boolean,
     onGoal: (PlanningGoal) -> Unit, onGenerate: () -> Unit, onCampus: (Campus) -> Unit,
-    onRefresh: () -> Unit, onRoom: (String?) -> Unit, notBeforeMinute: Int? = null) {
+    onRefresh: () -> Unit, onRoom: (String?) -> Unit, notBeforeMinute: Int? = null,
+    clock: Clock = Clock.system(SchoolZone)) {
     var editingStart by remember { mutableStateOf<Boolean?>(null) }
     var rules by remember { mutableStateOf(false) }
     var originMenu by remember { mutableStateOf(false) }
     var choice by remember(state.campus, goal) { mutableIntStateOf(0) }
     val snapshot = state.campusSnapshot
-    val planningToday = if (state.demo) state.today else java.time.LocalDate.now(SchoolZone)
+    val planningToday = if (state.demo) state.today else java.time.LocalDate.now(clock.withZone(SchoolZone))
     val stale = snapshot?.isCurrentOn(planningToday) == false
     val request = remember(snapshot, state.campus, planningToday, state.profiles, goal, requested, notBeforeMinute) {
         if (requested) PlanningRequest(snapshot, state.campus, planningToday, state.profiles, goal,
@@ -79,10 +81,7 @@ fun StudyPlanningScreen(state: YouRoomState, goal: PlanningGoal, requested: Bool
                         PlanningTimeButton("开始时间", goal.start, Modifier.weight(1f).testTag("planner_start")) { editingStart = true }
                         PlanningTimeButton("结束时间", goal.end, Modifier.weight(1f).testTag("planner_end")) { editingStart = false }
                     }
-                    Text("仅规划今日", style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    PlanningToggle("允许调整时间", "整体平移最多 15 分钟，裁剪与途中损失合计不超过 20 分钟。",
-                        goal.flexible, "planner_adjust") { onGoal(goal.copy(flexible = it)) }
+                    PlanningToggle("允许调整时间", goal.flexible, "planner_adjust") { onGoal(goal.copy(flexible = it)) }
                     Box {
                         OutlinedButton(onClick = { originMenu = true }, shape = MaterialTheme.shapes.small,
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("planner_origin")) {
@@ -109,7 +108,26 @@ fun StudyPlanningScreen(state: YouRoomState, goal: PlanningGoal, requested: Bool
                 }
             }
             result?.message?.let { message -> item {
-                Text(message, Modifier.padding(24.dp).testTag("planner_message"), style = MaterialTheme.typography.bodyMedium)
+                Row(Modifier.fillMaxWidth().padding(24.dp), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(message, Modifier.weight(1f).testTag("planner_message"), style = MaterialTheme.typography.bodyMedium)
+                    when (result.problem) {
+                        PlanningProblem.PAST_TIME -> TextButton(onClick = {
+                            PlanningTimeActions.startFromNow(goal, clock)?.let(onGoal)
+                        }, enabled = PlanningTimeActions.startFromNow(goal, clock) != null,
+                            modifier = Modifier.heightIn(min = 48.dp).testTag("planner_from_now"),
+                            contentPadding = PaddingValues(horizontal = 8.dp)) { Text("从现在起") }
+                        PlanningProblem.INVALID_TIME -> Row(Modifier.testTag("planner_duration_buttons")) {
+                            listOf(1, 2, 4).forEach { hours ->
+                                TextButton(onClick = { PlanningTimeActions.endAfterHours(goal, hours)?.let(onGoal) },
+                                    enabled = PlanningTimeActions.endAfterHours(goal, hours) != null,
+                                    modifier = Modifier.width(48.dp).heightIn(min = 48.dp).testTag("planner_duration_${hours}h"),
+                                    contentPadding = PaddingValues(horizontal = 4.dp)) { Text("${hours}h") }
+                            }
+                        }
+                        null -> Unit
+                    }
+                }
             } }
             if (result?.options?.isNotEmpty() == true) {
                 item {
@@ -159,7 +177,7 @@ fun StudyPlanningScreen(state: YouRoomState, goal: PlanningGoal, requested: Bool
         }
     }
     if (rules) AlertDialog(onDismissRequest = { rules = false }, title = { Text("规划规则") },
-        text = { Text("仅规划今日，收藏加分，排除教室不可用，自定义词条不评分。\n\n最多换教室 2 次；按相邻节次的时间边界，将全部课间（包括午间）视为可用。上课期间仍须列为空闲，不补造缺失节次。搬动及等候扣除自习时间。\n\n代价：损失每分钟 ×3，起止偏移每分钟 ×1，换房一次 +20，换楼另 +12，步行每分钟 ×2，收藏自习每分钟 −1。额外十分钟收藏不足以抵消一次换房。\n\n时间候选按 5 分钟步进，并补充课表边界及对应整体平移。楼间、走廊和上下楼耗时均为估算，不是地图导航。",
+        text = { Text("收藏加分，排除教室不可用，自定义词条不评分。\n\n最多换教室 2 次；按相邻节次的时间边界，将全部课间（包括午间）视为可用。上课期间仍须列为空闲，不补造缺失节次。搬动及等候扣除自习时间。\n\n代价：损失每分钟 ×3，起止偏移每分钟 ×1，换房一次 +20，换楼另 +12，步行每分钟 ×2，收藏自习每分钟 −1。额外十分钟收藏不足以抵消一次换房。\n\n时间候选按 5 分钟步进，并补充课表边界及对应整体平移。楼间、走廊和上下楼耗时均为估算，不是地图导航。",
             Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) },
         confirmButton = { TextButton(onClick = { rules = false }) { Text("关闭") } })
 }
@@ -175,13 +193,10 @@ private fun PlanningTimeButton(label: String, minute: Int, modifier: Modifier, o
 }
 
 @Composable
-private fun PlanningToggle(label: String, explanation: String, checked: Boolean, tag: String, onChecked: (Boolean) -> Unit) {
+private fun PlanningToggle(label: String, checked: Boolean, tag: String, onChecked: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().testTag(tag).toggleable(checked, role = Role.Checkbox, onValueChange = onChecked)
         .heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(label, style = MaterialTheme.typography.titleMedium)
-            Text(explanation, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
         Checkbox(checked, onCheckedChange = null)
     }
 }

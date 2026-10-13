@@ -26,11 +26,11 @@ object StudyPlanner {
             return PlanningResult(message = "请先获取当前校区的今日数据。")
         val duration = goal.end - goal.start
         if (goal.start !in 0..1439 || goal.end !in 0..1439 || duration <= 0)
-            return PlanningResult(message = "结束时间必须晚于开始时间，暂不支持跨日规划。")
+            return PlanningResult(message = "结束时间必须晚于开始时间，暂不支持跨日规划。", problem = PlanningProblem.INVALID_TIME)
         if (snapshot.slots.isEmpty()) return PlanningResult(message = "今日节次数据不完整。")
         if (notBeforeMinute != null && (goal.end <= notBeforeMinute ||
             goal.start + (if (goal.flexible) PlanningPolicy.shiftLimit + PlanningPolicy.lossLimit else 0) < notBeforeMinute))
-            return PlanningResult(message = "目标时段已早于当前时间，请选择今天尚未开始的时段。")
+            return PlanningResult(message = "目标时段已早于当前时间，请选择今天尚未开始的时段。", problem = PlanningProblem.PAST_TIME)
         val prepared = prepare(snapshot, campus, profiles, checkCancelled)
         if (prepared.rooms.isEmpty()) return PlanningResult(message = "当前数据中没有可规划的教室。")
         val windows = candidates(goal, snapshot.slots).filter { notBeforeMinute == null || it.start >= notBeforeMinute }
@@ -50,7 +50,7 @@ object StudyPlanner {
             original?.let { PlanningOption("原时段方案", it) }, quiet?.let { PlanningOption("少搬动方案", it) })
             .distinctBy { it.plan.signature }
         return if (options.isNotEmpty()) PlanningResult(options) else PlanningResult(message =
-            "在最多损失 20 分钟、换教室 2 次的范围内，没有找到连贯方案。可缩短目标时段，或允许调整时间。")
+            "难以满足要求，可缩短时段")
     }
 
     private val order = compareBy<StudyPlan> { it.score }.thenBy { it.changes }.thenBy { it.buildingChanges }

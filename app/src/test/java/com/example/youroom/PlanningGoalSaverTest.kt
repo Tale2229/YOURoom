@@ -15,7 +15,7 @@ class PlanningGoalSaverTest {
         for (oldFlag in listOf(false, true)) {
             assertEquals(PlanningGoal(690, 825, false, "4"),
                 PlanningGoalSaver.restore(listOf(690, 825, false, oldFlag, "4")))
-            assertEquals(PlanningGoal(), PlanningGoalSaver.restore(listOf(480, 685, true, oldFlag, "")))
+            assertEquals(PlanningGoal(480, 685), PlanningGoalSaver.restore(listOf(480, 685, true, oldFlag, "")))
         }
     }
 }

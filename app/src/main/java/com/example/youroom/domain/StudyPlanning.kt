@@ -2,7 +2,7 @@ package com.example.youroom.domain
 
 data class PlanningGoal(
     val start: Int = 8 * 60,
-    val end: Int = 11 * 60 + 25,
+    val end: Int = 12 * 60,
     val flexible: Boolean = true,
     val origin: String? = null,
 )
@@ -46,7 +46,9 @@ data class StudyPlan(
 }
 
 data class PlanningOption(val label: String, val plan: StudyPlan)
-data class PlanningResult(val options: List<PlanningOption> = emptyList(), val message: String? = null)
+enum class PlanningProblem { INVALID_TIME, PAST_TIME }
+data class PlanningResult(val options: List<PlanningOption> = emptyList(), val message: String? = null,
+    val problem: PlanningProblem? = null)
 
 fun planningTime(minute: Int) = "%02d:%02d".format(java.util.Locale.ROOT, minute / 60, minute % 60)
 

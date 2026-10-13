@@ -9,9 +9,117 @@ import com.example.youroom.ui.*
 import com.example.youroom.ui.theme.YouRoomTheme
 import org.junit.Rule
 import org.junit.Test
+import org.junit.Assert.*
+import java.time.*
 
 class StudyPlanningUiTest {
     @get:Rule val compose = createComposeRule()
+
+    private fun waitForMessage() {
+        compose.waitUntil(20_000) { compose.onAllNodesWithTag("planner_message").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_message"))
+    }
+
+    @Test fun freshInputsDefaultToEightAndTwelveWithoutTheRemovedCaptions() {
+        val demo = DemoData.snapshot()
+        compose.setContent { YouRoomTheme {
+            StudyPlanningScreen(YouRoomState(initializing = false, demo = true, snapshot = demo,
+                today = demo.queryDate), PlanningGoal(), false, {}, {}, {}, {}, {})
+        } }
+        compose.onNodeWithTag("planner_start").assertTextContains("08:00")
+        compose.onNodeWithTag("planner_end").assertTextContains("12:00")
+        compose.onNodeWithText("仅规划今日").assertDoesNotExist()
+        compose.onAllNodes(hasText("整体平移最多", substring = true)).assertCountEquals(0)
+        compose.onNodeWithTag("planner_adjust").assertExists()
+    }
+
+    @Test fun fromNowButtonUsesTheClickTimeAndDoesNotChangeTheEndOrAutoGenerate() {
+        val zone = SchoolZone
+        val fixed = Clock.fixed(LocalDateTime.of(2026, 10, 13, 15, 20, 59).atZone(zone).toInstant(), zone)
+        val data = DemoData.snapshot(clock = fixed).copy(isDemo = false)
+        var goal by mutableStateOf(PlanningGoal(origin = "2"))
+        var requested by mutableStateOf(true)
+        var generationClicks = 0
+        compose.setContent { YouRoomTheme {
+            StudyPlanningScreen(YouRoomState(initializing = false, loggedIn = true, snapshot = data,
+                today = data.queryDate), goal, requested, { goal = it; requested = false },
+                { generationClicks++; requested = true }, {}, {}, {}, notBeforeMinute = 921, clock = fixed)
+        } }
+        waitForMessage()
+        val message = compose.onNodeWithTag("planner_message").fetchSemanticsNode().boundsInRoot
+        val button = compose.onNodeWithTag("planner_from_now").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertTrue(button.left >= message.right)
+        compose.onNodeWithTag("planner_from_now").performClick()
+        assertEquals(PlanningGoal(start = 921, origin = "2"), goal)
+        assertEquals(0, generationClicks)
+        assertFalse(requested)
+        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_start"))
+        compose.onNodeWithTag("planner_start").assertTextContains("15:21")
+        compose.onNodeWithTag("planner_end").assertTextContains("12:00")
+        compose.onNodeWithTag("planner_from_now").assertDoesNotExist()
+    }
+
+    @Test fun invalidEndOffersThreeInlineDurationShortcutsRelativeToTheStart() {
+        val demo = DemoData.snapshot()
+        var goal by mutableStateOf(PlanningGoal(600, 550, false, "2"))
+        var requested by mutableStateOf(true)
+        compose.setContent { YouRoomTheme {
+            StudyPlanningScreen(YouRoomState(initializing = false, demo = true, snapshot = demo,
+                today = demo.queryDate), goal, requested, { goal = it; requested = false },
+                { requested = true }, {}, {}, {})
+        } }
+        for (hours in listOf(1, 2, 4)) {
+            waitForMessage()
+            val text = compose.onNodeWithTag("planner_message").fetchSemanticsNode().boundsInRoot
+            val actions = compose.onNodeWithTag("planner_duration_buttons").fetchSemanticsNode().boundsInRoot
+            assertTrue(actions.left >= text.right)
+            compose.onNodeWithTag("planner_duration_${hours}h").assertIsEnabled().performClick()
+            assertEquals(PlanningGoal(600, 600 + hours * 60, false, "2"), goal)
+            assertFalse(requested)
+            compose.runOnIdle { goal = goal.copy(end = 550); requested = true }
+        }
+    }
+
+    @Test fun crossDayDurationButtonsAreDisabledInsteadOfWrappingTheEnd() {
+        val demo = DemoData.snapshot()
+        var goal by mutableStateOf(PlanningGoal(1260, 1200, false))
+        var requested by mutableStateOf(true)
+        compose.setContent { YouRoomTheme {
+            StudyPlanningScreen(YouRoomState(initializing = false, demo = true, snapshot = demo,
+                today = demo.queryDate), goal, requested, { goal = it; requested = false }, {}, {}, {}, {})
+        } }
+        waitForMessage()
+        compose.onNodeWithTag("planner_duration_1h").assertIsEnabled()
+        compose.onNodeWithTag("planner_duration_2h").assertIsEnabled().performClick()
+        assertEquals(1380, goal.end)
+        compose.runOnIdle { goal = goal.copy(end = 1200); requested = true }
+        waitForMessage()
+        compose.onNodeWithTag("planner_duration_4h").assertIsNotEnabled()
+        assertEquals(1200, goal.end)
+    }
+
+    @Test fun fromNowIsDisabledDuringTheLastMinuteOfTheDay() {
+        val fixed = Clock.fixed(LocalDateTime.of(2026, 10, 13, 23, 59).atZone(SchoolZone).toInstant(), SchoolZone)
+        val data = DemoData.snapshot(clock = fixed).copy(isDemo = false)
+        compose.setContent { YouRoomTheme {
+            StudyPlanningScreen(YouRoomState(initializing = false, loggedIn = true, snapshot = data,
+                today = data.queryDate), PlanningGoal(), true, {}, {}, {}, {}, {}, notBeforeMinute = 1439, clock = fixed)
+        } }
+        waitForMessage()
+        compose.onNodeWithTag("planner_from_now").assertIsNotEnabled()
+    }
+
+    @Test fun anImpossibleRouteUsesTheShortMessageAndHasNoWrongTimeActions() {
+        val demo = DemoData.snapshot().let { it.copy(slots = it.slots.take(1)) }
+        compose.setContent { YouRoomTheme {
+            StudyPlanningScreen(YouRoomState(initializing = false, demo = true, snapshot = demo,
+                today = demo.queryDate), PlanningGoal(flexible = false), true, {}, {}, {}, {}, {})
+        } }
+        waitForMessage()
+        compose.onNodeWithTag("planner_message").assertTextEquals("难以满足要求，可缩短时段")
+        compose.onNodeWithTag("planner_from_now").assertDoesNotExist()
+        compose.onNodeWithTag("planner_duration_buttons").assertDoesNotExist()
+    }
     @Test fun aDateChangeImmediatelyRemovesPreviouslyGeneratedPlans() {
         val snapshot = DemoData.snapshot()
         var state by mutableStateOf(YouRoomState(initializing = false, demo = true,

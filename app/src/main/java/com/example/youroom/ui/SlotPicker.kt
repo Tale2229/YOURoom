@@ -52,6 +52,7 @@ import kotlinx.coroutines.delay
 private class SlotPointerGeometry {
     var origin: Offset = Offset.Zero
     val bounds = mutableMapOf<Int, SlotBounds>()
+    val faces = mutableMapOf<Int, SlotBounds>()
 }
 
 // Null change means cancellation; a null decision means the stationary press timed out.
@@ -85,8 +86,8 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
         // Keyboard/accessibility inspection has no pointer-up event to dismiss it.
         if (!pointerHeld && inspectedNumber != null) { delay(2_000); inspectedNumber = null }
     }
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.fillMaxWidth().testTag("slot_header"), verticalAlignment = Alignment.CenterVertically) {
             Text("自习时段", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
             TextButton(onClick = { onFilters(filters.copy(selectedSlots = emptySet())) },
                 shape = MaterialTheme.shapes.small, enabled = enabled && filters.selectedSlots.isNotEmpty()) { Text("清空") }
@@ -141,6 +142,10 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                                 val cancelled = change == null || change.isConsumed || event.changes.count { it.pressed } > 1
                                 event.changes.forEach { it.consume() }
                                 if (cancelled || change?.pressed != true) break
+                                val position = change.position + geometry.origin
+                                // Follow the current face, not every cell crossed along the way.
+                                // Gaps / search / filters hide the hint without leaving inspection mode.
+                                inspectedNumber = SlotGridGeometry.hit(geometry.faces.values, position.x, position.y)
                             }
                             return@awaitEachGesture
                         }
@@ -199,7 +204,11 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                                             stateDescription = if (isSelected) "已选中" else "未选中"
                                             if (enabled) onLongClick("查看节次时间") { inspectedNumber = slot.number; true }
                                         }, contentAlignment = Alignment.Center) {
-                                        Surface(Modifier.fillMaxWidth().height(36.dp).testTag("slot_face_${slot.number}"),
+                                        Surface(Modifier.fillMaxWidth().height(36.dp).testTag("slot_face_${slot.number}")
+                                            .onGloballyPositioned {
+                                                val rect = it.boundsInRoot()
+                                                geometry.faces[slot.number] = SlotBounds(slot.number, rect.left, rect.top, rect.right, rect.bottom)
+                                            },
                                             shape = RectangleShape, color = background,
                                             contentColor = if (isSelected) colors.onPrimary else colors.onSurfaceVariant) {
                                             Box(contentAlignment = Alignment.Center) {

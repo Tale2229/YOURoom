@@ -143,6 +143,17 @@ class StudyPlannerTest {
         assertTrue(run(data, PlanningGoal(480, 480)).options.isEmpty())
     }
 
+    @Test fun feedbackTypesMatchTheirShortcutsAndNoSolutionUsesTheRequestedCopy() {
+        val data = snapshot(slot(1, 480, 525, a))
+        assertEquals(PlanningProblem.INVALID_TIME, run(data, PlanningGoal(600, 500)).problem)
+        val past = StudyPlanner.plan(data, Campus.XITUCHENG, day, emptyMap(), PlanningGoal(480, 525), notBeforeMinute = 600)
+        assertEquals(PlanningProblem.PAST_TIME, past.problem)
+        val impossible = run(data, PlanningGoal(480, 540, false))
+        assertEquals("难以满足要求，可缩短时段", impossible.message)
+        assertNull(impossible.problem)
+        assertNull(StudyPlanner.plan(data, Campus.SHAHE, day, emptyMap(), PlanningGoal()).problem)
+    }
+
     @Test fun staleAndMismatchedCampusesCannotProducePlans() {
         val data = snapshot(slot(1, 480, 525, a))
         assertTrue(StudyPlanner.plan(data, Campus.SHAHE, day, emptyMap(), PlanningGoal()).options.isEmpty())
