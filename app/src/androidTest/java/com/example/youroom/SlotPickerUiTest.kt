@@ -55,6 +55,20 @@ class SlotPickerUiTest {
         return compose.onNodeWithTag("slot_$number").fetchSemanticsNode().boundsInRoot.center - grid.topLeft
     }
 
+    @Test fun unselectedPeriodsUseCampusSpecificSurfaceColors() {
+        render()
+        for (target in Campus.entries) {
+            compose.runOnIdle { campus = target }
+            val pixels = compose.onNodeWithTag("slot_face_1", useUnmergedTree = true).captureToImage().toPixelMap()
+            assertEquals(campusColorScheme(target, false).surfaceContainer, pixels[3, 3])
+            if (target == Campus.XITUCHENG) {
+                assertEquals(androidx.compose.ui.graphics.Color(0xFFF4F0E7), pixels[3, 3])
+                val selected = compose.onNodeWithTag("slot_face_6", useUnmergedTree = true).captureToImage().toPixelMap()
+                assertEquals(campusColorScheme(target, false).primary, selected[3, 3])
+            }
+        }
+    }
+
     private fun hold(number: Int) {
         val position = point(number)
         compose.onNodeWithTag("slot_grid").performTouchInput { down(position) }
@@ -108,25 +122,42 @@ class SlotPickerUiTest {
         assertTrue(changes.isEmpty())
     }
 
-    @Test fun leavingFacesHidesTheHintAndReturningResumesInspection() {
+    @Test fun narrowHorizontalGapsKeepTheHintButLeavingTheGridHidesItAndReturningResumesInspection() {
         render()
         hold(1)
+        val popupId = compose.onNodeWithTag("slot_time_tooltip").fetchSemanticsNode().id
         val grid = compose.onNodeWithTag("slot_grid").fetchSemanticsNode().boundsInRoot
         val first = compose.onNodeWithTag("slot_face_1", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val second = compose.onNodeWithTag("slot_face_2", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val gap = Offset((first.right + second.left) / 2, first.center.y) - grid.topLeft
         compose.onNodeWithTag("slot_grid").performTouchInput { moveTo(gap) }
-        compose.onNodeWithTag("slot_time_tooltip").assertDoesNotExist()
+        compose.onNodeWithTag("slot_time_tooltip").assertIsDisplayed()
         val search = compose.onNodeWithTag("room_search_frame", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.center - grid.topLeft
         compose.onNodeWithTag("slot_grid").performTouchInput { moveTo(search) }
         compose.onNodeWithTag("slot_time_tooltip").assertDoesNotExist()
         val seventh = point(7)
         compose.onNodeWithTag("slot_grid").performTouchInput { moveTo(seventh) }
         compose.onNodeWithTag("slot_time_label_7").assertExists()
+        assertEquals(popupId, compose.onNodeWithTag("slot_time_tooltip").fetchSemanticsNode().id)
         compose.onNodeWithTag("slot_grid").performTouchInput { cancel() }
         compose.onNodeWithTag("slot_time_tooltip").assertDoesNotExist()
         assertEquals(setOf(6), filters.selectedSlots)
         assertTrue(changes.isEmpty())
+    }
+
+    @Test fun heldMovementKeepsOnePopupAcrossGuttersAndRowsIncludingFastReversal() {
+        render()
+        hold(1)
+        val id = compose.onNodeWithTag("slot_time_tooltip").fetchSemanticsNode().id
+        for (number in listOf(2, 5, 6, 7, 12, 14, 13, 1, 6, 2)) {
+            val target = point(number)
+            compose.onNodeWithTag("slot_grid").performTouchInput { moveTo(target, delayMillis = 16) }
+            compose.onNodeWithTag("slot_time_label_$number").assertExists()
+            assertEquals(id, compose.onNodeWithTag("slot_time_tooltip").fetchSemanticsNode().id)
+            assertEquals(1, compose.onAllNodesWithTag("slot_time_tooltip").fetchSemanticsNodes().size)
+        }
+        compose.onNodeWithTag("slot_grid").performTouchInput { up() }
+        assertTrue(changes.isEmpty()); assertEquals(setOf(6), filters.selectedSlots)
     }
 
     @Test fun changingCampusAfterFollowingAnotherFaceEndsInspection() {

@@ -444,10 +444,11 @@ class YouRoomUiTest {
         assertEquals(fourteenth.center.y, search.center.y, 1f)
         assertEquals(fourteenth.center.y, filter.center.y, 1f)
         assertTrue(first.width + 1f >= first.height)
-        // The Pager keeps the other campus precomposed. Ignore that clipped face
-        // when inspecting the unmerged tree; it is hidden from normal semantics.
-        val face = compose.onAllNodesWithTag("slot_face_1", useUnmergedTree = true).fetchSemanticsNodes()
-            .single { it.boundsInRoot.width > 0f && first.contains(it.boundsInRoot.center) }.boundsInRoot
+        // Both stationary bodies remain precomposed. The unmerged tree deliberately
+        // includes the hidden one; inspect the current campus, not just its coordinates.
+        val face = compose.onNode(hasTestTag("slot_face_1") and
+            hasAnyAncestor(hasTestTag("campus_content_01")), useUnmergedTree = true)
+            .fetchSemanticsNode().boundsInRoot
         assertEquals(first.height * .75f, face.height, 1f)
         for (number in listOf(1, 6, 7, 12, 13, 14)) {
             compose.onNodeWithTag("time_marker_$number").assertDoesNotExist()
@@ -470,6 +471,25 @@ class YouRoomUiTest {
         compose.onNodeWithTag("slot_1").assertIsSelected()
         compose.onNodeWithTag("slot_2").assertIsSelected()
         compose.onNodeWithTag("slot_14").assertIsNotSelected()
+    }
+
+    @Test fun touchingTheFixedHeaderClearsSearchFocusAndCampusSwipeKeepsItBlurred() {
+        enterDemo()
+        compose.onNodeWithTag("room_search").performTouchInput { click() }
+        compose.onNodeWithTag("room_search").performTextInput("201")
+        compose.onNodeWithTag("room_search").assertIsFocused()
+        compose.onNodeWithTag("campus_swipe_region").performTouchInput { click() }
+        compose.onNodeWithTag("room_search").assertIsNotFocused().assertTextEquals("201")
+        compose.onNodeWithTag("room_search").performTouchInput { click() }
+        compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeLeft() }
+        compose.onNodeWithTag("campus_label").assertTextEquals("沙河")
+        compose.onNodeWithTag("room_search").assertIsNotFocused()
+        compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeRight() }
+        compose.onNodeWithTag("room_search").assertIsNotFocused().assertTextEquals("201")
+        compose.onNodeWithTag("room_search").performTouchInput { click() }
+        compose.onNodeWithTag("tab_preferences").performTouchInput { click() }
+        compose.onNodeWithTag("tab_rooms").performTouchInput { click() }
+        compose.onNodeWithTag("room_search").assertIsNotFocused().assertTextEquals("201")
     }
 
     @Test fun searchClearRestoresRoomsWithoutChangingPeriodsOrSelectedBuildings() {
@@ -511,10 +531,31 @@ class YouRoomUiTest {
         compose.onNodeWithTag("room_actions_01:2-201").assertDoesNotExist()
     }
 
+    @Test fun favoriteCornersAndAutoCloseWorkInBothCampusWorkspaces() {
+        enterDemo()
+        for ((id, name) in listOf("01:2-201" to "2-201", "04:演示楼-A101" to "演示楼-A101")) {
+            if (id.startsWith("04:")) compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeLeft() }
+            revealRoom(id)
+            compose.onNodeWithContentDescription("收藏 $name").performClick()
+            compose.onNodeWithTag("room_actions_$id").assertDoesNotExist()
+            val marker = compose.onNodeWithTag("room_favorite_$id", useUnmergedTree = true)
+                .fetchSemanticsNode().boundsInRoot
+            val face = compose.onNodeWithTag("room_face_$id").fetchSemanticsNode().boundsInRoot
+            val period = compose.onNodeWithTag("room_period_${id}_14", useUnmergedTree = true)
+                .fetchSemanticsNode().boundsInRoot
+            assertEquals(face.top, marker.top, 1f); assertEquals(period.right, marker.right, 1f)
+            compose.onNodeWithTag("room_list").performScrollToNode(hasTestTag("slot_1"))
+            compose.onNodeWithTag("slot_1").assertIsSelected()
+            compose.onNodeWithTag("slot_2").assertIsSelected()
+        }
+    }
+
     @Test fun roomPopupsUpdateMarksAndNotesWithoutSavingAndSearchIgnoresNotes() {
         enterDemo()
         revealRoom("01:2-201")
         compose.onNodeWithContentDescription("收藏 2-201").performClick()
+        compose.onNodeWithTag("room_actions_01:2-201").assertDoesNotExist()
+        revealRoom("01:2-201")
         compose.onNodeWithContentDescription("修改标签 2-201").performClick()
         compose.onNodeWithTag("room_tag_dialog").assertIsDisplayed()
         compose.onNodeWithTag("building_all").assertDoesNotExist()
@@ -617,6 +658,7 @@ class YouRoomUiTest {
         compose.onNodeWithText("清空").performScrollTo().performClick()
         revealRoom("01:2-240")
         compose.onNodeWithContentDescription("收藏 2-240").performClick()
+        revealRoom("01:2-240")
         compose.onNodeWithContentDescription("排除 2-240").performClick()
         compose.onNodeWithContentDescription("取消排除 2-240").assertIsDisplayed()
         compose.onNodeWithContentDescription("取消收藏 2-240").assertIsDisplayed()
@@ -647,6 +689,7 @@ class YouRoomUiTest {
         enterDemo()
         revealRoom("01:2-201")
         compose.onNodeWithContentDescription("收藏 2-201").performClick()
+        revealRoom("01:2-201")
         compose.onNodeWithContentDescription("排除 2-201").performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("2-201").fetchSemanticsNodes().isEmpty() }
         compose.onNodeWithTag("tab_preferences").performClick()
@@ -677,9 +720,12 @@ class YouRoomUiTest {
         compose.onNodeWithTag("slot_2").assertIsSelected()
     }
 
-    @Test fun campusTransitionMovesTheWholePageAtMidAnimation() {
+    @Test fun campusTransitionMovesOnlyTheHeaderAndKeepsDividerAndContentAnchored() {
         enterDemo()
         val initialHeader = compose.onNodeWithTag("campus_header").fetchSemanticsNode().boundsInRoot
+        val initialDivider = compose.onNodeWithTag("campus_divider").fetchSemanticsNode().boundsInRoot
+        val initialBody = compose.onNodeWithTag("campus_body").fetchSemanticsNode().boundsInRoot
+        val initialGrid = compose.onNodeWithTag("slot_grid").fetchSemanticsNode().boundsInRoot
         val action = compose.onNodeWithTag("campus_swipe_region").fetchSemanticsNode().config[SemanticsActions.CustomActions].single()
         compose.mainClock.autoAdvance = false
         compose.runOnIdle { assertTrue(action.action()) }
@@ -691,9 +737,62 @@ class YouRoomUiTest {
             val bounds = it.boundsInRoot
             kotlin.math.abs(bounds.left - initialHeader.left) > 1f || bounds.width < initialHeader.width * .9f
         })
+        assertEquals(initialDivider, compose.onNodeWithTag("campus_divider").fetchSemanticsNode().boundsInRoot)
+        assertEquals(initialBody, compose.onNodeWithTag("campus_body").fetchSemanticsNode().boundsInRoot)
+        assertEquals(initialGrid, compose.onNodeWithTag("slot_grid").fetchSemanticsNode().boundsInRoot)
+        compose.onNodeWithTag("room_row_04:演示楼-A101").assertDoesNotExist()
         compose.mainClock.advanceTimeBy(500)
         compose.mainClock.autoAdvance = true
         compose.onNodeWithTag("campus_label").assertTextEquals("沙河")
+        compose.onNodeWithTag("room_list").performScrollToNode(hasText("演示楼-A101"))
+        compose.onNodeWithText("2-201").assertDoesNotExist()
+        assertEquals(initialDivider, compose.onNodeWithTag("campus_divider").fetchSemanticsNode().boundsInRoot)
+        assertEquals(initialBody, compose.onNodeWithTag("campus_body").fetchSemanticsNode().boundsInRoot)
+    }
+
+    @Test fun reversingBeforeTheBodySwapKeepsWestContentAndSharedSlots() {
+        enterDemo()
+        compose.onNodeWithText("清空").performClick()
+        compose.onNodeWithTag("slot_6").performClick()
+        val toShahe = compose.onNodeWithTag("campus_swipe_region").fetchSemanticsNode()
+            .config[SemanticsActions.CustomActions].single()
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { assertTrue(toShahe.action()) }
+        compose.mainClock.advanceTimeBy(208)
+        val toWest = compose.onNodeWithTag("campus_swipe_region").fetchSemanticsNode()
+            .config[SemanticsActions.CustomActions].single()
+        assertEquals("切换到西土城校区", toWest.label)
+        compose.runOnIdle { assertTrue(toWest.action()) }
+        compose.mainClock.advanceTimeBy(800)
+        compose.mainClock.autoAdvance = true
+        compose.onNodeWithTag("campus_label").assertTextEquals("西土城")
+        compose.onNodeWithTag("slot_6").assertIsSelected()
+        compose.onNodeWithTag("slot_1").assertIsNotSelected()
+        compose.onNodeWithTag("room_list").performScrollToNode(hasText("2-201"))
+        compose.onNodeWithText("演示楼-A101").assertDoesNotExist()
+    }
+
+    @Test fun reversingDuringIncomingFadeFinishesWithTheLatestCampusAndSelection() {
+        enterDemo()
+        compose.onNodeWithText("清空").performClick()
+        compose.onNodeWithTag("slot_6").performClick()
+        val toShahe = compose.onNodeWithTag("campus_swipe_region").fetchSemanticsNode()
+            .config[SemanticsActions.CustomActions].single()
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { assertTrue(toShahe.action()) }
+        compose.mainClock.advanceTimeBy(400)
+        compose.onNodeWithTag("campus_label").assertTextEquals("沙河")
+        // The incoming grid is visible but cannot edit either campus mid-handoff.
+        compose.onNodeWithTag("slot_6").assertIsNotEnabled()
+        val toWest = compose.onNodeWithTag("campus_swipe_region").fetchSemanticsNode()
+            .config[SemanticsActions.CustomActions].single()
+        compose.runOnIdle { assertTrue(toWest.action()) }
+        compose.mainClock.advanceTimeBy(800)
+        compose.mainClock.autoAdvance = true
+        compose.onNodeWithTag("campus_label").assertTextEquals("西土城")
+        compose.onNodeWithTag("slot_6").assertIsSelected().assertIsEnabled()
+        compose.onNodeWithTag("room_list").performScrollToNode(hasText("2-201"))
+        compose.onNodeWithText("演示楼-A101").assertDoesNotExist()
     }
 
     @Test fun termDeletionRequiresConfirmationAndFavoriteCannotBeDeleted() {

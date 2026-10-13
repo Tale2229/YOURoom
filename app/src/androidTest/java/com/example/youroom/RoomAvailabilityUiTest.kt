@@ -86,12 +86,14 @@ class RoomAvailabilityUiTest {
         compose.onNodeWithTag(tooltip).assertIsDisplayed()
     }
 
-    @Test fun shortTapAndEarlyHorizontalDragDoNotInspectOrOpenRoomActions() {
+    @Test fun shortTapDoesNothingButEarlyHorizontalDragOpensAndClosesWithoutInspection() {
         render(list = true)
         compose.onNodeWithTag(stripTag).performTouchInput { click(center) }
         compose.onNodeWithTag(tooltip).assertDoesNotExist()
         compose.onNodeWithTag(stripTag).performTouchInput { swipeLeft(durationMillis = 120) }
         compose.onNodeWithTag(tooltip).assertDoesNotExist()
+        compose.onNodeWithTag("room_actions_$id").assertIsDisplayed()
+        compose.onNodeWithTag(stripTag, useUnmergedTree = true).performTouchInput { swipeRight(durationMillis = 120) }
         compose.onNodeWithTag("room_actions_$id").assertDoesNotExist()
         assertEquals(0, edits)
     }
@@ -241,7 +243,7 @@ class RoomAvailabilityUiTest {
         compose.onNodeWithTag(tooltip).assertDoesNotExist()
     }
 
-    @Test fun onlyTheUpperRegionRevealsRoomActionsAndExpandedRowsDoNotStartInspection() {
+    @Test fun bothRegionsRevealActionsAndExpandedRowsDoNotStartInspection() {
         render(list = true)
         compose.onNodeWithTag("room_swipe_$id").performTouchInput { swipeLeft() }
         compose.onNodeWithTag("room_actions_$id").assertIsDisplayed()
@@ -251,10 +253,33 @@ class RoomAvailabilityUiTest {
         compose.mainClock.advanceTimeBy(500)
         compose.onNodeWithTag(tooltip).assertDoesNotExist()
         face(14).performTouchInput { up() }
-        compose.onNodeWithTag("room_swipe_$id").performTouchInput { swipeRight() }
+        compose.onNodeWithTag("room_swipe_$id", useUnmergedTree = true).performTouchInput { swipeRight() }
         compose.onNodeWithTag("room_actions_$id").assertDoesNotExist()
         hold(6)
         label(6).assertExists()
         compose.onNodeWithTag(stripTag).performTouchInput { up() }
+    }
+
+    @Test fun aHeldStripKeepsOwnershipDuringHorizontalMotionAndNeverSwipesTheRow() {
+        render(list = true)
+        hold(6)
+        compose.onNodeWithTag(stripTag).performTouchInput { moveTo(centerLeft, delayMillis = 80) }
+        compose.onNodeWithTag(tooltip).assertExists()
+        compose.onNodeWithTag("room_actions_$id").assertDoesNotExist()
+        compose.onNodeWithTag(stripTag).performTouchInput { up() }
+        compose.onNodeWithTag(tooltip).assertDoesNotExist()
+        assertEquals(0, edits)
+    }
+
+    @Test fun diagonalVerticalMotionStillScrollsInsteadOfOpeningActions() {
+        render(list = true)
+        val list = compose.onNodeWithTag("inspection_test_list")
+        val before = list.fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange].value()
+        compose.onNodeWithTag(stripTag).performTouchInput {
+            down(center); moveTo(center + Offset(-45f, -250f), delayMillis = 120); up()
+        }
+        assertTrue(list.fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange].value() > before)
+        compose.onNodeWithTag("room_actions_$id").assertDoesNotExist()
+        compose.onNodeWithTag(tooltip).assertDoesNotExist()
     }
 }

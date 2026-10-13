@@ -77,8 +77,8 @@ internal fun RoomAvailabilityStrip(roomId: String, freeSlots: Set<Int>, slots: L
                 inspected = null
                 var x = down.position.x
                 try {
-                    // Observe without consuming during the dwell. Any real movement, up,
-                    // second finger, or a parent's claim cancels; scrolling stays ordinary.
+                    // Observe without consuming during the dwell. Movement hands off
+                    // to the parent's row swipe or vertical list scroll; only a hold owns time inspection.
                     val interrupted = withTimeoutOrNull(250L) {
                         var done = false
                         while (!done) {

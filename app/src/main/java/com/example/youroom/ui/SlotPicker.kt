@@ -32,6 +32,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalDensity
@@ -74,9 +76,12 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
     val bounds = geometry.bounds
     var previewSelection by remember(context, available) { mutableStateOf<Set<Int>?>(null) }
     var inspectedNumber by remember(context, available) { mutableStateOf<Int?>(null) }
+    var lastInspectedNumber by remember(context, available) { mutableStateOf<Int?>(null) }
     var pointerHeld by remember(context, available) { mutableStateOf(false) }
     val haptic = LocalHapticFeedback.current
+    val inspectionGap = with(LocalDensity.current) { 6.dp.toPx() }
     val selection = previewSelection ?: filters.selectedSlots
+    val tooltipNumber = inspectedNumber ?: lastInspectedNumber.takeIf { pointerHeld }
     val chosen = remember(slots, selection) { slots.filter { it.number in selection } }
     val summaryScroll = rememberScrollState()
     val summaryStyle = MaterialTheme.typography.bodySmall
@@ -94,7 +99,7 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
         }
         BoxWithConstraints(Modifier.fillMaxWidth().testTag("slot_grid").onGloballyPositioned { geometry.origin = it.positionInRoot() }) {
             val cellWidth = (maxWidth - 4.dp * (StudyGridLayout.columns - 1)) / StudyGridLayout.columns
-            Column(Modifier.fillMaxWidth().pointerInput(context, available, enabled) {
+            Column(Modifier.fillMaxWidth().pointerInput(context, available, enabled, inspectionGap) {
                 // Initial-pass consumption owns grid painting, not the surrounding LazyColumn.
                 awaitEachGesture {
                     val down = awaitFirstDown(pass = PointerEventPass.Initial)
@@ -107,6 +112,7 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                     down.consume()
                     pointerHeld = true
                     inspectedNumber = null
+                    lastInspectedNumber = null
                     try {
                         // Do not toggle on down: a stationary long press only inspects
                         // this period. A normal tap commits on up; movement paints immediately.
@@ -133,6 +139,7 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                         }
                         if (decision == null) {
                             inspectedNumber = first
+                            lastInspectedNumber = first
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             // Inspection owns the rest of the gesture and never turns
                             // into selection or starts a classroom search on release.
@@ -144,8 +151,11 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                                 if (cancelled || change?.pressed != true) break
                                 val position = change.position + geometry.origin
                                 // Follow the current face, not every cell crossed along the way.
-                                // Gaps / search / filters hide the hint without leaving inspection mode.
-                                inspectedNumber = SlotGridGeometry.hit(geometry.faces.values, position.x, position.y)
+                                // Bridge the 4dp horizontal gutters without flashing a new window.
+                                // Vertical gaps / search / filters still dismiss the hint.
+                                inspectedNumber = SlotGridGeometry.inspectionHit(geometry.faces.values,
+                                    position.x, position.y, inspectionGap)
+                                inspectedNumber?.let { lastInspectedNumber = it }
                             }
                             return@awaitEachGesture
                         }
@@ -177,6 +187,7 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                         // only the local preview has changed, so no search is launched.
                         previewSelection = null
                         inspectedNumber = null
+                        lastInspectedNumber = null
                         pointerHeld = false
                     }
                 }
@@ -213,7 +224,6 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                                             contentColor = if (isSelected) colors.onPrimary else colors.onSurfaceVariant) {
                                             Box(contentAlignment = Alignment.Center) {
                                                 Text("${slot.number}", style = MaterialTheme.typography.labelLarge)
-                                                if (enabled && inspectedNumber == slot.number) SlotTimeTooltip(slot)
                                             }
                                         }
                                     }
@@ -227,6 +237,16 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                         } }
                     }
                 }
+            }
+            slots.firstOrNull { enabled && it.number == tooltipNumber }?.let { slot ->
+                val density = LocalDensity.current
+                val provider = remember(slot.number, geometry, density) {
+                    GridSlotTooltipPositionProvider({ geometry.faces[slot.number] }, { geometry.origin },
+                        with(density) { SlotTimeTooltipPositionProvider(28.dp.roundToPx(), 8.dp.roundToPx()) })
+                }
+                // One unkeyed popup survives number changes, including cross-row moves.
+                SlotTimeTooltip(slot, positionOverride = provider, smoothPosition = true,
+                    visible = inspectedNumber != null)
             }
         }
         // Reserve one font-scaled line even when empty. Disjoint selections scroll
@@ -242,17 +262,23 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
 @Composable
 private fun CompactRoomSearch(query: String, onQuery: (String) -> Unit, modifier: Modifier, enabled: Boolean) {
     val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
+    val outside = LocalRoomSearchFocus.current
+    val token = remember { Any() }
+    DisposableEffect(outside, token) { onDispose { outside?.remove(token) } }
     val colors = MaterialTheme.colorScheme
     Box(modifier.height(48.dp), contentAlignment = Alignment.Center) {
-        Surface(Modifier.fillMaxWidth().height(36.dp).testTag("room_search_frame"), shape = MaterialTheme.shapes.small,
+        Surface(Modifier.fillMaxWidth().height(36.dp).testTag("room_search_frame")
+            .onGloballyPositioned { outside?.position(token, it.boundsInRoot()) }, shape = MaterialTheme.shapes.small,
             border = BorderStroke(1.dp, colors.outlineVariant)) {
             BasicTextField(query, onQuery, Modifier.fillMaxSize().testTag("room_search")
+                .onFocusChanged { outside?.focus(token, it.isFocused) }
                 .semantics { contentDescription = "搜索教室" }.padding(horizontal = 6.dp),
                 enabled = enabled, singleLine = true,
                 textStyle = MaterialTheme.typography.labelLarge.copy(color = colors.onSurface),
                 cursorBrush = SolidColor(colors.primary),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
+                keyboardActions = KeyboardActions(onSearch = { focus.clearFocus(force = true); keyboard?.hide() }),
                 decorationBox = { inner ->
                     Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)) {

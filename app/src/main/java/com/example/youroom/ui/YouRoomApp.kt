@@ -41,6 +41,7 @@ fun YouRoomApp(model: YouRoomViewModel) {
     }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { model.onForeground() }
     YouRoomTheme(campus = state.campus) {
+        RoomSearchFocusBoundary(Modifier.fillMaxSize()) {
         Scaffold(
             bottomBar = {
                 if (state.showWorkspace) WorkspaceNavigation(tab) { tab = it }
@@ -80,6 +81,7 @@ fun YouRoomApp(model: YouRoomViewModel) {
                     }
                 }
             }
+        }
         }
         state.selectedRoom?.let { room ->
             val dismiss = { model.selectRoom(null) }

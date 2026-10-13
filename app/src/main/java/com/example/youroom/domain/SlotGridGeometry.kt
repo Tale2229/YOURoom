@@ -25,6 +25,15 @@ data class SlotBounds(val number: Int, val left: Float, val top: Float, val righ
 
 object SlotGridGeometry {
     fun hit(bounds: Collection<SlotBounds>, x: Float, y: Float): Int? = bounds.firstOrNull { it.contains(x, y) }?.number
+    /** Bridge only the narrow horizontal gutters while inspecting. Vertical gaps,
+     * outer edges and the search/filter cells must still dismiss the time hint. */
+    fun inspectionHit(bounds: Collection<SlotBounds>, x: Float, y: Float, maximumGap: Float): Int? {
+        hit(bounds, x, y)?.let { return it }
+        val row = bounds.filter { y >= it.top && y < it.bottom && it.right > it.left }.sortedBy { it.left }
+        return row.zipWithNext().firstOrNull { (left, right) ->
+            right.left - left.right in 0f..maximumGap && x >= left.right && x < right.left
+        }?.let { (left, right) -> if (x - left.right <= right.left - x) left.number else right.number }
+    }
     fun crossed(bounds: Collection<SlotBounds>, x0: Float, y0: Float, x1: Float, y1: Float): List<Int> =
         bounds.mapNotNull { cell -> cell.intersection(x0, y0, x1, y1)?.let { cell.number to it } }
             .sortedBy { it.second }.map { it.first }

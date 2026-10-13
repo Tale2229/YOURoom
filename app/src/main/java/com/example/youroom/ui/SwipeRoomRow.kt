@@ -2,6 +2,7 @@ package com.example.youroom.ui
 
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.*
@@ -16,7 +17,10 @@ import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -25,10 +29,25 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.example.youroom.domain.*
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.job
+import kotlin.math.abs
+import kotlin.math.sign
 import kotlin.math.roundToInt
+
+private val RoomActionRailWidth = 184.dp // Four compact 40dp buttons, plus 12dp on each side.
+private class RowSwipeAnimation { var job: Job? = null }
+
+@Composable
+private fun FavoriteCornerMarker(roomId: String, modifier: Modifier = Modifier) {
+    val color = MaterialTheme.colorScheme.primary
+    Canvas(modifier.size(22.dp).testTag("room_favorite_$roomId").clearAndSetSemantics {}) {
+        drawPath(Path().apply {
+            moveTo(0f, 0f); lineTo(size.width, 0f); lineTo(size.width, size.height); close()
+        }, color)
+    }
+}
 
 @Composable
 internal fun RoomActionButtons(profile: RoomProfile, onFavorite: () -> Unit, onTags: () -> Unit,
@@ -55,16 +74,12 @@ internal fun RoomActionButtons(profile: RoomProfile, onFavorite: () -> Unit, onT
 private fun RoomActionRail(profile: RoomProfile, onFavorite: () -> Unit, onTags: () -> Unit,
     onNote: () -> Unit, onExcluded: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     val colors = MaterialTheme.colorScheme
-    Column(modifier.fillMaxHeight().padding(vertical = 16.dp), verticalArrangement = Arrangement.SpaceBetween) {
-        HorizontalDivider(Modifier.fillMaxWidth().padding(horizontal = 12.dp)
+    Column(modifier.fillMaxHeight().padding(horizontal = 12.dp, vertical = 16.dp), verticalArrangement = Arrangement.SpaceBetween) {
+        HorizontalDivider(Modifier.fillMaxWidth()
             .testTag("room_action_line_${profile.roomId}_top_thin"), color = colors.outlineVariant)
-        HorizontalDivider(Modifier.fillMaxWidth().padding(horizontal = 20.dp)
-            .testTag("room_action_line_${profile.roomId}_top_thick"), thickness = 3.dp, color = colors.primary.copy(alpha = .7f))
         RoomActionButtons(profile, onFavorite, onTags, onNote, onExcluded, enabled = enabled, compact = true)
-        HorizontalDivider(Modifier.fillMaxWidth().padding(horizontal = 20.dp)
-            .testTag("room_action_line_${profile.roomId}_bottom_thick"), thickness = 3.dp, color = colors.primary.copy(alpha = .7f))
         // Both separators end 16dp above the row bottom, so they share the same baseline.
-        HorizontalDivider(Modifier.fillMaxWidth().padding(horizontal = 12.dp)
+        HorizontalDivider(Modifier.fillMaxWidth()
             .testTag("room_action_line_${profile.roomId}_bottom_thin"), color = colors.outlineVariant)
     }
 }
@@ -78,86 +93,122 @@ internal fun ExcludedRoomMarker(profile: RoomProfile) {
 @Composable
 internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List<String>, expanded: Boolean,
     active: Boolean, onExpanded: (Boolean) -> Unit, onFavorite: () -> Unit, onTags: () -> Unit,
-    onNote: () -> Unit, onExcluded: () -> Unit, modifier: Modifier = Modifier, inspectionKey: Any? = null) {
+    onNote: () -> Unit, onExcluded: () -> Unit, modifier: Modifier = Modifier, inspectionKey: Any? = null,
+    interactionEnabled: Boolean = active, favoriteClosing: Boolean = false) {
     val profile = match.profile
     val swipe = remember(profile.roomId) { AnchoredDraggableState(false) }
-    val railWidth = with(LocalDensity.current) { 160.dp.toPx() }
+    val density = LocalDensity.current.density
+    val railWidth = with(LocalDensity.current) { RoomActionRailWidth.toPx() }
     val anchors = remember(railWidth) { DraggableAnchors { false at 0f; true at -railWidth } }
     SideEffect { swipe.updateAnchors(anchors) }
-    val scope = rememberCoroutineScope()
-    var settleJob by remember { mutableStateOf<Job?>(null) }
+    val animation = remember(profile.roomId) { RowSwipeAnimation() }
+    var dragging by remember(profile.roomId) { mutableStateOf(false) }
+    var settlement by remember(profile.roomId) { mutableIntStateOf(0) }
     val latestExpanded by rememberUpdatedState(onExpanded)
     val latestActive by rememberUpdatedState(active)
-    LaunchedEffect(expanded, active) {
-        if (!active) { settleJob?.cancel(); swipe.snapTo(false) }
-        else if (swipe.settledValue != expanded) swipe.animateTo(expanded, tween(160))
-    }
-    LaunchedEffect(swipe) {
-        snapshotFlow { swipe.settledValue }.distinctUntilChanged().collect {
-            if (latestActive) latestExpanded(it)
+    val latestIntent by rememberUpdatedState(expanded)
+    // One owner animates toward the explicit request. Never feed an old settledValue
+    // back into the parent while a newer drag or favorite-close is in progress.
+    LaunchedEffect(expanded, active, railWidth, dragging, settlement, favoriteClosing) {
+        val ownJob = currentCoroutineContext().job
+        animation.job = ownJob
+        try {
+            if (!active) swipe.snapTo(false)
+            else if (!dragging) swipe.animateTo(expanded,
+                tween(if (favoriteClosing && !expanded) FavoriteMotionTiming.Close else 160))
+        } finally {
+            if (animation.job === ownJob) animation.job = null
         }
     }
     val revealed by remember { derivedStateOf { !swipe.offset.isNaN() && swipe.offset < -.5f } }
     val labels = remember(profile, terms) { terms.filter { it != PersonalTags.favorite && profile.hasTerm(it) } }
     val colors = MaterialTheme.colorScheme
-    val background = if (profile.favorite) colors.primaryContainer else colors.background
     Box(modifier.fillMaxWidth().clipToBounds().testTag("room_row_${profile.roomId}").semantics {
         stateDescription = listOfNotNull(if (profile.favorite) "已收藏" else null,
             if (profile.excluded) "已排除" else null).joinToString("，")
-        if (active) customActions = listOf(CustomAccessibilityAction(if (expanded) "收起教室操作" else "展开教室操作") {
+        if (active && interactionEnabled) customActions = listOf(CustomAccessibilityAction(if (expanded) "收起教室操作" else "展开教室操作") {
             latestExpanded(!expanded); true
         })
+    }.pointerInput(swipe, active, interactionEnabled, railWidth, density, inspectionKey) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            if (!active || !interactionEnabled) return@awaitEachGesture
+            val before = latestIntent
+            val velocity = VelocityTracker().apply { addPosition(down.uptimeMillis, down.position) }
+            var startOffset = 0f
+            var claimed = false
+            var finished = false
+            try {
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Main)
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    // The strip consumes Initial-pass events after its 250ms dwell.
+                    // Before that it observes only, so this stable row can own a swipe.
+                    if (change.isConsumed || event.changes.count { it.pressed } > 1) break
+                    velocity.addPosition(change.uptimeMillis, change.position)
+                    val delta = change.position - down.position
+                    if (!claimed) {
+                        if (!change.pressed) break
+                        if (abs(delta.y) > viewConfiguration.touchSlop && abs(delta.y) >= abs(delta.x)) break
+                        if (abs(delta.x) <= viewConfiguration.touchSlop || abs(delta.x) <= abs(delta.y) * 1.2f) continue
+                        animation.job?.cancel()
+                        startOffset = if (swipe.offset.isNaN()) 0f else swipe.requireOffset()
+                        claimed = true; dragging = true
+                        swipe.dispatchRawDelta(delta.x - sign(delta.x) * viewConfiguration.touchSlop)
+                    } else {
+                        swipe.dispatchRawDelta(change.positionChange().x)
+                    }
+                    change.consume()
+                    if (!change.pressed) {
+                        val open = RoomSwipePolicy.target(startOffset / density, swipe.requireOffset() / density,
+                            railWidth / density, velocity.calculateVelocity().x / density)
+                        finished = true
+                        if (latestActive) latestExpanded(open)
+                        break
+                    }
+                }
+            } finally {
+                if (claimed) {
+                    dragging = false
+                    if (!finished && latestActive) latestExpanded(before)
+                    // A whole fast/cancelled gesture may happen between compositions:
+                    // true -> false alone would not restart the cancelled effect.
+                    settlement++
+                }
+            }
+        }
     }) {
         if (revealed && active) Box(Modifier.matchParentSize().background(colors.surfaceContainer)) {
-            val actionsReady = expanded && swipe.settledValue
-            RoomActionRail(profile, onFavorite, onTags, onNote, onExcluded,
-                Modifier.align(AbsoluteAlignment.CenterRight).width(160.dp).testTag("room_actions_${profile.roomId}")
+            val actionsReady = expanded && swipe.settledValue && interactionEnabled
+            RoomActionRail(profile, { latestExpanded(false); onFavorite() }, onTags, onNote, onExcluded,
+                Modifier.align(AbsoluteAlignment.CenterRight).width(RoomActionRailWidth).testTag("room_actions_${profile.roomId}")
                     .then(if (actionsReady) Modifier else Modifier.clearAndSetSemantics {}), enabled = actionsReady)
         }
-        Column(Modifier.fillMaxWidth().absoluteOffset {
+        Box(Modifier.fillMaxWidth().absoluteOffset {
             IntOffset(if (swipe.offset.isNaN()) 0 else swipe.requireOffset().roundToInt(), 0)
-        }.background(background, RectangleShape).testTag("room_face_${profile.roomId}")
-            .then(if (expanded) Modifier.clickable { latestExpanded(false) } else Modifier)) {
-            Column(Modifier.fillMaxWidth().testTag("room_swipe_${profile.roomId}").pointerInput(swipe, active, railWidth) {
-                if (active) {
-                    var before = false
-                    val velocity = VelocityTracker()
-                    fun settle(open: Boolean) {
-                        settleJob?.cancel()
-                        settleJob = scope.launch { swipe.animateTo(open, tween(160)) }
+        }.background(colors.background, RectangleShape).testTag("room_face_${profile.roomId}")
+            .then(if (expanded) Modifier.clickable(enabled = interactionEnabled) { latestExpanded(false) } else Modifier)) {
+            Column(Modifier.fillMaxWidth()) {
+                Column(Modifier.fillMaxWidth().testTag("room_swipe_${profile.roomId}")
+                    .padding(start = 24.dp, end = 24.dp, top = 16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(profile.name, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.titleLarge,
+                            maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        ExcludedRoomMarker(profile)
                     }
-                    // Only the upper region owns row swipes; the lower region inspects time.
-                    detectHorizontalDragGestures(onDragStart = {
-                        settleJob?.cancel(); before = swipe.settledValue; velocity.resetTracking()
-                    }, onDragEnd = {
-                        val speed = velocity.calculateVelocity().x
-                        val threshold = railWidth * 1.7f
-                        settle(when {
-                            speed < -threshold -> true
-                            speed > threshold -> false
-                            else -> swipe.requireOffset() < -railWidth / 2
-                        })
-                    }, onDragCancel = { settle(if (latestActive) before else false) }) { change, delta ->
-                        change.consume(); velocity.addPosition(change.uptimeMillis, change.position)
-                        swipe.dispatchRawDelta(delta)
-                    }
+                    Text(listOfNotNull(match.classroom.buildingLabel, match.classroom.capacity?.let { "容量 $it" })
+                        .plus(labels).joinToString(" · "), Modifier.padding(top = 4.dp),
+                        style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                    if (profile.note.isNotBlank()) Text(profile.note, Modifier.padding(top = 4.dp), maxLines = 1,
+                        overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                 }
-            }.padding(start = 24.dp, end = 24.dp, top = 16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(profile.name, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.titleLarge,
-                        maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    ExcludedRoomMarker(profile)
-                }
-                Text(listOfNotNull(match.classroom.buildingLabel, match.classroom.capacity?.let { "容量 $it" })
-                    .plus(labels).joinToString(" · "), Modifier.padding(top = 4.dp),
-                    style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-                if (profile.note.isNotBlank()) Text(profile.note, Modifier.padding(top = 4.dp), maxLines = 1,
-                    overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                RoomAvailabilityStrip(profile.roomId, match.freeSlots, slots, active && interactionEnabled && !expanded && !revealed,
+                    inspectionKey = inspectionKey)
+                HorizontalDivider(Modifier.padding(horizontal = 24.dp).testTag("room_divider_${profile.roomId}"))
+                Spacer(Modifier.height(16.dp))
             }
-            RoomAvailabilityStrip(profile.roomId, match.freeSlots, slots, active && !expanded && !revealed,
-                inspectionKey = inspectionKey)
-            HorizontalDivider(Modifier.padding(horizontal = 24.dp).testTag("room_divider_${profile.roomId}"))
-            Spacer(Modifier.height(16.dp))
+            if (profile.favorite) FavoriteCornerMarker(profile.roomId,
+                Modifier.align(AbsoluteAlignment.TopRight).absoluteOffset(x = (-24).dp))
         }
     }
 }
