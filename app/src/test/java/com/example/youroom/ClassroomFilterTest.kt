@@ -51,8 +51,41 @@ class ClassroomFilterTest {
         val filters = SearchFilters(buildings = setOf("2", "3"), query = "201", favoritesOnly = true,
             outletsOnly = true, tags = setOf(PersonalTags.comfortable))
         assertEquals(listOf(a.id), ClassroomFilter.search(snapshot, filters, profiles).rooms.map { it.classroom.id })
-        assertTrue(ClassroomFilter.search(snapshot, filters, profiles +
+        assertEquals(listOf(a.id), ClassroomFilter.search(snapshot, filters, profiles +
+            (a.id to profiles.getValue(a.id).copy(excluded = true))).rooms.map { it.classroom.id })
+        assertTrue(ClassroomFilter.search(snapshot, filters.copy(selectedSlots = setOf(1)), profiles +
             (a.id to profiles.getValue(a.id).copy(excluded = true))).rooms.isEmpty())
+    }
+
+    @Test fun emptySelectionIncludesExcludedRoomsAndKeepsExcludedFavoritesFirst() {
+        val profiles = mapOf(a.id to a.emptyProfile().copy(excluded = true),
+            c.id to c.emptyProfile().copy(favorite = true, excluded = true))
+        val result = ClassroomFilter.search(snapshot, SearchFilters(), profiles)
+        assertEquals(listOf(c.id, a.id, b.id), result.rooms.map { it.classroom.id })
+        assertTrue(result.rooms.first().profile.favorite && result.rooms.first().profile.excluded)
+        assertTrue(result.rooms.first { it.classroom.id == a.id }.profile.excluded)
+        assertEquals(setOf(1, 2, 3), result.rooms.first().freeSlots)
+    }
+
+    @Test fun selectionOnlyChangesExclusionVisibilityNeverTheStoredMark() {
+        val profile = a.emptyProfile().copy(favorite = true, excluded = true, outlets = true, note = "保留")
+        val profiles = mapOf(a.id to profile)
+        for (selected in listOf(emptySet(), setOf(1), setOf(1, 2), emptySet())) {
+            val rooms = ClassroomFilter.search(snapshot, SearchFilters(selected), profiles).rooms
+            assertEquals(selected.isEmpty(), rooms.any { it.classroom.id == a.id })
+            assertEquals(profile, profiles[a.id])
+        }
+    }
+
+    @Test fun emptySelectionExclusionRuleAlsoAppliesToShaheAndAllExcludedSnapshots() {
+        val shahe = snapshot.copy(campusId = "04", slots = snapshot.slots.map { slot ->
+            slot.copy(classrooms = slot.classrooms.map { it.copy(id = it.id.replaceFirst("01:", "04:")) })
+        })
+        val profiles = shahe.classrooms.associate { it.id to it.emptyProfile().copy(excluded = true, favorite = it.name == b.name) }
+        val all = ClassroomFilter.search(shahe, SearchFilters(), profiles).rooms
+        assertEquals(3, all.size)
+        assertEquals("04:3-108", all.first().classroom.id)
+        assertTrue(ClassroomFilter.search(shahe, SearchFilters(setOf(1)), profiles).rooms.isEmpty())
     }
 
     @Test fun emptySelectionAndEmptySnapshotProduceAnEmptyValidResult() {
@@ -69,7 +102,7 @@ class ClassroomFilterTest {
         assertEquals("01:未来学习大楼-202-203", c.id)
     }
 
-    @Test fun exclusionsAreHardFiltersAndFavoritesSortFirst() {
+    @Test fun exclusionsAreHardFiltersWhenPeriodsAreSelectedAndFavoritesSortFirst() {
         val profiles = mapOf(a.id to a.emptyProfile().copy(excluded = true), b.id to b.emptyProfile().copy(favorite = true))
         val rooms = ClassroomFilter.search(snapshot, SearchFilters((1..1).toSet()), profiles).rooms
         assertEquals(listOf(b.id, c.id), rooms.map { it.classroom.id })

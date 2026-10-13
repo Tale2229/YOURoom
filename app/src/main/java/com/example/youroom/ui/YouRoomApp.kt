@@ -24,6 +24,9 @@ fun YouRoomApp(model: YouRoomViewModel) {
     var generationMinute by rememberSaveable { mutableStateOf<Int?>(null) }
     var planningDate by rememberSaveable { mutableStateOf(state.today.toString()) }
     var planningDemo by rememberSaveable { mutableStateOf(state.demo) }
+    var roomEditor by rememberSaveable { mutableStateOf(RoomEditor.ACTIONS) }
+    fun editRoom(id: String, editor: RoomEditor) { roomEditor = editor; model.selectRoom(id) }
+    fun manageRoom(id: String?) { roomEditor = RoomEditor.ACTIONS; model.selectRoom(id) }
     LaunchedEffect(state.today, state.demo) {
         if (planningDate != state.today.toString() || planningDemo != state.demo) {
             planRequested = false; generationMinute = null
@@ -65,21 +68,28 @@ fun YouRoomApp(model: YouRoomViewModel) {
                         "login" -> LoginScreen(state, model::login, { tab = 0; model.showDemo() },
                             { tab = 0; model.viewCache() })
                         "rooms" -> ClassroomScreen(state, { model.setFiltersFor(displayedCampus, it) }, model::refresh,
-                            model::selectRoom, model::toggleFavorite, model::setCampus, model::addCustomTag,
-                            model::removePersonalTag, model::reorderPersonalTags)
+                            ::editRoom, model::toggleFavorite, model::setCampus, model::addCustomTag,
+                            model::removePersonalTag, model::reorderPersonalTags, model::toggleExcluded)
                         "planner" -> StudyPlanningScreen(state, goal, planRequested,
                             { goal = it; planRequested = false }, {
                                 generationMinute = if (state.demo) null else java.time.LocalTime.now(com.example.youroom.domain.SchoolZone)
                                     .let { (it.toSecondOfDay() + 59) / 60 }
                                 planRequested = true
-                            }, model::setCampus, model::refresh, model::selectRoom, generationMinute)
-                        else -> PreferencesScreen(state, model::selectRoom, model::clearProfile, model::logout)
+                            }, model::setCampus, model::refresh, ::manageRoom, generationMinute)
+                        else -> PreferencesScreen(state, ::manageRoom, model::clearProfile, model::logout)
                     }
                 }
             }
         }
         state.selectedRoom?.let { room ->
-            RoomDetailSheet(room, state, { model.selectRoom(null) }, model::saveProfile)
+            val dismiss = { model.selectRoom(null) }
+            when (roomEditor) {
+                RoomEditor.TAGS -> RoomTagsDialog(room, state, dismiss, model::saveProfile, model::addCustomTag)
+                RoomEditor.NOTE -> RoomNoteDialog(room, dismiss, model::saveProfile)
+                RoomEditor.ACTIONS -> RoomActionsDialog(room, dismiss,
+                    { model.toggleFavorite(room.classroom) }, { roomEditor = RoomEditor.TAGS },
+                    { roomEditor = RoomEditor.NOTE }, { model.toggleExcluded(room.classroom) })
+            }
         }
     }
 }

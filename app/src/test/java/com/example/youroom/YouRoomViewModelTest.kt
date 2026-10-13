@@ -111,6 +111,76 @@ class YouRoomViewModelTest {
         assertTrue(model.state.value.filters.buildings.isEmpty())
     }
 
+    @Test fun rapidFavoriteAndExclusionTogglesUseTheLatestProfileAndCanBeUndone() = checkModel { model, source, _ ->
+        val room = model.state.value.snapshot!!.classrooms.first()
+        val original = room.emptyProfile().copy(outlets = true, note = "保留备注", tags = setOf("靠窗"))
+        model.saveProfile(original)
+        model.toggleFavorite(room)
+        model.toggleExcluded(room)
+        assertEquals(original.copy(favorite = true, excluded = true), model.state.value.profiles[room.id])
+        model.selectRoom(room.id)
+        assertTrue(model.state.value.selectedRoom!!.profile.excluded)
+        runCurrent()
+        assertEquals(original.copy(favorite = true, excluded = true), source.profiles.value[room.id])
+        model.toggleExcluded(room)
+        runCurrent()
+        assertEquals(original.copy(favorite = true), source.profiles.value[room.id])
+    }
+
+    @Test fun exclusionToggleAlwaysSavesTheSameMarkIndependentOfSelectedPeriods() = checkModel { model, source, _ ->
+        val room = model.state.value.snapshot!!.classrooms.first()
+        val original = room.emptyProfile().copy(favorite = true, outlets = true, note = "保留备注", tags = setOf("靠窗"))
+        model.saveProfile(original)
+        model.setFilters(SearchFilters())
+        model.toggleExcluded(room)
+        runCurrent()
+        val excluded = original.copy(excluded = true)
+        assertEquals(excluded, source.profiles.value[room.id])
+        assertEquals(room.id, model.state.value.result.rooms.first().classroom.id)
+        model.setFilters(SearchFilters(setOf(1)))
+        runCurrent()
+        assertFalse(model.state.value.result.rooms.any { it.classroom.id == room.id })
+        assertEquals(excluded, source.profiles.value[room.id])
+        model.toggleExcluded(room)
+        runCurrent()
+        assertEquals(original, source.profiles.value[room.id])
+        assertEquals(room.id, model.state.value.result.rooms.first().classroom.id)
+        model.toggleExcluded(room)
+        runCurrent()
+        assertEquals(excluded, source.profiles.value[room.id])
+        model.setFilters(SearchFilters())
+        runCurrent()
+        assertEquals(room.id, model.state.value.result.rooms.first().classroom.id)
+        assertEquals(excluded, source.profiles.value[room.id])
+        model.toggleExcluded(room)
+        runCurrent()
+        assertEquals(original, source.profiles.value[room.id])
+    }
+
+    @Test fun demoExclusionIsIsolatedAndRestoredWhenReturningToTheCampus() = checkModel(false) { model, source, _ ->
+        model.showDemo()
+        val room = model.state.value.snapshot!!.classrooms.first()
+        model.toggleExcluded(room)
+        model.selectRoom(room.id)
+        assertTrue(model.state.value.selectedRoom!!.profile.excluded)
+        model.setCampus(Campus.SHAHE)
+        assertNull(model.state.value.selectedRoom)
+        model.setCampus(Campus.XITUCHENG)
+        assertTrue(model.state.value.profiles.getValue(room.id).excluded)
+        runCurrent()
+        assertTrue(source.profileWrites.isEmpty())
+    }
+
+    @Test fun anExcludedSavedRoomOutsideTodaysSnapshotStillHasAManagementEntry() {
+        val profile = RoomProfile("01:2-999", "2-999", "2", excluded = true, favorite = true, note = "旧记录")
+        val state = com.example.youroom.ui.YouRoomState(snapshot = snapshot(Campus.XITUCHENG),
+            today = LocalDate.of(2026, 10, 12), profiles = mapOf(profile.roomId to profile), selectedRoomId = profile.roomId)
+        assertEquals(profile, state.selectedRoom!!.profile)
+        assertTrue(state.selectedRoom!!.freeSlots.isEmpty())
+        assertEquals(profile.name, state.selectedRoom!!.classroom.name)
+        assertNull(state.copy(campus = Campus.SHAHE).selectedRoom)
+    }
+
     @Test fun returningToFreshCampusDoesNotQueryAgain() = checkModel { model, source, _ ->
         model.setCampus(Campus.SHAHE); runCurrent()
         model.setCampus(Campus.XITUCHENG); runCurrent()

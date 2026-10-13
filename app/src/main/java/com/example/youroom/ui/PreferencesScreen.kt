@@ -1,6 +1,7 @@
 package com.example.youroom.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -39,15 +40,19 @@ fun PreferencesScreen(state: YouRoomState, onRoom: (String?) -> Unit,
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Icon(Icons.Outlined.StarBorder, null, Modifier.size(36.dp), tint = MaterialTheme.colorScheme.primary)
                 Text("还没有个人标记", style = MaterialTheme.typography.titleLarge)
-                Text("在教室列表点星号收藏，或打开详情添加备注。",
+                Text("在教室列表左滑，可收藏、修改标签与备注或排除教室。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         items(profiles, key = { it.roomId }) { profile ->
-            Column(Modifier.animateItem().clickable { onRoom(profile.roomId) }.padding(horizontal = 24.dp, vertical = 12.dp)) {
+            Column(Modifier.animateItem().background(if (profile.favorite) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.background)
+                .clickable { onRoom(profile.roomId) }.padding(horizontal = 24.dp, vertical = 12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(profile.name, style = MaterialTheme.typography.titleLarge)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(profile.name, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.titleLarge)
+                            ExcludedRoomMarker(profile)
+                        }
                         Text(listOfNotNull(if (profile.favorite) "已收藏" else null,
                             if (profile.excluded) "已排除" else null).plus(
                             state.tagOrder.filter { it != PersonalTags.favorite && profile.hasTerm(it) }).joinToString(" · ").ifBlank { "个人备注" },
@@ -73,7 +78,7 @@ fun PreferencesScreen(state: YouRoomState, onRoom: (String?) -> Unit,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                     Text(if (state.demo) "结束演示" else if (state.viewingCache) "返回登录" else "退出登录")
                 }
-                Text("YouRoom 1.6.3 · 非学校官方应用", style = MaterialTheme.typography.labelSmall,
+                Text("YouRoom 1.7.1 · 非学校官方应用", style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }

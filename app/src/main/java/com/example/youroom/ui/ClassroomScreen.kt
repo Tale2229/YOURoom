@@ -8,20 +8,15 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.draw.clipToBounds
-import com.example.youroom.domain.allTags
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.youroom.data.DemoData
@@ -30,9 +25,10 @@ import com.example.youroom.ui.theme.YouRoomTheme
 
 @Composable
 fun ClassroomScreen(state: YouRoomState, onFilters: (SearchFilters) -> Unit,
-    onRefresh: () -> Unit, onRoom: (String?) -> Unit, onFavorite: (Classroom) -> Unit,
+    onRefresh: () -> Unit, onRoomEditor: (String, RoomEditor) -> Unit, onFavorite: (Classroom) -> Unit,
     onCampus: (Campus) -> Unit = {}, onAddTag: (String) -> Unit = {},
-    onRemoveTag: (String) -> Unit = {}, onTagOrder: (List<String>) -> Unit = {}) {
+    onRemoveTag: (String) -> Unit = {}, onTagOrder: (List<String>) -> Unit = {},
+    onExcluded: (Classroom) -> Unit = {}) {
     val westList = androidx.compose.foundation.lazy.rememberLazyListState()
     val shaheList = androidx.compose.foundation.lazy.rememberLazyListState()
     val viewportDates = remember { mutableMapOf<Pair<Campus, Boolean>, java.time.LocalDate>() }
@@ -77,9 +73,9 @@ fun ClassroomScreen(state: YouRoomState, onFilters: (SearchFilters) -> Unit,
             Surface(Modifier.fillMaxSize().then(pageModifier).graphicsLayer()) {
                 ClassroomPage(page, if (displayed == Campus.XITUCHENG) westList else shaheList, active, moving,
                     { if (active) onFilters(it) }, { if (active) onRefresh() },
-                    { if (active) onRoom(it) }, { if (active) onFavorite(it) }, onCampus,
+                    { id, editor -> if (active) onRoomEditor(id, editor) }, { if (active) onFavorite(it) }, onCampus,
                     { if (active) onAddTag(it) }, { if (active) onRemoveTag(it) },
-                    { if (active) onTagOrder(it) })
+                    { if (active) onTagOrder(it) }, { if (active) onExcluded(it) })
             }
         }
     }
@@ -88,17 +84,20 @@ fun ClassroomScreen(state: YouRoomState, onFilters: (SearchFilters) -> Unit,
 @Composable
 private fun ClassroomPage(state: YouRoomState, listState: LazyListState, active: Boolean, moving: Boolean,
     onFilters: (SearchFilters) -> Unit,
-    onRefresh: () -> Unit, onRoom: (String?) -> Unit, onFavorite: (Classroom) -> Unit,
+    onRefresh: () -> Unit, onRoomEditor: (String, RoomEditor) -> Unit, onFavorite: (Classroom) -> Unit,
     onCampus: (Campus) -> Unit, onAddTag: (String) -> Unit,
-    onRemoveTag: (String) -> Unit, onTagOrder: (List<String>) -> Unit) {
+    onRemoveTag: (String) -> Unit, onTagOrder: (List<String>) -> Unit, onExcluded: (Classroom) -> Unit) {
     var showFilters by remember { mutableStateOf(false) }
+    var expandedRoom by remember(state.campus, state.demo) { mutableStateOf<String?>(null) }
     val snapshot = state.campusSnapshot
     val search = rememberClassroomSearch(state, enabled = active)
     val result = search.result
     val waiting = search.pending || (snapshot == null && (state.refreshing || moving))
     val slots = snapshot?.slots.orEmpty()
-    val slotNumbers = remember(slots) { slots.map { it.number } }
-    LaunchedEffect(active) { if (!active) showFilters = false }
+    LaunchedEffect(active) { if (!active) { showFilters = false; expandedRoom = null } }
+    LaunchedEffect(result.rooms.map { it.classroom.id }, state.campusSnapshot?.queryDate) {
+        if (result.rooms.none { it.classroom.id == expandedRoom }) expandedRoom = null
+    }
     if (showFilters && active) FilterDialog(state, { showFilters = false }, onFilters, onAddTag, onRemoveTag, onTagOrder)
     Column(Modifier.fillMaxSize().imePadding()) {
         CampusHeader(state, onRefresh, onCampus)
@@ -148,37 +147,17 @@ private fun ClassroomPage(state: YouRoomState, listState: LazyListState, active:
                 }
             }
             items(result.rooms, key = { it.classroom.id }) { room ->
-                RoomRow(room, slotNumbers, if (moving) Modifier else Modifier.animateItem(), terms = state.tagOrder,
-                    onClick = { onRoom(room.classroom.id) }, onFavorite = { onFavorite(room.classroom) })
+                val id = room.classroom.id
+                val current = room.copy(profile = state.profiles[id] ?: room.classroom.emptyProfile())
+                SwipeRoomRow(current, slots, state.tagOrder, expanded = expandedRoom == id, active = active,
+                    onExpanded = { open -> if (open) expandedRoom = id else if (expandedRoom == id) expandedRoom = null },
+                    onFavorite = { onFavorite(room.classroom) },
+                    onTags = { expandedRoom = null; onRoomEditor(id, RoomEditor.TAGS) },
+                    onNote = { expandedRoom = null; onRoomEditor(id, RoomEditor.NOTE) },
+                    onExcluded = { onExcluded(room.classroom) },
+                    modifier = if (moving) Modifier else Modifier.animateItem(), inspectionKey = snapshot?.let { it.queryDate to it.fetchedAt })
             }
         }
-    }
-}
-
-@Composable
-private fun RoomRow(match: RoomMatch, slots: List<Int>, modifier: Modifier = Modifier, terms: List<String>,
-    onClick: () -> Unit, onFavorite: () -> Unit) {
-    val room = match.classroom
-    val labels = remember(match.profile, terms) { terms.filter { it != PersonalTags.favorite && match.profile.hasTerm(it) } }
-    Column(modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 24.dp, vertical = 16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(room.name, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(listOfNotNull(room.buildingLabel, room.capacity?.let { "容量 $it" }).plus(labels).joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (match.profile.note.isNotBlank()) Text(match.profile.note, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            IconAction(onClick = onFavorite) {
-                AnimatedContent(match.profile.favorite, label = "favorite") { favorite ->
-                    Icon(if (favorite) Icons.Outlined.Star else Icons.Outlined.StarBorder,
-                        if (favorite) "取消收藏 ${room.name}" else "收藏 ${room.name}",
-                        tint = if (favorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        }
-        AvailabilityStrip(match.freeSlots, slots, Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 16.dp))
-        HorizontalDivider()
     }
 }
 
@@ -188,7 +167,7 @@ private fun RoomRow(match: RoomMatch, slots: List<Int>, modifier: Modifier = Mod
 @Composable
 private fun RoomsPreview() {
     YouRoomTheme { ClassroomScreen(YouRoomState(initializing = false, demo = true,
-        snapshot = DemoData.snapshot(), filters = SearchFilters(setOf(1, 2))), {}, {}, {}, {}) }
+        snapshot = DemoData.snapshot(), filters = SearchFilters(setOf(1, 2))), {}, {}, { _, _ -> }, {}) }
 }
 
 @Preview(name = "沙河演示", showBackground = true, widthDp = 390, heightDp = 844)
@@ -196,5 +175,5 @@ private fun RoomsPreview() {
 private fun ShahePreview() {
     YouRoomTheme(campus = Campus.SHAHE) { ClassroomScreen(YouRoomState(initializing = false,
         campus = Campus.SHAHE, demo = true, snapshot = DemoData.snapshot(Campus.SHAHE),
-        filters = SearchFilters(setOf(1, 2))), {}, {}, {}, {}) }
+        filters = SearchFilters(setOf(1, 2))), {}, {}, { _, _ -> }, {}) }
 }

@@ -1,6 +1,6 @@
 package com.example.youroom.domain
 
-/** Selected periods must all be free; no selection lists all rooms in this snapshot. */
+/** Selected periods must all be free; no selection lists even excluded rooms for browsing. */
 object ClassroomFilter {
     fun search(
         snapshot: ClassroomSnapshot,
@@ -22,7 +22,7 @@ object ClassroomFilter {
             .map { room ->
                 RoomMatch(room, profiles[room.id] ?: room.emptyProfile(), index.freeSlotsByRoom.getValue(room.id))
             }
-            .filter { !it.profile.excluded }
+            .filter { selected.isEmpty() || !it.profile.excluded }
             .filter { filters.buildings.isEmpty() || it.classroom.building in filters.buildings }
             .filter { query.isEmpty() || it.classroom.name.contains(query, true) }
             .filter { !filters.favoritesOnly || it.profile.favorite }

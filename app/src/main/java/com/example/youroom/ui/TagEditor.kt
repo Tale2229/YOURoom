@@ -28,25 +28,27 @@ private class TagGeometry {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TagEditor(state: YouRoomState, onFilters: (SearchFilters) -> Unit, onAdd: (String) -> Unit,
-    onRemove: (String) -> Unit, onOrder: (List<String>) -> Unit) {
+    onRemove: (String) -> Unit, onOrder: (List<String>) -> Unit,
+    showFavorite: Boolean = true, manageCatalog: Boolean = true) {
     var editing by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var removal by remember { mutableStateOf<String?>(null) }
-    var order by remember { mutableStateOf(state.tagOrder) }
+    val visibleOrder = remember(state.tagOrder, showFavorite) { state.tagOrder.filter { showFavorite || it != PersonalTags.favorite } }
+    var order by remember { mutableStateOf(visibleOrder) }
     var dragged by remember { mutableStateOf<String?>(null) }
     var pointer by remember { mutableStateOf(Offset.Zero) }
     var grab by remember { mutableStateOf(Offset.Zero) }
     val geometry = remember { TagGeometry() }
     val latestOrderCallback by rememberUpdatedState(onOrder)
-    LaunchedEffect(state.tagOrder, dragged) { if (dragged == null) order = state.tagOrder }
-    val angle = if (editing) rememberInfiniteTransition(label = "tag_editing").animateFloat(-1.3f, 1.3f,
+    LaunchedEffect(visibleOrder, dragged) { if (dragged == null) order = visibleOrder }
+    val angle = if (editing && manageCatalog) rememberInfiniteTransition(label = "tag_editing").animateFloat(-1.3f, 1.3f,
         infiniteRepeatable(tween(110, easing = LinearEasing), RepeatMode.Reverse), label = "tag_wiggle") else null
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Box(Modifier.fillMaxWidth().onGloballyPositioned { geometry.origin = it.positionInRoot() }) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 order.forEach { tag -> key(tag) {
-                    val movable = tag != PersonalTags.favorite
+                    val movable = manageCatalog && tag != PersonalTags.favorite
                     CompactFilterChip(tag, state.filters.hasTerm(tag), { onFilters(state.filters.toggleTerm(tag)) },
                         modifier = Modifier.testTag(when (tag) {
                             PersonalTags.favorite -> "filter_favorite"
@@ -95,7 +97,9 @@ fun TagEditor(state: YouRoomState, onFilters: (SearchFilters) -> Unit, onAdd: (S
                         angle = if (movable && dragged != tag) angle else null, faded = dragged == tag)
                 } }
                 CompactFilterChip("＋", editing, { editing = !editing },
-                    Modifier.testTag("edit_tags").semantics { contentDescription = if (editing) "结束词条编辑" else "添加和整理词条" })
+                    Modifier.testTag("edit_tags").semantics { contentDescription = if (manageCatalog) {
+                        if (editing) "结束词条编辑" else "添加和整理词条"
+                    } else if (editing) "结束添加词条" else "添加词条" })
             }
             dragged?.let { tag ->
                 CompactFilterChip(tag, state.filters.hasTerm(tag), {},

@@ -75,6 +75,7 @@ class YouRoomUiTest {
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("demo").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("demo").performScrollTo().performClick()
         compose.onNodeWithText("可选教室").performScrollTo().assertIsDisplayed()
+        revealRoom("01:2-201")
         compose.onNodeWithContentDescription("收藏 2-201").performScrollTo().performClick()
         compose.onNodeWithTag("tab_preferences").performClick()
         compose.onNodeWithText("2-201").assertIsDisplayed()
@@ -83,6 +84,7 @@ class YouRoomUiTest {
 
     @Test fun plannerIsBetweenTheExistingTabsAndGeneratesAnOpenableFavoriteRoute() {
         enterDemo()
+        revealRoom("01:2-201")
         compose.onNodeWithContentDescription("收藏 2-201").performScrollTo().performClick()
         val rooms = compose.onNodeWithTag("tab_rooms").fetchSemanticsNode().boundsInRoot
         val planner = compose.onNodeWithTag("tab_planner").fetchSemanticsNode().boundsInRoot
@@ -97,8 +99,9 @@ class YouRoomUiTest {
         compose.onNodeWithTag("planner_metrics").assertTextContains("收藏 240 分钟", substring = true)
         compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_step_0"))
         compose.onNodeWithTag("planner_step_0").performClick()
-        compose.onNodeWithTag("room_detail").assertExists()
-        compose.onNodeWithTag("close_room_detail").performClick()
+        compose.onNodeWithTag("room_actions_dialog").assertExists()
+        compose.onNodeWithTag("room_detail").assertDoesNotExist()
+        compose.onNodeWithTag("close_room_actions").performClick()
         compose.onNodeWithTag("tab_rooms").performClick()
         compose.onNodeWithTag("slot_1").assertIsSelected()
         compose.onNodeWithTag("slot_2").assertIsSelected()
@@ -269,6 +272,12 @@ class YouRoomUiTest {
     private fun enterDemo() {
         compose.waitUntil(10_000) { compose.onAllNodesWithTag("demo").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("demo").performScrollTo().performClick()
+    }
+
+    private fun revealRoom(id: String) {
+        compose.onNodeWithTag("room_list").performScrollToNode(hasTestTag("room_row_$id"))
+        compose.onNodeWithTag("room_row_$id").performTouchInput { swipeLeft() }
+        compose.onNodeWithTag("room_actions_$id").assertIsDisplayed()
     }
 
     @Test fun fixedHeaderAndIndependentScrollPositionsSurviveCampusSwitch() {
@@ -485,41 +494,46 @@ class YouRoomUiTest {
         compose.onNodeWithTag("filtering_indicator").assertDoesNotExist()
     }
 
-    @Test fun detailPeriodRectanglesHaveSquareCornersInBothCampusThemes() {
+    @Test fun roomActionsAreOnlyRevealedByLeftSwipeInBothCampuses() {
         enterDemo()
         compose.onNodeWithTag("room_list").performScrollToNode(hasText("2-201"))
-        compose.onNodeWithText("2-201").performClick()
-        assertSquareCorners(compose.onNodeWithTag("detail_slot_1"))
-        assertSquareCorners(compose.onNodeWithTag("detail_slot_14"))
-        compose.onNodeWithTag("close_room_detail").performClick()
+        compose.onNodeWithContentDescription("收藏 2-201").assertDoesNotExist()
+        compose.onNodeWithText("2-201").performTouchInput { click() }
+        compose.onNodeWithTag("room_detail").assertDoesNotExist()
+        compose.onNodeWithTag("room_actions_dialog").assertDoesNotExist()
+        revealRoom("01:2-201")
+        for (index in 0..3) compose.onNodeWithTag("room_action_01:2-201_$index").assertIsDisplayed()
         compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeLeft() }
-        compose.onNodeWithTag("room_list").performScrollToNode(hasText("演示楼-A101"))
-        compose.onNodeWithText("演示楼-A101").performClick()
-        assertSquareCorners(compose.onNodeWithTag("detail_slot_1"))
-        assertSquareCorners(compose.onNodeWithTag("detail_slot_14"))
+        compose.onNodeWithContentDescription("收藏 演示楼-A101").assertDoesNotExist()
+        revealRoom("04:演示楼-A101")
+        for (index in 0..3) compose.onNodeWithTag("room_action_04:演示楼-A101_$index").assertIsDisplayed()
+        compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeRight() }
+        compose.onNodeWithTag("room_actions_01:2-201").assertDoesNotExist()
     }
 
-    @Test fun roomDetailsUpdateMarksAndNotesWithoutSavingOrDismissing() {
+    @Test fun roomPopupsUpdateMarksAndNotesWithoutSavingAndSearchIgnoresNotes() {
         enterDemo()
-        compose.onNodeWithTag("room_list").performScrollToNode(hasText("2-201"))
-        compose.onNodeWithText("2-201").performClick()
+        revealRoom("01:2-201")
+        compose.onNodeWithContentDescription("收藏 2-201").performClick()
+        compose.onNodeWithContentDescription("修改标签 2-201").performClick()
+        compose.onNodeWithTag("room_tag_dialog").assertIsDisplayed()
+        compose.onNodeWithTag("building_all").assertDoesNotExist()
+        compose.onNodeWithTag("filter_favorite").assertDoesNotExist()
+        compose.onNodeWithTag("filter_outlets").performClick().assertIsSelected()
         compose.onNodeWithTag("save_profile").assertDoesNotExist()
         compose.onNodeWithText("保存个人标记").assertDoesNotExist()
-        compose.onNodeWithText("标签仅依据个人经验；未勾选表示未标记，不代表没有。").assertDoesNotExist()
-        compose.onNodeWithText("标注容量 180", substring = true).assertIsDisplayed()
-        compose.onNodeWithText("（非余座）", substring = true).assertDoesNotExist()
-        compose.onNodeWithText("主题色：课表空闲；灰色：未列为空闲。课间与午休不作保证。").assertDoesNotExist()
-        compose.onNodeWithText("已收藏").performScrollTo().performClick()
-        compose.onNodeWithText("有插座").performScrollTo().performClick()
-        compose.onNodeWithTag("room_note").performScrollTo().performTextInput("仅备注关键词")
-        compose.onNodeWithTag("room_detail").assertExists()
-        compose.onNodeWithTag("close_room_detail").performScrollTo().performClick()
-        compose.onNodeWithContentDescription("取消收藏 2-201").performScrollTo().assertExists()
-        compose.onNodeWithTag("room_list").performScrollToNode(hasText("2-201"))
-        compose.onNodeWithText("2-201").performClick()
-        compose.onNodeWithTag("room_note").performScrollTo().assertTextContains("仅备注关键词")
-        compose.onNodeWithText("有插座").performScrollTo().assertHasClickAction()
-        compose.onNodeWithTag("close_room_detail").performScrollTo().performClick()
+        compose.onNodeWithTag("close_room_tags").performClick()
+        compose.onNodeWithTag("filter_badge").assertDoesNotExist()
+        revealRoom("01:2-201")
+        compose.onNodeWithContentDescription("取消收藏 2-201").assertExists()
+        compose.onNodeWithContentDescription("修改备注 2-201").performClick()
+        compose.onNodeWithTag("room_note_dialog").assertIsDisplayed()
+        compose.onNodeWithTag("room_note").performTextInput("仅备注关键词")
+        compose.onNodeWithTag("close_room_note").performClick()
+        revealRoom("01:2-201")
+        compose.onNodeWithContentDescription("修改备注 2-201").performClick()
+        compose.onNodeWithTag("room_note").assertTextContains("仅备注关键词")
+        compose.onNodeWithTag("close_room_note").performClick()
         compose.onNodeWithTag("room_search").performScrollTo().performTextInput("仅备注关键词")
         compose.onNodeWithTag("room_search").performImeAction()
         compose.waitUntil(10_000) {
@@ -536,11 +550,11 @@ class YouRoomUiTest {
         compose.onNodeWithTag("add_tag").performScrollTo().performClick()
         compose.onNodeWithTag("filter_tag_靠窗").performScrollTo().assertExists()
         compose.onNodeWithTag("close_filters").performClick()
-        compose.onNodeWithTag("room_list").performScrollToNode(hasText("2-201"))
-        compose.onNodeWithText("2-201").performClick()
-        compose.onNodeWithText("靠窗").performScrollTo().performClick()
+        revealRoom("01:2-201")
+        compose.onNodeWithContentDescription("修改标签 2-201").performClick()
+        compose.onNodeWithTag("filter_tag_靠窗").performClick()
         compose.onNodeWithTag("save_profile").assertDoesNotExist()
-        compose.onNodeWithTag("close_room_detail").performScrollTo().performClick()
+        compose.onNodeWithTag("close_room_tags").performClick()
         compose.onNodeWithTag("room_list").performScrollToNode(hasTestTag("extra_filters"))
         compose.onNodeWithTag("extra_filters").performClick()
         compose.onNodeWithTag("filter_tag_靠窗").performScrollTo().performClick()
@@ -549,6 +563,118 @@ class YouRoomUiTest {
         compose.onNodeWithTag("room_list").performScrollToNode(hasText("2-201"))
         compose.onNodeWithText("2-201").assertIsDisplayed()
         compose.onNodeWithText("3-108").assertDoesNotExist()
+    }
+
+    @Test fun addingRoomTagsAutomaticallyMarksTheRoomWithoutChangingSearchConditions() {
+        enterDemo()
+        revealRoom("01:2-201")
+        compose.onNodeWithContentDescription("修改标签 2-201").performClick()
+        compose.onNodeWithTag("edit_tags").performClick()
+        compose.onNodeWithContentDescription("删除词条 有插座").assertDoesNotExist()
+        compose.onNodeWithTag("custom_tag_name").performTextInput("靠窗")
+        compose.onNodeWithTag("add_tag").performClick()
+        compose.onNodeWithTag("filter_tag_靠窗").assertIsSelected()
+        compose.onNodeWithTag("filter_outlets").performClick()
+        compose.onNodeWithTag("close_room_tags").performClick()
+        compose.onNodeWithTag("filter_badge").assertDoesNotExist()
+        revealRoom("01:2-201")
+        compose.onNodeWithContentDescription("修改标签 2-201").performClick()
+        compose.onNodeWithTag("filter_tag_靠窗").assertIsSelected()
+        compose.onNodeWithTag("filter_outlets").assertIsSelected()
+        compose.onNodeWithTag("reset_room_tags").performClick()
+        compose.onNodeWithTag("filter_tag_靠窗").assertIsNotSelected()
+        compose.onNodeWithTag("filter_outlets").assertIsNotSelected()
+        compose.onNodeWithTag("close_room_tags").performClick()
+        compose.onNodeWithTag("room_list").performScrollToNode(hasTestTag("extra_filters"))
+        compose.onNodeWithTag("extra_filters").performClick()
+        compose.onNodeWithTag("filter_tag_靠窗").assertIsNotSelected()
+        compose.onNodeWithTag("filter_outlets").assertIsNotSelected()
+    }
+
+    @Test fun roomStripHoldInspectsTimeWithoutChangingFiltersOrCampus() {
+        enterDemo()
+        val id = "01:2-201"
+        compose.onNodeWithTag("room_list").performScrollToNode(hasTestTag("room_row_$id"))
+        val strip = compose.onNodeWithTag("room_period_strip_$id").fetchSemanticsNode().boundsInRoot
+        val face = compose.onNodeWithTag("room_period_${id}_6", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithTag("room_period_strip_$id").performTouchInput { down(face.center - strip.topLeft) }
+        compose.waitUntil(4_000) { compose.onAllNodesWithTag("room_time_${id}_tooltip").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("room_time_${id}_label_6").assertTextEquals("6 · 13:00–13:45")
+        compose.onNodeWithTag("room_period_strip_$id").performTouchInput {
+            moveTo(face.center - strip.topLeft + androidx.compose.ui.geometry.Offset(0f, -150f)); up()
+        }
+        compose.onNodeWithTag("room_time_${id}_tooltip").assertDoesNotExist()
+        compose.onNodeWithTag("room_actions_$id").assertDoesNotExist()
+        compose.onNodeWithTag("campus_label").assertTextEquals("西土城")
+        compose.onNodeWithTag("room_list").performScrollToNode(hasTestTag("slot_1"))
+        compose.onNodeWithTag("slot_1").assertIsSelected()
+        compose.onNodeWithTag("slot_2").assertIsSelected()
+        compose.onNodeWithTag("filter_badge").assertDoesNotExist()
+    }
+
+    @Test fun excludedFavoritesStayVisibleWithoutPeriodsAndReturnWhenPeriodsAreCleared() {
+        enterDemo()
+        compose.onNodeWithText("清空").performScrollTo().performClick()
+        revealRoom("01:2-240")
+        compose.onNodeWithContentDescription("收藏 2-240").performClick()
+        compose.onNodeWithContentDescription("排除 2-240").performClick()
+        compose.onNodeWithContentDescription("取消排除 2-240").assertIsDisplayed()
+        compose.onNodeWithContentDescription("取消收藏 2-240").assertIsDisplayed()
+        compose.onNodeWithTag("room_row_01:2-240").performTouchInput { swipeRight() }
+        compose.onNodeWithTag("room_excluded_01:2-240", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithTag("room_list").performScrollToNode(hasText("可选教室"))
+        val favorite = compose.onNodeWithTag("room_row_01:2-240").fetchSemanticsNode().boundsInRoot
+        val ordinary = compose.onNodeWithTag("room_row_01:2-201").fetchSemanticsNode().boundsInRoot
+        assertTrue(favorite.top < ordinary.top)
+        compose.onNodeWithTag("room_list").performScrollToNode(hasTestTag("slot_1"))
+        compose.onNodeWithTag("slot_1").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("2-240").fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithText("清空").performClick()
+        compose.onNodeWithTag("room_list").performScrollToNode(hasTestTag("room_row_01:2-240"))
+        compose.onNodeWithTag("room_excluded_01:2-240", useUnmergedTree = true).assertIsDisplayed()
+        revealRoom("01:2-240")
+        compose.onNodeWithContentDescription("取消收藏 2-240").assertIsDisplayed()
+        compose.onNodeWithContentDescription("取消排除 2-240").performClick()
+        compose.onNodeWithContentDescription("排除 2-240").assertIsDisplayed()
+        compose.onNodeWithTag("room_excluded_01:2-240", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("room_list").performScrollToNode(hasTestTag("slot_1"))
+        compose.onNodeWithTag("slot_1").performClick()
+        compose.onNodeWithTag("room_list").performScrollToNode(hasTestTag("room_row_01:2-240"))
+        compose.onNodeWithText("2-240").assertIsDisplayed()
+    }
+
+    @Test fun exclusionRemovesTheResultAndCanBeReversedInPreferencesWithoutLosingFavorite() {
+        enterDemo()
+        revealRoom("01:2-201")
+        compose.onNodeWithContentDescription("收藏 2-201").performClick()
+        compose.onNodeWithContentDescription("排除 2-201").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("2-201").fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithTag("tab_preferences").performClick()
+        compose.onNodeWithTag("room_excluded_01:2-201", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("2-201").performClick()
+        compose.onNodeWithTag("room_actions_dialog").assertIsDisplayed()
+        compose.onNodeWithContentDescription("取消收藏 2-201").assertIsDisplayed()
+        compose.onNodeWithContentDescription("取消排除 2-201").performClick()
+        compose.onNodeWithContentDescription("排除 2-201").assertIsDisplayed()
+        compose.onNodeWithTag("close_room_actions").performClick()
+        compose.onNodeWithTag("room_excluded_01:2-201", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("tab_rooms").performClick()
+        revealRoom("01:2-201")
+        compose.onNodeWithContentDescription("取消收藏 2-201").assertIsDisplayed()
+    }
+
+    @Test fun revealingAnotherRowClosesTheFirstAndDoesNotChangeCampusesOrPeriods() {
+        enterDemo()
+        revealRoom("01:2-201")
+        revealRoom("01:2-240")
+        compose.onNodeWithTag("room_actions_01:2-201").assertDoesNotExist()
+        compose.onNodeWithTag("room_actions_01:2-240").assertIsDisplayed()
+        compose.onNodeWithTag("campus_label").assertTextEquals("西土城")
+        compose.onNodeWithTag("room_row_01:2-240").performTouchInput { swipeRight() }
+        compose.onNodeWithTag("room_actions_01:2-240").assertDoesNotExist()
+        compose.onNodeWithTag("room_list").performScrollToNode(hasTestTag("slot_1"))
+        compose.onNodeWithTag("slot_1").assertIsSelected()
+        compose.onNodeWithTag("slot_2").assertIsSelected()
     }
 
     @Test fun campusTransitionMovesTheWholePageAtMidAnimation() {

@@ -39,19 +39,20 @@ internal class SlotTimeTooltipPositionProvider(private val gap: Int, private val
 }
 
 @Composable
-internal fun SlotTimeTooltip(slot: LessonSlot) {
+internal fun SlotTimeTooltip(slot: LessonSlot, includeNumber: Boolean = false, tagPrefix: String = "slot_time",
+    positionOverride: PopupPositionProvider? = null) {
     val density = LocalDensity.current
     val position = remember(density) {
         with(density) { SlotTimeTooltipPositionProvider(gap = 28.dp.roundToPx(), margin = 8.dp.roundToPx()) }
     }
-    Popup(popupPositionProvider = position, properties = PopupProperties(focusable = false,
+    Popup(popupPositionProvider = positionOverride ?: position, properties = PopupProperties(focusable = false,
         dismissOnBackPress = false, dismissOnClickOutside = false)) {
-        Surface(Modifier.testTag("slot_time_tooltip").semantics { liveRegion = LiveRegionMode.Polite },
+        Surface(Modifier.testTag("${tagPrefix}_tooltip").semantics { liveRegion = LiveRegionMode.Polite },
             shape = RectangleShape, color = MaterialTheme.colorScheme.background,
             contentColor = MaterialTheme.colorScheme.primary,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary), shadowElevation = 4.dp) {
-            Text("${slot.start}—${slot.end}", Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                .testTag("slot_time_label_${slot.number}"),
+            Text(if (includeNumber) "${slot.number} · ${slot.timeLabel}" else "${slot.start}—${slot.end}",
+                Modifier.padding(horizontal = 12.dp, vertical = 6.dp).testTag("${tagPrefix}_label_${slot.number}"),
                 style = MaterialTheme.typography.bodyMedium, maxLines = 1, softWrap = false)
         }
     }

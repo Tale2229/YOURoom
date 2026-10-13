@@ -362,6 +362,11 @@ class YouRoomViewModel(
         saveProfile(profile.copy(favorite = !profile.favorite))
     }
 
+    fun toggleExcluded(room: Classroom) {
+        val profile = state.value.profiles[room.id] ?: room.emptyProfile()
+        saveProfile(profile.copy(excluded = !profile.excluded))
+    }
+
     fun saveProfile(profile: RoomProfile) {
         if (state.value.demo) {
             mutableState.update { it.copy(profiles = it.profiles + (profile.roomId to profile)) }
