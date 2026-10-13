@@ -4,6 +4,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
@@ -80,6 +81,103 @@ class YouRoomUiTest {
         compose.onNodeWithText("已收藏").assertIsDisplayed()
     }
 
+    @Test fun plannerIsBetweenTheExistingTabsAndGeneratesAnOpenableFavoriteRoute() {
+        enterDemo()
+        compose.onNodeWithContentDescription("收藏 2-201").performScrollTo().performClick()
+        val rooms = compose.onNodeWithTag("tab_rooms").fetchSemanticsNode().boundsInRoot
+        val planner = compose.onNodeWithTag("tab_planner").fetchSemanticsNode().boundsInRoot
+        val preferences = compose.onNodeWithTag("tab_preferences").fetchSemanticsNode().boundsInRoot
+        assertTrue(rooms.right <= planner.left && planner.right <= preferences.left)
+        compose.onNodeWithTag("tab_planner").performClick()
+        compose.onNodeWithTag("planner_screen").assertExists()
+        generatePlanner()
+        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_window"))
+        compose.onNodeWithTag("planner_window").assertTextEquals("08:00—11:25")
+        compose.onNodeWithTag("planner_metrics").assertTextContains("换教室 0 次", substring = true)
+        compose.onNodeWithTag("planner_metrics").assertTextContains("收藏 205 分钟", substring = true)
+        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_step_0"))
+        compose.onNodeWithTag("planner_step_0").performClick()
+        compose.onNodeWithTag("room_detail").assertExists()
+        compose.onNodeWithTag("close_room_detail").performClick()
+        compose.onNodeWithTag("tab_rooms").performClick()
+        compose.onNodeWithTag("slot_1").assertIsSelected()
+        compose.onNodeWithTag("slot_2").assertIsSelected()
+        compose.onNodeWithTag("tab_preferences").performClick()
+        compose.onNodeWithText("2-201").assertExists()
+    }
+
+    @Test fun plannerTimeInputPersistsAcrossTabsAndDoesNotChangeStudySlots() {
+        enterDemo()
+        compose.onNodeWithTag("tab_planner").performClick()
+        compose.onNodeWithTag("planner_end").performClick()
+        compose.onNodeWithTag("planner_hour_wheel").performSemanticsAction(SemanticsActions.SetProgress) { it(9f) }
+        compose.onNodeWithTag("planner_minute_wheel").performSemanticsAction(SemanticsActions.SetProgress) { it(35f) }
+        compose.onNodeWithTag("planner_time_confirm").performClick()
+        compose.onNodeWithTag("planner_end").assertTextContains("09:35")
+        compose.onNodeWithTag("planner_adjust").performClick()
+        generatePlanner()
+        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_window"))
+        compose.onNodeWithTag("planner_window").assertTextEquals("08:00—09:35")
+        compose.onNodeWithTag("tab_rooms").performClick()
+        compose.onNodeWithTag("slot_1").assertIsSelected()
+        compose.onNodeWithTag("slot_2").assertIsSelected()
+        compose.onNodeWithTag("tab_planner").performClick()
+        compose.onNodeWithTag("planner_end").assertTextContains("09:35")
+    }
+
+    @Test fun plannerSwitchesCampusesWithoutKeepingWestRoomsAndCanExplainItsRules() {
+        enterDemo()
+        compose.onNodeWithTag("tab_planner").performClick()
+        generatePlanner()
+        compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeLeft() }
+        compose.onNodeWithTag("campus_label").assertTextEquals("沙河")
+        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_generate"))
+        awaitPlanner()
+        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_step_0"))
+        compose.onNodeWithTag("planner_step_0").assertTextContains("演示楼-A101")
+        compose.onNodeWithText("2-201").assertDoesNotExist()
+        compose.onNodeWithTag("planner_list").performScrollToNode(hasText("规则"))
+        compose.onNodeWithText("规则").performClick()
+        compose.onNodeWithText("规划规则").assertExists()
+        compose.onNodeWithText("额外十分钟收藏不足以抵消一次换房。", substring = true).assertExists()
+        compose.onNodeWithText("关闭").performClick()
+    }
+
+    @Test fun plannerWheelCancelAndReopenKeepStartAndEndIndependent() {
+        enterDemo()
+        compose.onNodeWithTag("tab_planner").performClick()
+        compose.onNodeWithTag("planner_start").performClick()
+        compose.onNodeWithTag("planner_hour_wheel").performSemanticsAction(SemanticsActions.SetProgress) { it(22f) }
+        compose.onNodeWithTag("planner_time_cancel").performClick()
+        compose.onNodeWithTag("planner_start").assertTextContains("08:00")
+        compose.onNodeWithTag("planner_start").performClick()
+        assertEquals(8f, compose.onNodeWithTag("planner_hour_wheel").fetchSemanticsNode()
+            .config[SemanticsProperties.ProgressBarRangeInfo].current)
+        compose.onNodeWithTag("planner_minute_wheel").performSemanticsAction(SemanticsActions.SetProgress) { it(12f) }
+        compose.onNodeWithTag("planner_time_confirm").performClick()
+        compose.onNodeWithTag("planner_start").assertTextContains("08:12")
+        compose.onNodeWithTag("planner_end").assertTextContains("11:25")
+        compose.onNodeWithTag("planner_end").performClick()
+        assertEquals(11f, compose.onNodeWithTag("planner_hour_wheel").fetchSemanticsNode()
+            .config[SemanticsProperties.ProgressBarRangeInfo].current)
+        assertEquals(25f, compose.onNodeWithTag("planner_minute_wheel").fetchSemanticsNode()
+            .config[SemanticsProperties.ProgressBarRangeInfo].current)
+        compose.onNodeWithTag("planner_time_cancel").performClick()
+    }
+
+    @Test fun invalidPlanningTimesNeverLeavePreviousResultsVisible() {
+        enterDemo()
+        compose.onNodeWithTag("tab_planner").performClick()
+        generatePlanner()
+        compose.onNodeWithTag("planner_start").performScrollTo().performClick()
+        compose.onNodeWithTag("planner_hour_wheel").performSemanticsAction(SemanticsActions.SetProgress) { it(18f) }
+        compose.onNodeWithTag("planner_time_confirm").performClick()
+        compose.onNodeWithTag("planner_results").assertDoesNotExist()
+        generatePlanner()
+        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_message"))
+        compose.onNodeWithTag("planner_message").assertTextContains("结束时间必须晚于开始时间", substring = true)
+    }
+
     @Test fun slotGridSupportsDisjointSelectionAndClear() {
         enterDemo()
         compose.onNodeWithText("清空").performScrollTo().performClick()
@@ -93,6 +191,17 @@ class YouRoomUiTest {
         compose.onNodeWithTag("slot_summary").assertDoesNotExist()
         compose.onNodeWithTag("room_list").performScrollToNode(hasText("2-201"))
         compose.onNodeWithText("2-201").assertIsDisplayed()
+    }
+
+    @Test fun changingSelectionNeverShiftsTheClassroomsHeading() {
+        enterDemo()
+        val top = compose.onNodeWithText("可选教室").fetchSemanticsNode().boundsInRoot.top
+        compose.onNodeWithText("清空").performClick()
+        assertEquals(top, compose.onNodeWithText("可选教室").fetchSemanticsNode().boundsInRoot.top, 1f)
+        for (number in 1..14 step 2) compose.onNodeWithTag("slot_$number").performClick()
+        assertEquals(top, compose.onNodeWithText("可选教室").fetchSemanticsNode().boundsInRoot.top, 1f)
+        compose.onNodeWithText("清空").performClick()
+        assertEquals(top, compose.onNodeWithText("可选教室").fetchSemanticsNode().boundsInRoot.top, 1f)
     }
 
     @Test fun gridDragCanAddAndRemoveWithoutTogglingTheWholePage() {
@@ -141,6 +250,20 @@ class YouRoomUiTest {
         compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeRight() }
         compose.onNodeWithTag("room_list").performScrollToNode(hasText("2-201"))
         compose.onNodeWithText("2-201").assertIsDisplayed()
+    }
+
+    private fun generatePlanner() {
+        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_generate"))
+        compose.onNodeWithTag("planner_generate").performClick()
+        awaitPlanner()
+    }
+
+    private fun awaitPlanner() {
+        compose.waitUntil(20_000) {
+            compose.onAllNodesWithTag("planner_generate").fetchSemanticsNodes().any { node ->
+                node.config.getOrNull(SemanticsProperties.Text)?.any { it.text == "生成规划" } == true
+            }
+        }
     }
 
     private fun enterDemo() {

@@ -4,6 +4,8 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
@@ -23,15 +25,20 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -40,11 +47,15 @@ import androidx.compose.ui.text.input.ImeAction
 import com.example.youroom.ui.theme.campusBadgeColor
 import com.example.youroom.domain.*
 import java.time.LocalDate
+import kotlinx.coroutines.delay
 
 private class SlotPointerGeometry {
     var origin: Offset = Offset.Zero
     val bounds = mutableMapOf<Int, SlotBounds>()
 }
+
+// Null change means cancellation; a null decision means the stationary press timed out.
+private data class SlotPressDecision(val change: PointerInputChange? = null)
 
 @Composable
 fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: SearchFilters,
@@ -61,8 +72,19 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
     val geometry = remember(context, available) { SlotPointerGeometry() }
     val bounds = geometry.bounds
     var previewSelection by remember(context, available) { mutableStateOf<Set<Int>?>(null) }
+    var inspectedNumber by remember(context, available) { mutableStateOf<Int?>(null) }
+    var pointerHeld by remember(context, available) { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
     val selection = previewSelection ?: filters.selectedSlots
     val chosen = remember(slots, selection) { slots.filter { it.number in selection } }
+    val summaryScroll = rememberScrollState()
+    val summaryStyle = MaterialTheme.typography.bodySmall
+    val summaryHeight = with(LocalDensity.current) { summaryStyle.lineHeight.toDp() }
+    LaunchedEffect(context, filters.selectedSlots) { summaryScroll.scrollTo(0) }
+    LaunchedEffect(pointerHeld, inspectedNumber) {
+        // Keyboard/accessibility inspection has no pointer-up event to dismiss it.
+        if (!pointerHeld && inspectedNumber != null) { delay(2_000); inspectedNumber = null }
+    }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("自习时段", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
@@ -82,21 +104,52 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                     val drag = SlotDragSelection(latestFilters.selectedSlots, first)
                     var previous = firstPosition
                     down.consume()
-                    // Preview stays inside the grid. Do not change the search request
-                    // or animate classroom rows for each cell crossed by the finger.
-                    previewSelection = drag.selection
+                    pointerHeld = true
+                    inspectedNumber = null
                     try {
-                        while (true) {
-                            val event = awaitPointerEvent(PointerEventPass.Initial)
-                            if (event.changes.count { it.pressed } > 1) {
-                                event.changes.forEach { it.consume() }
-                                break
+                        // Do not toggle on down: a stationary long press only inspects
+                        // this period. A normal tap commits on up; movement paints immediately.
+                        val decision = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                            var intent: SlotPressDecision? = null
+                            while (intent == null) {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                if (event.changes.count { it.pressed } > 1) {
+                                    event.changes.forEach { it.consume() }
+                                    intent = SlotPressDecision()
+                                } else {
+                                    val change = event.changes.firstOrNull { it.id == down.id }
+                                    if (change == null || change.isConsumed) intent = SlotPressDecision()
+                                    else {
+                                        val position = change.position + geometry.origin
+                                        val hit = SlotGridGeometry.hit(bounds.values, position.x, position.y)
+                                        change.consume()
+                                        if (!change.pressed || (position - firstPosition).getDistance() > viewConfiguration.touchSlop ||
+                                            (hit != null && hit != first)) intent = SlotPressDecision(change)
+                                    }
+                                }
                             }
-                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                            if (change.isConsumed) break
+                            intent
+                        }
+                        if (decision == null) {
+                            inspectedNumber = first
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            // Inspection owns the rest of the gesture and never turns
+                            // into selection or starts a classroom search on release.
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                val change = event.changes.firstOrNull { it.id == down.id }
+                                val cancelled = change == null || change.isConsumed || event.changes.count { it.pressed } > 1
+                                event.changes.forEach { it.consume() }
+                                if (cancelled || change?.pressed != true) break
+                            }
+                            return@awaitEachGesture
+                        }
+                        var change = decision.change ?: return@awaitEachGesture
+                        while (true) {
                             val position = change.position + geometry.origin
                             val crossed = SlotGridGeometry.crossed(bounds.values, previous.x, previous.y, position.x, position.y)
                             drag.visit(crossed)
+                            // Preview stays inside the grid; commit only once, on up.
                             previewSelection = drag.selection
                             previous = position
                             change.consume()
@@ -106,11 +159,20 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                                 }
                                 break
                             }
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            if (event.changes.count { it.pressed } > 1) {
+                                event.changes.forEach { it.consume() }
+                                break
+                            }
+                            change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (change.isConsumed) break
                         }
                     } finally {
                         // Cancellation/disposal needs no rollback of committed filters:
                         // only the local preview has changed, so no search is launched.
                         previewSelection = null
+                        inspectedNumber = null
+                        pointerHeld = false
                     }
                 }
             }) {
@@ -135,12 +197,14 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                                             selected = isSelected
                                             contentDescription = "第 ${slot.number} 节，${slot.timeLabel}"
                                             stateDescription = if (isSelected) "已选中" else "未选中"
+                                            if (enabled) onLongClick("查看节次时间") { inspectedNumber = slot.number; true }
                                         }, contentAlignment = Alignment.Center) {
                                         Surface(Modifier.fillMaxWidth().height(36.dp).testTag("slot_face_${slot.number}"),
                                             shape = RectangleShape, color = background,
                                             contentColor = if (isSelected) colors.onPrimary else colors.onSurfaceVariant) {
                                             Box(contentAlignment = Alignment.Center) {
                                                 Text("${slot.number}", style = MaterialTheme.typography.labelLarge)
+                                                if (enabled && inspectedNumber == slot.number) SlotTimeTooltip(slot)
                                             }
                                         }
                                     }
@@ -156,8 +220,13 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                 }
             }
         }
-        if (chosen.isNotEmpty()) Text(SlotSelection.summary(chosen), style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.primary, modifier = Modifier.testTag("slot_summary"))
+        // Reserve one font-scaled line even when empty. Disjoint selections scroll
+        // horizontally rather than adding rows and shifting the classrooms below.
+        Box(Modifier.fillMaxWidth().height(summaryHeight).testTag("slot_summary_space")) {
+            if (chosen.isNotEmpty()) Text(SlotSelection.summary(chosen), style = summaryStyle,
+                color = MaterialTheme.colorScheme.primary, maxLines = 1, softWrap = false,
+                modifier = Modifier.fillMaxWidth().horizontalScroll(summaryScroll).testTag("slot_summary"))
+        }
     }
 }
 

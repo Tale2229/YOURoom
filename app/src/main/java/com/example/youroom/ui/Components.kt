@@ -25,6 +25,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 
 @Composable
 fun AppMark(modifier: Modifier = Modifier) {
@@ -55,13 +56,13 @@ fun WorkspaceNavigation(tab: Int, onTab: (Int) -> Unit) {
         Column(Modifier.navigationBarsPadding()) {
             HorizontalDivider()
             Row(Modifier.fillMaxWidth().selectableGroup()) {
-                listOf("找教室", "个人偏好").forEachIndexed { index, label ->
+                listOf("找教室" to "tab_rooms", "自习规划" to "tab_planner", "个人偏好" to "tab_preferences").forEachIndexed { index, (label, tag) ->
                     val selected = index == tab
-                    Column(Modifier.weight(1f).testTag(if (index == 0) "tab_rooms" else "tab_preferences")
+                    Column(Modifier.weight(1f).testTag(tag)
                         .selectable(selected, role = Role.Tab, onClick = { onTab(index) })
                         .padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(label, style = MaterialTheme.typography.labelLarge,
+                        Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                         val width by animateDpAsState(if (selected) 24.dp else 0.dp, tween(160), label = "navigation_line")
                         Box(Modifier.width(width).height(2.dp).background(MaterialTheme.colorScheme.primary))

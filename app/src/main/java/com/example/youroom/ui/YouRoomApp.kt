@@ -11,12 +11,31 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.domain.PlanningGoal
 
 @Composable
 fun YouRoomApp(model: YouRoomViewModel) {
     val state by model.state.collectAsStateWithLifecycle()
     val displayedCampus = state.campus
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    var goal by rememberSaveable(stateSaver = PlanningGoalSaver) { mutableStateOf(PlanningGoal()) }
+    var planRequested by rememberSaveable { mutableStateOf(false) }
+    var planningCampus by rememberSaveable { mutableStateOf(state.campus.dataKey) }
+    var generationMinute by rememberSaveable { mutableStateOf<Int?>(null) }
+    var planningDate by rememberSaveable { mutableStateOf(state.today.toString()) }
+    var planningDemo by rememberSaveable { mutableStateOf(state.demo) }
+    LaunchedEffect(state.today, state.demo) {
+        if (planningDate != state.today.toString() || planningDemo != state.demo) {
+            planRequested = false; generationMinute = null
+        }
+        planningDate = state.today.toString(); planningDemo = state.demo
+    }
+    LaunchedEffect(state.campus) {
+        if (planningCampus != state.campus.dataKey && goal.origin != null) {
+            goal = goal.copy(origin = null); planRequested = false
+        }
+        planningCampus = state.campus.dataKey
+    }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { model.onForeground() }
     YouRoomTheme(campus = state.campus) {
         Scaffold(
@@ -33,6 +52,7 @@ fun YouRoomApp(model: YouRoomViewModel) {
                         state.initializing -> "loading"
                         !state.showWorkspace -> "login"
                         tab == 0 -> "rooms"
+                        tab == 1 -> "planner"
                         else -> "preferences"
                     },
                     transitionSpec = {
@@ -47,6 +67,12 @@ fun YouRoomApp(model: YouRoomViewModel) {
                         "rooms" -> ClassroomScreen(state, { model.setFiltersFor(displayedCampus, it) }, model::refresh,
                             model::selectRoom, model::toggleFavorite, model::setCampus, model::addCustomTag,
                             model::removePersonalTag, model::reorderPersonalTags)
+                        "planner" -> StudyPlanningScreen(state, goal, planRequested,
+                            { goal = it; planRequested = false }, {
+                                generationMinute = if (state.demo) null else java.time.LocalTime.now(com.example.youroom.domain.SchoolZone)
+                                    .let { (it.toSecondOfDay() + 59) / 60 }
+                                planRequested = true
+                            }, model::setCampus, model::refresh, model::selectRoom, generationMinute)
                         else -> PreferencesScreen(state, model::selectRoom, model::clearProfile, model::logout)
                     }
                 }
