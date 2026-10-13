@@ -1,6 +1,5 @@
 package com.example.youroom.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -8,7 +7,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -39,7 +37,7 @@ internal class SlotTimeTooltipPositionProvider(private val gap: Int, private val
 }
 
 @Composable
-internal fun SlotTimeTooltip(slot: LessonSlot, includeNumber: Boolean = false, tagPrefix: String = "slot_time",
+internal fun SlotTimeTooltip(slot: LessonSlot, tagPrefix: String = "slot_time",
     positionOverride: PopupPositionProvider? = null) {
     val density = LocalDensity.current
     val position = remember(density) {
@@ -48,10 +46,9 @@ internal fun SlotTimeTooltip(slot: LessonSlot, includeNumber: Boolean = false, t
     Popup(popupPositionProvider = positionOverride ?: position, properties = PopupProperties(focusable = false,
         dismissOnBackPress = false, dismissOnClickOutside = false)) {
         Surface(Modifier.testTag("${tagPrefix}_tooltip").semantics { liveRegion = LiveRegionMode.Polite },
-            shape = RectangleShape, color = MaterialTheme.colorScheme.background,
-            contentColor = MaterialTheme.colorScheme.primary,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary), shadowElevation = 4.dp) {
-            Text(if (includeNumber) "${slot.number} · ${slot.timeLabel}" else "${slot.start}—${slot.end}",
+            shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.background,
+            contentColor = MaterialTheme.colorScheme.primary, tonalElevation = 0.dp, shadowElevation = 0.dp) {
+            Text("${slot.number} · ${slot.timeLabel}",
                 Modifier.padding(horizontal = 12.dp, vertical = 6.dp).testTag("${tagPrefix}_label_${slot.number}"),
                 style = MaterialTheme.typography.bodyMedium, maxLines = 1, softWrap = false)
         }

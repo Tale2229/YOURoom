@@ -54,7 +54,7 @@ class SwipeRoomRowUiTest {
         compose.onNodeWithTag("room_actions_${room.id}").assertDoesNotExist()
         reveal()
         val actions = (0..3).map { compose.onNodeWithTag("room_action_${room.id}_$it") }
-        actions.forEach { it.assertIsDisplayed().assertWidthIsAtLeast(androidx.compose.ui.unit.Dp(48f))
+        actions.forEach { it.assertIsDisplayed().assertWidthIsAtLeast(androidx.compose.ui.unit.Dp(40f))
             .assertHeightIsAtLeast(androidx.compose.ui.unit.Dp(48f)) }
         val bounds = actions.map { it.fetchSemanticsNode().boundsInRoot }
         for (index in 0..2) assertTrue(bounds[index].right <= bounds[index + 1].left + 1f)
@@ -68,6 +68,35 @@ class SwipeRoomRowUiTest {
         compose.onNodeWithTag("room_excluded_${room.id}", useUnmergedTree = true).assertExists()
         compose.onNodeWithTag("room_row_${room.id}").performTouchInput { swipeRight() }
         compose.onNodeWithTag("room_actions_${room.id}").assertDoesNotExist()
+    }
+
+    @Test fun compactRailHasFourOrderedLinesAndItsBottomSeparatorMatchesTheRow() {
+        renderRow()
+        for (note in listOf("", "一行备注")) {
+            compose.runOnIdle { profile = profile.copy(note = note) }
+            val closed = compose.onNodeWithTag("room_row_${room.id}").fetchSemanticsNode().boundsInRoot
+            reveal()
+            val lines = listOf("top_thin", "top_thick", "bottom_thick", "bottom_thin").map {
+                compose.onNodeWithTag("room_action_line_${room.id}_$it").fetchSemanticsNode().boundsInRoot
+            }
+            for (index in 0..2) assertTrue(lines[index].bottom < lines[index + 1].top)
+            assertEquals(lines[0].height, lines[3].height, 1f)
+            assertEquals(lines[1].height, lines[2].height, 1f)
+            assertEquals(lines[0].height * 3, lines[1].height, 1.1f)
+            val separator = compose.onNodeWithTag("room_divider_${room.id}", useUnmergedTree = true)
+                .fetchSemanticsNode().boundsInRoot
+            assertEquals(separator.top, lines.last().top, 1f)
+            assertEquals(closed.height, compose.onNodeWithTag("room_row_${room.id}").fetchSemanticsNode().boundsInRoot.height, 1f)
+            val actions = (0..3).map { compose.onNodeWithTag("room_action_${room.id}_$it").fetchSemanticsNode().boundsInRoot }
+            val width = compose.onNodeWithTag("room_actions_${room.id}").fetchSemanticsNode().boundsInRoot.width
+            assertEquals(width / 4, actions[0].width, 1f)
+            for (index in 0..2) assertEquals(width / 4, actions[index + 1].center.x - actions[index].center.x, 1f)
+            assertTrue(lines[1].bottom < actions.first().top && actions.first().bottom < lines[2].top)
+            compose.onNodeWithTag("room_action_${room.id}_1").performTouchInput { click() }
+            compose.onNodeWithTag("room_action_${room.id}_2").performTouchInput { click() }
+            compose.onNodeWithTag("room_swipe_${room.id}", useUnmergedTree = true).performTouchInput { swipeRight() }
+        }
+        assertEquals(2, tagClicks); assertEquals(2, noteClicks)
     }
 
     @Test fun cancelRestoresClosedAndOpenAnchorsWithoutChangingMarks() {

@@ -141,7 +141,7 @@ internal fun RoomAvailabilityStrip(roomId: String, freeSlots: Set<Int>, slots: L
                     SlotTimeTooltipPositionProvider(28.dp.roundToPx(), 8.dp.roundToPx()))
             } }
             // Updating number/anchor does not remove and recreate an Android popup window.
-            SlotTimeTooltip(slot, includeNumber = true, tagPrefix = "room_time_$roomId", positionOverride = position)
+            SlotTimeTooltip(slot, tagPrefix = "room_time_$roomId", positionOverride = position)
         }
     }
 }

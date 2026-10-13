@@ -69,7 +69,7 @@ class SlotPickerUiTest {
         for (number in listOf(1, 6)) {
             hold(number)
             val slot = slots.single { it.number == number }
-            compose.onNodeWithTag("slot_time_label_$number").assertTextEquals("${slot.start}—${slot.end}")
+            compose.onNodeWithTag("slot_time_label_$number").assertTextEquals("${slot.number} · ${slot.timeLabel}")
             compose.onNodeWithTag("slot_1").assertIsNotSelected()
             compose.onNodeWithTag("slot_6").assertIsSelected()
             assertTrue(changes.isEmpty())
@@ -84,7 +84,7 @@ class SlotPickerUiTest {
         slots = slots.map { if (it.number == 7) it.copy(start = LocalTime.of(14, 5), end = LocalTime.of(14, 50)) else it }
         render()
         hold(7)
-        compose.onNodeWithTag("slot_time_label_7").assertTextEquals("14:05—14:50")
+        compose.onNodeWithTag("slot_time_label_7").assertTextEquals("7 · 14:05–14:50")
         compose.onNodeWithTag("slot_grid").performTouchInput { cancel() }
         compose.onNodeWithTag("slot_time_tooltip").assertDoesNotExist()
         assertEquals(setOf(6), filters.selectedSlots)
@@ -99,7 +99,7 @@ class SlotPickerUiTest {
             val target = point(number)
             compose.onNodeWithTag("slot_grid").performTouchInput { moveTo(target) }
             val slot = slots.single { it.number == number }
-            compose.onNodeWithTag("slot_time_label_$number").assertTextEquals("${slot.start}—${slot.end}")
+            compose.onNodeWithTag("slot_time_label_$number").assertTextEquals("${slot.number} · ${slot.timeLabel}")
             assertEquals(setOf(6), filters.selectedSlots)
             assertTrue(changes.isEmpty())
         }
@@ -161,9 +161,9 @@ class SlotPickerUiTest {
             hold(1)
             val colors = campusColorScheme(target, dark)
             val pixels = compose.onNodeWithTag("slot_time_tooltip").captureToImage().toPixelMap()
-            // Border is 1dp; sample well inside the padding, away from both border and glyphs.
+            // The fill reaches the straight edge: no contrasting border remains.
             assertEquals(colors.background, pixels[pixels.width / 2, pixels.height / 8])
-            assertEquals(colors.primary, pixels[1, pixels.height / 2])
+            assertEquals(colors.background, pixels[1, pixels.height / 2])
             val layout = mutableListOf<TextLayoutResult>()
             compose.onNodeWithTag("slot_time_label_1").performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layout) }
             assertEquals(colors.primary, layout.single().layoutInput.style.color)
@@ -172,7 +172,7 @@ class SlotPickerUiTest {
         assertTrue(changes.isEmpty())
     }
 
-    @Test fun hintsUsePageColoredFillAndCampusColoredBorderAndDigits() = verifyHintColors(false)
+    @Test fun hintsUseBorderlessPageColoredFillAndCampusColoredDigits() = verifyHintColors(false)
 
     @Test fun hintContrastFollowsTheExistingDarkTheme() = verifyHintColors(true)
 
@@ -203,7 +203,7 @@ class SlotPickerUiTest {
     @Test fun accessibleInspectionDoesNotToggleThePeriod() {
         render()
         compose.onNodeWithTag("slot_1").performSemanticsAction(SemanticsActions.OnLongClick) { assertTrue(it()) }
-        compose.onNodeWithTag("slot_time_label_1").assertTextEquals("08:00—08:45")
+        compose.onNodeWithTag("slot_time_label_1").assertTextEquals("1 · 08:00–08:45")
         compose.onNodeWithTag("slot_1").assertIsNotSelected()
         assertTrue(changes.isEmpty())
         compose.mainClock.advanceTimeBy(2_100)

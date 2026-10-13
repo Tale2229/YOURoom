@@ -197,7 +197,7 @@ class RoomAvailabilityUiTest {
             assertEquals(colors.outlineVariant, face(3).captureToImage().toPixelMap()[2, 2])
             val pixels = compose.onNodeWithTag(tooltip).captureToImage().toPixelMap()
             assertEquals(colors.background, pixels[pixels.width / 2, pixels.height / 8])
-            assertEquals(colors.primary, pixels[1, pixels.height / 2])
+            assertEquals(colors.background, pixels[1, pixels.height / 2])
             compose.onNodeWithTag(stripTag).performTouchInput { up() }
         }
     }

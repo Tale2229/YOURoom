@@ -32,7 +32,8 @@ import kotlin.math.roundToInt
 
 @Composable
 internal fun RoomActionButtons(profile: RoomProfile, onFavorite: () -> Unit, onTags: () -> Unit,
-    onNote: () -> Unit, onExcluded: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+    onNote: () -> Unit, onExcluded: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true,
+    compact: Boolean = false) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         val buttons = listOf(
             Triple(if (profile.favorite) Icons.Outlined.Star else Icons.Outlined.StarBorder,
@@ -42,11 +43,29 @@ internal fun RoomActionButtons(profile: RoomProfile, onFavorite: () -> Unit, onT
             Triple(if (profile.excluded) Icons.Filled.Cancel else Icons.Outlined.Block,
                 if (profile.excluded) "取消排除 ${profile.name}" else "排除 ${profile.name}", onExcluded))
         buttons.forEachIndexed { index, (icon, description, action) ->
-            IconButton(onClick = action, enabled = enabled, modifier = Modifier.width(48.dp).heightIn(min = 48.dp)
+            IconButton(onClick = action, enabled = enabled, modifier = Modifier.width(if (compact) 40.dp else 48.dp).heightIn(min = 48.dp)
                 .testTag("room_action_${profile.roomId}_$index")) {
                 Icon(icon, description, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
             }
         }
+    }
+}
+
+@Composable
+private fun RoomActionRail(profile: RoomProfile, onFavorite: () -> Unit, onTags: () -> Unit,
+    onNote: () -> Unit, onExcluded: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+    val colors = MaterialTheme.colorScheme
+    Column(modifier.fillMaxHeight().padding(vertical = 16.dp), verticalArrangement = Arrangement.SpaceBetween) {
+        HorizontalDivider(Modifier.fillMaxWidth().padding(horizontal = 12.dp)
+            .testTag("room_action_line_${profile.roomId}_top_thin"), color = colors.outlineVariant)
+        HorizontalDivider(Modifier.fillMaxWidth().padding(horizontal = 20.dp)
+            .testTag("room_action_line_${profile.roomId}_top_thick"), thickness = 3.dp, color = colors.primary.copy(alpha = .7f))
+        RoomActionButtons(profile, onFavorite, onTags, onNote, onExcluded, enabled = enabled, compact = true)
+        HorizontalDivider(Modifier.fillMaxWidth().padding(horizontal = 20.dp)
+            .testTag("room_action_line_${profile.roomId}_bottom_thick"), thickness = 3.dp, color = colors.primary.copy(alpha = .7f))
+        // Both separators end 16dp above the row bottom, so they share the same baseline.
+        HorizontalDivider(Modifier.fillMaxWidth().padding(horizontal = 12.dp)
+            .testTag("room_action_line_${profile.roomId}_bottom_thin"), color = colors.outlineVariant)
     }
 }
 
@@ -62,7 +81,7 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
     onNote: () -> Unit, onExcluded: () -> Unit, modifier: Modifier = Modifier, inspectionKey: Any? = null) {
     val profile = match.profile
     val swipe = remember(profile.roomId) { AnchoredDraggableState(false) }
-    val railWidth = with(LocalDensity.current) { 192.dp.toPx() }
+    val railWidth = with(LocalDensity.current) { 160.dp.toPx() }
     val anchors = remember(railWidth) { DraggableAnchors { false at 0f; true at -railWidth } }
     SideEffect { swipe.updateAnchors(anchors) }
     val scope = rememberCoroutineScope()
@@ -91,8 +110,8 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
     }) {
         if (revealed && active) Box(Modifier.matchParentSize().background(colors.surfaceContainer)) {
             val actionsReady = expanded && swipe.settledValue
-            RoomActionButtons(profile, onFavorite, onTags, onNote, onExcluded,
-                Modifier.align(AbsoluteAlignment.CenterRight).width(192.dp).testTag("room_actions_${profile.roomId}")
+            RoomActionRail(profile, onFavorite, onTags, onNote, onExcluded,
+                Modifier.align(AbsoluteAlignment.CenterRight).width(160.dp).testTag("room_actions_${profile.roomId}")
                     .then(if (actionsReady) Modifier else Modifier.clearAndSetSemantics {}), enabled = actionsReady)
         }
         Column(Modifier.fillMaxWidth().absoluteOffset {
@@ -137,7 +156,7 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
             }
             RoomAvailabilityStrip(profile.roomId, match.freeSlots, slots, active && !expanded && !revealed,
                 inspectionKey = inspectionKey)
-            HorizontalDivider(Modifier.padding(horizontal = 24.dp))
+            HorizontalDivider(Modifier.padding(horizontal = 24.dp).testTag("room_divider_${profile.roomId}"))
             Spacer(Modifier.height(16.dp))
         }
     }
