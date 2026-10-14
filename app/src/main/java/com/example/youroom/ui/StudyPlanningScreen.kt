@@ -65,7 +65,7 @@ fun StudyPlanningScreen(state: YouRoomState, goal: PlanningGoal, requested: Bool
         .map { CampusTopology.location(it, state.campus).building }.distinct().sorted() }
 
     Column(Modifier.fillMaxSize().testTag("planner_screen")) {
-        CampusHeader(state, onRefresh, onCampus)
+        CampusHeader(state, onCampus)
         HorizontalDivider(Modifier.padding(horizontal = 24.dp))
         LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("planner_list"),
             contentPadding = PaddingValues(bottom = 24.dp)) {

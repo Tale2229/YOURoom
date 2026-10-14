@@ -17,8 +17,10 @@ import org.junit.Assert.*
 class ExampleInstrumentedTest {
     @Test
     fun useAppContext() {
-        // Context of the app under test.
-        val appContext = InstrumentationRegistry.getInstrumentation().targetContext
-        assertEquals("com.example.youroom", appContext.packageName)
+        // Both normal and isolated test APKs must target their matching app.
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val expected = instrumentation.context.packageName.removeSuffix(".test")
+        assertTrue(expected in setOf("com.example.youroom", "com.example.youroom.uitest"))
+        assertEquals(expected, instrumentation.targetContext.packageName)
     }
 }

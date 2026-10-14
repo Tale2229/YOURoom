@@ -2,14 +2,15 @@ package com.example.youroom.ui
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -28,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.PopupPositionProvider
 import com.example.youroom.domain.LessonSlot
 import com.example.youroom.domain.PeriodStripGeometry
+import com.example.youroom.domain.PeriodWave
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -50,7 +52,8 @@ internal class PeriodStripTooltipPositionProvider(private val index: Int, privat
 
 @Composable
 internal fun RoomAvailabilityStrip(roomId: String, freeSlots: Set<Int>, slots: List<LessonSlot>,
-    enabled: Boolean, modifier: Modifier = Modifier, inspectionKey: Any? = null) {
+    enabled: Boolean, modifier: Modifier = Modifier, inspectionKey: Any? = null,
+    wave: RoomPeriodWave? = null, onInspection: () -> Unit = {}) {
     // Reset transient inspection when the room, response/date, or real period times change.
     var inspected by remember(roomId, slots, inspectionKey) { mutableStateOf<Int?>(null) }
     var pointerHeld by remember(roomId, slots, inspectionKey) { mutableStateOf(false) }
@@ -58,6 +61,7 @@ internal fun RoomAvailabilityStrip(roomId: String, freeSlots: Set<Int>, slots: L
     val density = LocalDensity.current
     val direction = LocalLayoutDirection.current
     val haptic = LocalHapticFeedback.current
+    val latestInspection by rememberUpdatedState(onInspection)
     val gutter = with(density) { 24.dp.roundToPx().toFloat() }
     val gap = with(density) { 3.dp.roundToPx().toFloat() }
     fun numberAt(x: Float): Int? = PeriodStripGeometry.nearestIndex(x - gutter,
@@ -67,7 +71,7 @@ internal fun RoomAvailabilityStrip(roomId: String, freeSlots: Set<Int>, slots: L
         // Accessibility/keyboard inspection has no pointer release to dismiss it.
         if (!pointerHeld && inspected != null) { delay(2_000); inspected = null }
     }
-    fun inspectAccessibly(number: Int): Boolean { inspected = number; return true }
+    fun inspectAccessibly(number: Int): Boolean { latestInspection(); inspected = number; return true }
     Box(modifier.fillMaxWidth().testTag("room_period_strip_$roomId")
         .onSizeChanged { geometry.width = it.width.toFloat() }
         .pointerInput(roomId, slots, inspectionKey, enabled, direction, gutter, gap) {
@@ -77,8 +81,8 @@ internal fun RoomAvailabilityStrip(roomId: String, freeSlots: Set<Int>, slots: L
                 inspected = null
                 var x = down.position.x
                 try {
-                    // Observe without consuming during the dwell. Movement hands off
-                    // to the parent's row swipe or vertical list scroll; only a hold owns time inspection.
+                    // Early movement yields to vertical list scrolling. Horizontal
+                    // motion here never opens the upper rail; only a hold owns inspection.
                     val interrupted = withTimeoutOrNull(250L) {
                         var done = false
                         while (!done) {
@@ -96,6 +100,7 @@ internal fun RoomAvailabilityStrip(roomId: String, freeSlots: Set<Int>, slots: L
                         true
                     }
                     if (interrupted != null) return@awaitEachGesture
+                    latestInspection()
                     pointerHeld = true
                     inspected = numberAt(x)
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -114,8 +119,10 @@ internal fun RoomAvailabilityStrip(roomId: String, freeSlots: Set<Int>, slots: L
         }) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            slots.forEach { slot -> key(slot.number) {
+            slots.forEachIndexed { index, slot -> key(slot.number) {
                 val shown = enabled && inspected == slot.number
+                val color = availabilityColor(slot.number in freeSlots)
+                val visual = if (direction == LayoutDirection.Rtl) slots.lastIndex - index else index
                 val lift by animateDpAsState(if (shown) (-4).dp else 0.dp, tween(90), label = "period_inspection_lift")
                 Box(Modifier.weight(1f).height(5.dp).offset { IntOffset(0, lift.roundToPx()) }
                     .testTag("room_period_${roomId}_${slot.number}")
@@ -131,7 +138,13 @@ internal fun RoomAvailabilityStrip(roomId: String, freeSlots: Set<Int>, slots: L
                             onLongClick("查看节次时间") { inspectAccessibly(slot.number) }
                             onClick("查看节次时间") { inspectAccessibly(slot.number) }
                         }
-                    }.background(availabilityColor(slot.number in freeSlots), RectangleShape))
+                    }.drawBehind {
+                        val extension = (if (enabled) wave?.amplitude(visual, slots.size) ?: 0f else 0f) *
+                            PeriodWave.maximumExtensionDp.dp.toPx()
+                        // Extend upwards into existing padding. The baseline, hit
+                        // boxes, colors and row/list measurements never animate.
+                        drawRect(color, Offset(0f, -extension), Size(size.width, size.height + extension))
+                    })
             } }
         }
         slots.firstOrNull { enabled && it.number == inspected }?.let { slot ->

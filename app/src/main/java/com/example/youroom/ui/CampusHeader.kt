@@ -4,9 +4,6 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.Login
-import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,12 +15,19 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.youroom.domain.*
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlin.math.abs
 
+private val headerDateFormat = DateTimeFormatter.ofPattern("M月d日 EEE.", Locale.ENGLISH)
+internal fun campusHeaderDate(date: LocalDate): String = date.format(headerDateFormat)
+
 @Composable
-fun CampusHeader(state: YouRoomState, onRefresh: () -> Unit, onCampus: (Campus) -> Unit) {
+fun CampusHeader(state: YouRoomState, onCampus: (Campus) -> Unit) {
     val density = LocalDensity.current.density
     val focus = LocalFocusManager.current
     val latestCampus by rememberUpdatedState(state.campus)
@@ -31,46 +35,46 @@ fun CampusHeader(state: YouRoomState, onRefresh: () -> Unit, onCampus: (Campus) 
     val campus = state.campus
     val other = if (campus == Campus.XITUCHENG) Campus.SHAHE else Campus.XITUCHENG
     fun switch(target: Campus) { focus.clearFocus(); latestSwitch(target) }
-    Row(Modifier.fillMaxWidth().testTag("campus_header"), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f).testTag("campus_swipe_region")
-            .semantics {
-                customActions = listOf(CustomAccessibilityAction("切换到${other.label}校区") {
-                    switch(other); true
-                })
-            }.focusable()
-            .pointerInput(campus, density) {
-                awaitEachGesture {
-                    val down = awaitFirstDown()
-                    var ownsGesture = false
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        if (event.changes.count { it.pressed } > 1) break
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (change.isConsumed) break
-                        val delta = change.position - down.position
-                        if (!ownsGesture && abs(delta.x) > viewConfiguration.touchSlop &&
-                            abs(delta.x) > abs(delta.y) * CampusSwipe.horizontalDominance) ownsGesture = true
-                        if (ownsGesture) change.consume()
-                        if (!change.pressed) {
-                            if (ownsGesture && latestCampus == campus) {
-                                CampusSwipe.target(campus, delta.x / density, delta.y / density)?.let { switch(it) }
+    Box(Modifier.fillMaxWidth().testTag("campus_header")) {
+        Row(Modifier.fillMaxWidth().testTag("campus_swipe_region")
+                .semantics {
+                    customActions = listOf(CustomAccessibilityAction("切换到${other.label}校区") {
+                        switch(other); true
+                    })
+                }.focusable()
+                .pointerInput(campus, density) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        var ownsGesture = false
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            if (event.changes.count { it.pressed } > 1) break
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (change.isConsumed) break
+                            val delta = change.position - down.position
+                            if (!ownsGesture && abs(delta.x) > viewConfiguration.touchSlop &&
+                                abs(delta.x) > abs(delta.y) * CampusSwipe.horizontalDominance) ownsGesture = true
+                            if (ownsGesture) change.consume()
+                            if (!change.pressed) {
+                                if (ownsGesture && latestCampus == campus) {
+                                    CampusSwipe.target(campus, delta.x / density, delta.y / density)?.let { switch(it) }
+                                }
+                                break
                             }
-                            break
                         }
                     }
-                }
-            }.padding(start = 24.dp, end = 12.dp, top = 24.dp, bottom = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("YouRoom", style = MaterialTheme.typography.headlineMedium)
-            Text(campus.label, modifier = Modifier.testTag("campus_label"), style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        if (state.refreshing) Box(Modifier.padding(end = 24.dp).size(48.dp), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-        } else IconAction(onClick = onRefresh, enabled = !state.demo,
-            modifier = Modifier.padding(end = 24.dp).testTag("refresh_rooms")) {
-            Icon(if (state.viewingCache) Icons.AutoMirrored.Outlined.Login else Icons.Outlined.Refresh,
-                if (state.viewingCache) "登录并刷新" else "刷新教室", Modifier.size(22.dp))
+                }.padding(horizontal = 24.dp).padding(top = 24.dp, bottom = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("YouRoom", Modifier.weight(1f).testTag("campus_brand"),
+                style = MaterialTheme.typography.headlineMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Column(Modifier.testTag("campus_context"), horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(campus.label, modifier = Modifier.testTag("campus_label"), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                Text(campusHeaderDate(state.today), Modifier.testTag("campus_date"),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1)
+            }
         }
     }
 }

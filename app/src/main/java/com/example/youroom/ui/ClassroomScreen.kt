@@ -87,7 +87,7 @@ fun ClassroomScreen(state: YouRoomState, onFilters: (SearchFilters) -> Unit,
             val pageModifier = if (pager.currentPage == index) Modifier else Modifier.clearAndSetSemantics {}
             YouRoomTheme(campus = displayed) {
                 Surface(Modifier.fillMaxWidth().then(pageModifier)) {
-                    CampusHeader(header, { if (displayed == state.campus && !moving) onRefresh() }, onCampus)
+                    CampusHeader(header.copy(today = state.today), onCampus)
                 }
             }
         }
@@ -136,6 +136,7 @@ private fun ClassroomPage(state: YouRoomState, listState: LazyListState, active:
     onRemoveTag: (String) -> Unit, onTagOrder: (List<String>) -> Unit, onExcluded: (Classroom) -> Unit) {
     var showFilters by remember { mutableStateOf(false) }
     var expandedRoom by remember(state.campus, state.demo) { mutableStateOf<String?>(null) }
+    var previousEditorRoom by remember(state.campus, state.demo) { mutableStateOf<String?>(null) }
     val snapshot = state.campusSnapshot
     val search = rememberClassroomSearch(state, enabled = searchEnabled)
     val result = search.result
@@ -144,6 +145,13 @@ private fun ClassroomPage(state: YouRoomState, listState: LazyListState, active:
     val displayedRooms = favorites.rooms(result.rooms)
     val waiting = search.pending || (snapshot == null && (state.refreshing || moving))
     val slots = snapshot?.slots.orEmpty()
+    LaunchedEffect(state.selectedRoomId) {
+        // Opening an editor keeps its rail visible. Only a previously attached
+        // editor ending (button, Back, or outside touch) closes the matching row.
+        val finished = previousEditorRoom
+        if (finished != null && finished != state.selectedRoomId && expandedRoom == finished) expandedRoom = null
+        previousEditorRoom = state.selectedRoomId
+    }
     LaunchedEffect(active) { if (!active) { showFilters = false; expandedRoom = null } }
     LaunchedEffect(result.rooms.map { it.classroom.id }, state.campusSnapshot?.queryDate) {
         if (result.rooms.none { it.classroom.id == expandedRoom }) expandedRoom = null
@@ -209,8 +217,8 @@ private fun ClassroomPage(state: YouRoomState, listState: LazyListState, active:
                 onFavorite = {
                     if (favorites.start(room.classroom, result.rooms, state.profiles)) onFavorite(room.classroom)
                 },
-                onTags = { expandedRoom = null; onRoomEditor(id, RoomEditor.TAGS) },
-                onNote = { expandedRoom = null; onRoomEditor(id, RoomEditor.NOTE) },
+                onTags = { onRoomEditor(id, RoomEditor.TAGS) },
+                onNote = { onRoomEditor(id, RoomEditor.NOTE) },
                 onExcluded = { onExcluded(room.classroom) },
                 modifier = rowMotion.graphicsLayer { alpha = if (isMovingFavorite) favorites.alpha.value else 1f },
                 inspectionKey = snapshot?.let { it.queryDate to it.fetchedAt },

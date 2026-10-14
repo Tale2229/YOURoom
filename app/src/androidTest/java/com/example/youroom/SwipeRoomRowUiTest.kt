@@ -70,10 +70,30 @@ class SwipeRoomRowUiTest {
         reveal()
         compose.onNodeWithContentDescription("取消收藏 2-201").assertIsDisplayed()
         compose.onNodeWithContentDescription("排除 2-201").performClick()
+        compose.onNodeWithTag("room_actions_${room.id}").assertDoesNotExist()
+        reveal()
         compose.onNodeWithContentDescription("取消排除 2-201").assertIsDisplayed()
         compose.onNodeWithTag("room_excluded_${room.id}", useUnmergedTree = true).assertExists()
         compose.onNodeWithTag("room_row_${room.id}").performTouchInput { swipeRight() }
         compose.onNodeWithTag("room_actions_${room.id}").assertDoesNotExist()
+    }
+
+    @Test fun exclusionAndUnexclusionBothCloseTheRailAndLeaveTheRoomFaceInPlace() {
+        renderRow()
+        for (target in Campus.entries) for (night in listOf(false, true)) {
+            compose.runOnIdle { campus = target; dark = night }
+            reveal()
+            compose.onNodeWithContentDescription("排除 2-201").performClick()
+            compose.onNodeWithTag("room_actions_${room.id}").assertDoesNotExist()
+            compose.onNodeWithTag("room_excluded_${room.id}", useUnmergedTree = true).assertExists()
+            assertEquals(compose.onNodeWithTag("room_row_${room.id}").fetchSemanticsNode().positionInRoot.x,
+                compose.onNodeWithTag("room_face_${room.id}").fetchSemanticsNode().positionInRoot.x, 1f)
+            reveal()
+            compose.onNodeWithContentDescription("取消排除 2-201").performClick()
+            compose.onNodeWithTag("room_actions_${room.id}").assertDoesNotExist()
+            compose.onNodeWithTag("room_excluded_${room.id}", useUnmergedTree = true).assertDoesNotExist()
+            assertFalse(profile.excluded)
+        }
     }
 
     @Test fun compactRailHasOnlyTwoThinLinesAndEqualSideGuttersWithoutIncreasingRowHeight() {
@@ -88,9 +108,8 @@ class SwipeRoomRowUiTest {
             compose.onNodeWithTag("room_action_line_${room.id}_top_thick").assertDoesNotExist()
             compose.onNodeWithTag("room_action_line_${room.id}_bottom_thick").assertDoesNotExist()
             assertEquals(lines[0].height, lines[1].height, 1f)
-            val separator = compose.onNodeWithTag("room_divider_${room.id}", useUnmergedTree = true)
-                .fetchSemanticsNode().boundsInRoot
-            assertEquals(separator.top, lines.last().top, 1f)
+            val strip = compose.onNodeWithTag("room_period_strip_${room.id}").fetchSemanticsNode().boundsInRoot
+            assertTrue(lines.last().bottom < strip.top)
             assertEquals(closed.height, compose.onNodeWithTag("room_row_${room.id}").fetchSemanticsNode().boundsInRoot.height, 1f)
             val actions = (0..3).map { compose.onNodeWithTag("room_action_${room.id}_$it").fetchSemanticsNode().boundsInRoot }
             val rail = compose.onNodeWithTag("room_actions_${room.id}").fetchSemanticsNode().boundsInRoot

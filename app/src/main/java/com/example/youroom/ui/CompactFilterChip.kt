@@ -1,6 +1,7 @@
 package com.example.youroom.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
@@ -19,8 +20,10 @@ import androidx.compose.ui.unit.dp
 fun CompactFilterChip(label: String, selected: Boolean, onClick: () -> Unit,
     modifier: Modifier = Modifier, onDelete: (() -> Unit)? = null, angle: State<Float>? = null,
     faded: Boolean = false) {
-    Box(modifier.heightIn(min = 40.dp).widthIn(min = 56.dp, max = 168.dp).width(IntrinsicSize.Max)
-        .toggleable(selected, role = Role.Checkbox, onValueChange = { onClick() })
+    val interaction = remember { MutableInteractionSource() }
+    Box(modifier.heightIn(min = 40.dp).widthIn(min = 40.dp, max = 168.dp).width(IntrinsicSize.Max)
+        .toggleable(selected, interactionSource = interaction, indication = null,
+            role = Role.Checkbox, onValueChange = { onClick() })
         .semantics { this.selected = selected; contentDescription = label }, contentAlignment = Alignment.Center) {
         Box(Modifier.fillMaxWidth().graphicsLayer {
             rotationZ = angle?.value ?: 0f

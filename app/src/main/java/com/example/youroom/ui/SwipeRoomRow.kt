@@ -74,11 +74,11 @@ internal fun RoomActionButtons(profile: RoomProfile, onFavorite: () -> Unit, onT
 private fun RoomActionRail(profile: RoomProfile, onFavorite: () -> Unit, onTags: () -> Unit,
     onNote: () -> Unit, onExcluded: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     val colors = MaterialTheme.colorScheme
-    Column(modifier.fillMaxHeight().padding(horizontal = 12.dp, vertical = 16.dp), verticalArrangement = Arrangement.SpaceBetween) {
+    Column(modifier.fillMaxHeight().padding(horizontal = 12.dp, vertical = 4.dp), verticalArrangement = Arrangement.SpaceBetween) {
         HorizontalDivider(Modifier.fillMaxWidth()
             .testTag("room_action_line_${profile.roomId}_top_thin"), color = colors.outlineVariant)
         RoomActionButtons(profile, onFavorite, onTags, onNote, onExcluded, enabled = enabled, compact = true)
-        // Both separators end 16dp above the row bottom, so they share the same baseline.
+        // The rail and its decoration stay entirely above the fixed period strip.
         HorizontalDivider(Modifier.fillMaxWidth()
             .testTag("room_action_line_${profile.roomId}_bottom_thin"), color = colors.outlineVariant)
     }
@@ -121,15 +121,23 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
         }
     }
     val revealed by remember { derivedStateOf { !swipe.offset.isNaN() && swipe.offset < -.5f } }
+    val settledOpen by remember(swipe, railWidth) { derivedStateOf {
+        swipe.settledValue && !swipe.offset.isNaN() && abs(swipe.offset + railWidth) < .5f
+    } }
+    val wave = remember(profile.roomId) { RoomPeriodWave() }
+    wave.Run(expanded, active && interactionEnabled, dragging, settledOpen, inspectionKey to slots)
     val labels = remember(profile, terms) { terms.filter { it != PersonalTags.favorite && profile.hasTerm(it) } }
     val colors = MaterialTheme.colorScheme
-    Box(modifier.fillMaxWidth().clipToBounds().testTag("room_row_${profile.roomId}").semantics {
+    Column(modifier.fillMaxWidth().clipToBounds().background(colors.background).testTag("room_row_${profile.roomId}").semantics {
         stateDescription = listOfNotNull(if (profile.favorite) "已收藏" else null,
             if (profile.excluded) "已排除" else null).joinToString("，")
         if (active && interactionEnabled) customActions = listOf(CustomAccessibilityAction(if (expanded) "收起教室操作" else "展开教室操作") {
+            if (expanded) wave.interrupt()
             latestExpanded(!expanded); true
         })
-    }.pointerInput(swipe, active, interactionEnabled, railWidth, density, inspectionKey) {
+    }) {
+    Box(Modifier.fillMaxWidth().heightIn(min = 58.dp).clipToBounds().testTag("room_swipe_${profile.roomId}")
+        .pointerInput(swipe, active, interactionEnabled, railWidth, density, inspectionKey) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
             if (!active || !interactionEnabled) return@awaitEachGesture
@@ -142,8 +150,6 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
                 while (true) {
                     val event = awaitPointerEvent(PointerEventPass.Main)
                     val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                    // The strip consumes Initial-pass events after its 250ms dwell.
-                    // Before that it observes only, so this stable row can own a swipe.
                     if (change.isConsumed || event.changes.count { it.pressed } > 1) break
                     velocity.addPosition(change.uptimeMillis, change.position)
                     val delta = change.position - down.position
@@ -151,6 +157,7 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
                         if (!change.pressed) break
                         if (abs(delta.y) > viewConfiguration.touchSlop && abs(delta.y) >= abs(delta.x)) break
                         if (abs(delta.x) <= viewConfiguration.touchSlop || abs(delta.x) <= abs(delta.y) * 1.2f) continue
+                        if (latestIntent) wave.interrupt()
                         animation.job?.cancel()
                         startOffset = if (swipe.offset.isNaN()) 0f else swipe.requireOffset()
                         claimed = true; dragging = true
@@ -179,18 +186,20 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
         }
     }) {
         if (revealed && active) Box(Modifier.matchParentSize().background(colors.surfaceContainer)) {
-            val actionsReady = expanded && swipe.settledValue && interactionEnabled
-            RoomActionRail(profile, { latestExpanded(false); onFavorite() }, onTags, onNote, onExcluded,
+            val actionsReady = expanded && !dragging && settledOpen && interactionEnabled
+            RoomActionRail(profile, { wave.interrupt(); latestExpanded(false); onFavorite() },
+                { wave.interrupt(); onTags() }, { wave.interrupt(); onNote() },
+                { wave.interrupt(); latestExpanded(false); onExcluded() },
                 Modifier.align(AbsoluteAlignment.CenterRight).width(RoomActionRailWidth).testTag("room_actions_${profile.roomId}")
                     .then(if (actionsReady) Modifier else Modifier.clearAndSetSemantics {}), enabled = actionsReady)
         }
         Box(Modifier.fillMaxWidth().absoluteOffset {
             IntOffset(if (swipe.offset.isNaN()) 0 else swipe.requireOffset().roundToInt(), 0)
         }.background(colors.background, RectangleShape).testTag("room_face_${profile.roomId}")
-            .then(if (expanded) Modifier.clickable(enabled = interactionEnabled) { latestExpanded(false) } else Modifier)) {
-            Column(Modifier.fillMaxWidth()) {
-                Column(Modifier.fillMaxWidth().testTag("room_swipe_${profile.roomId}")
-                    .padding(start = 24.dp, end = 24.dp, top = 16.dp)) {
+            .then(if (expanded) Modifier.clickable(enabled = interactionEnabled) {
+                wave.interrupt(); latestExpanded(false)
+            } else Modifier)) {
+                Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(profile.name, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.titleLarge,
                             maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -202,13 +211,13 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
                     if (profile.note.isNotBlank()) Text(profile.note, Modifier.padding(top = 4.dp), maxLines = 1,
                         overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                 }
-                RoomAvailabilityStrip(profile.roomId, match.freeSlots, slots, active && interactionEnabled && !expanded && !revealed,
-                    inspectionKey = inspectionKey)
-                HorizontalDivider(Modifier.padding(horizontal = 24.dp).testTag("room_divider_${profile.roomId}"))
-                Spacer(Modifier.height(16.dp))
-            }
             if (profile.favorite) FavoriteCornerMarker(profile.roomId,
                 Modifier.align(AbsoluteAlignment.TopRight).absoluteOffset(x = (-24).dp))
         }
+    }
+        RoomAvailabilityStrip(profile.roomId, match.freeSlots, slots, active && interactionEnabled,
+            inspectionKey = inspectionKey, wave = wave, onInspection = wave::interrupt)
+        HorizontalDivider(Modifier.padding(horizontal = 24.dp).testTag("room_divider_${profile.roomId}"))
+        Spacer(Modifier.height(16.dp))
     }
 }

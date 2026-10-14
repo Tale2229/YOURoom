@@ -86,15 +86,17 @@ class RoomAvailabilityUiTest {
         compose.onNodeWithTag(tooltip).assertIsDisplayed()
     }
 
-    @Test fun shortTapDoesNothingButEarlyHorizontalDragOpensAndClosesWithoutInspection() {
+    @Test fun shortTapAndEarlyHorizontalMotionNeverOpenOrCloseTheUpperActions() {
         render(list = true)
         compose.onNodeWithTag(stripTag).performTouchInput { click(center) }
         compose.onNodeWithTag(tooltip).assertDoesNotExist()
         compose.onNodeWithTag(stripTag).performTouchInput { swipeLeft(durationMillis = 120) }
         compose.onNodeWithTag(tooltip).assertDoesNotExist()
+        compose.onNodeWithTag("room_actions_$id").assertDoesNotExist()
+        compose.onNodeWithTag("room_swipe_$id").performTouchInput { swipeLeft() }
         compose.onNodeWithTag("room_actions_$id").assertIsDisplayed()
         compose.onNodeWithTag(stripTag, useUnmergedTree = true).performTouchInput { swipeRight(durationMillis = 120) }
-        compose.onNodeWithTag("room_actions_$id").assertDoesNotExist()
+        compose.onNodeWithTag("room_actions_$id").assertIsDisplayed()
         assertEquals(0, edits)
     }
 
@@ -243,16 +245,22 @@ class RoomAvailabilityUiTest {
         compose.onNodeWithTag(tooltip).assertDoesNotExist()
     }
 
-    @Test fun bothRegionsRevealActionsAndExpandedRowsDoNotStartInspection() {
+    @Test fun onlyTheUpperRegionSlidesAndExpandedRowsStillAllowTimeInspection() {
         render(list = true)
+        val strip = compose.onNodeWithTag(stripTag).fetchSemanticsNode().boundsInRoot
+        val bars = (1..14).map { face(it).fetchSemanticsNode().boundsInRoot }
         compose.onNodeWithTag("room_swipe_$id").performTouchInput { swipeLeft() }
         compose.onNodeWithTag("room_actions_$id").assertIsDisplayed()
         compose.onNodeWithTag(tooltip).assertDoesNotExist()
-        // The offset strip isn't inspectable until the row is closed again.
-        face(14).performTouchInput { down(center) }
-        compose.mainClock.advanceTimeBy(500)
-        compose.onNodeWithTag(tooltip).assertDoesNotExist()
-        face(14).performTouchInput { up() }
+        assertEquals(strip, compose.onNodeWithTag(stripTag).fetchSemanticsNode().boundsInRoot)
+        for (i in 1..14) assertEquals(bars[i - 1], face(i).fetchSemanticsNode().boundsInRoot)
+        hold(14)
+        label(14).assertTextEquals("14 · 20:10–20:55")
+        val six = point(6)
+        compose.onNodeWithTag(stripTag).performTouchInput { moveTo(six) }
+        label(6).assertExists()
+        compose.onNodeWithTag("room_actions_$id").assertIsDisplayed()
+        compose.onNodeWithTag(stripTag).performTouchInput { up() }
         compose.onNodeWithTag("room_swipe_$id", useUnmergedTree = true).performTouchInput { swipeRight() }
         compose.onNodeWithTag("room_actions_$id").assertDoesNotExist()
         hold(6)

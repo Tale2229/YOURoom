@@ -1,5 +1,7 @@
 package com.example.youroom
 
+import android.accessibilityservice.AccessibilityService
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.semantics.SemanticsActions
@@ -57,7 +59,7 @@ class YouRoomUiTest {
         }
     }
 
-    @Test fun campusSubtitleChangesWithoutChangingItsFontSize() {
+    @Test fun campusHeadingChangesWithoutChangingItsFontSize() {
         enterDemo()
         compose.onNodeWithTag("campus_label").assertTextEquals("西土城")
         val west = mutableListOf<TextLayoutResult>()
@@ -302,8 +304,7 @@ class YouRoomUiTest {
         compose.onNodeWithTag("campus_label").assertTextEquals("西土城")
         compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeDown() }
         compose.onNodeWithTag("campus_label").assertTextEquals("西土城")
-        compose.onNodeWithTag("refresh_rooms").performTouchInput { swipeLeft() }
-        compose.onNodeWithTag("campus_label").assertTextEquals("西土城")
+        compose.onNodeWithTag("refresh_rooms").assertDoesNotExist()
     }
 
     @Test fun campusCanBeSwitchedUsingTheAccessibilityAction() {
@@ -660,6 +661,8 @@ class YouRoomUiTest {
         compose.onNodeWithContentDescription("收藏 2-240").performClick()
         revealRoom("01:2-240")
         compose.onNodeWithContentDescription("排除 2-240").performClick()
+        compose.onNodeWithTag("room_actions_01:2-240").assertDoesNotExist()
+        revealRoom("01:2-240")
         compose.onNodeWithContentDescription("取消排除 2-240").assertIsDisplayed()
         compose.onNodeWithContentDescription("取消收藏 2-240").assertIsDisplayed()
         compose.onNodeWithTag("room_row_01:2-240").performTouchInput { swipeRight() }
@@ -677,12 +680,76 @@ class YouRoomUiTest {
         revealRoom("01:2-240")
         compose.onNodeWithContentDescription("取消收藏 2-240").assertIsDisplayed()
         compose.onNodeWithContentDescription("取消排除 2-240").performClick()
+        compose.onNodeWithTag("room_actions_01:2-240").assertDoesNotExist()
+        revealRoom("01:2-240")
         compose.onNodeWithContentDescription("排除 2-240").assertIsDisplayed()
         compose.onNodeWithTag("room_excluded_01:2-240", useUnmergedTree = true).assertDoesNotExist()
         compose.onNodeWithTag("room_list").performScrollToNode(hasTestTag("slot_1"))
         compose.onNodeWithTag("slot_1").performClick()
         compose.onNodeWithTag("room_list").performScrollToNode(hasTestTag("room_row_01:2-240"))
         compose.onNodeWithText("2-240").assertIsDisplayed()
+    }
+
+    @Test fun excludingAndRestoringABrowsedRoomBothCloseTheActionsInBothCampuses() {
+        enterDemo()
+        compose.onNodeWithText("清空").performScrollTo().performClick()
+        for ((id, name) in listOf("01:2-201" to "2-201", "04:演示楼-A101" to "演示楼-A101")) {
+            if (id.startsWith("04:")) compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeLeft() }
+            revealRoom(id)
+            compose.onNodeWithContentDescription("排除 $name").performClick()
+            compose.onNodeWithTag("room_actions_$id").assertDoesNotExist()
+            compose.onNodeWithTag("room_row_$id").assertIsDisplayed()
+            compose.onNodeWithTag("room_excluded_$id", useUnmergedTree = true).assertExists()
+            revealRoom(id)
+            compose.onNodeWithContentDescription("取消排除 $name").performClick()
+            compose.onNodeWithTag("room_actions_$id").assertDoesNotExist()
+            compose.onNodeWithTag("room_excluded_$id", useUnmergedTree = true).assertDoesNotExist()
+        }
+    }
+
+    @Test fun tagAndNoteEditsKeepTheRailOpenUntilTheirCloseButtonsInBothCampuses() {
+        enterDemo()
+        for ((id, name) in listOf("01:2-201" to "2-201", "04:演示楼-A101" to "演示楼-A101")) {
+            if (id.startsWith("04:")) compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeLeft() }
+            revealRoom(id)
+            val openX = compose.onNodeWithTag("room_face_$id").fetchSemanticsNode().positionInRoot.x
+            compose.onNodeWithContentDescription("修改标签 $name").performClick()
+            compose.onNodeWithTag("room_tag_dialog").assertIsDisplayed()
+            compose.onNodeWithTag("room_actions_$id").assertExists()
+            compose.onNodeWithTag("filter_outlets").performClick()
+            assertEquals(openX, compose.onNodeWithTag("room_face_$id").fetchSemanticsNode().positionInRoot.x, 1f)
+            compose.onNodeWithTag("close_room_tags").performClick()
+            compose.onNodeWithTag("room_actions_$id").assertDoesNotExist()
+            revealRoom(id)
+            compose.onNodeWithContentDescription("修改备注 $name").performClick()
+            compose.onNodeWithTag("room_note_dialog").assertIsDisplayed()
+            compose.onNodeWithTag("room_note").performTextInput("立即更新的备注")
+            compose.onNodeWithTag("room_actions_$id").assertExists()
+            assertEquals(openX, compose.onNodeWithTag("room_face_$id").fetchSemanticsNode().positionInRoot.x, 1f)
+            compose.onNodeWithTag("close_room_note").performClick()
+            compose.onNodeWithTag("room_actions_$id").assertDoesNotExist()
+            compose.onNode(hasText("立即更新的备注") and hasAnyAncestor(hasTestTag("room_row_$id"))).assertIsDisplayed()
+        }
+    }
+
+    @Test fun backingOutOfEitherEditorAlsoClosesOnlyItsMatchingRail() {
+        enterDemo()
+        for ((id, name, kind, dialog) in listOf(
+            listOf("01:2-201", "2-201", "标签", "room_tag_dialog"),
+            listOf("01:2-240", "2-240", "备注", "room_note_dialog"))) {
+            revealRoom(id)
+            compose.onNodeWithContentDescription("修改$kind $name").performClick()
+            compose.onNodeWithTag(dialog).assertIsDisplayed()
+            compose.onNodeWithTag("room_actions_$id").assertExists()
+            assertTrue(InstrumentationRegistry.getInstrumentation().uiAutomation
+                .performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK))
+            // System navigation is asynchronous and outside Compose's frame clock.
+            compose.waitUntil(10_000) { compose.onAllNodesWithTag(dialog).fetchSemanticsNodes().isEmpty() }
+            compose.onNodeWithTag(dialog).assertDoesNotExist()
+            compose.onNodeWithTag("room_actions_$id").assertDoesNotExist()
+            assertEquals(compose.onNodeWithTag("room_row_$id").fetchSemanticsNode().positionInRoot.x,
+                compose.onNodeWithTag("room_face_$id").fetchSemanticsNode().positionInRoot.x, 1f)
+        }
     }
 
     @Test fun exclusionRemovesTheResultAndCanBeReversedInPreferencesWithoutLosingFavorite() {
