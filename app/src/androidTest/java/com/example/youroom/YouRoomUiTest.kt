@@ -114,10 +114,8 @@ class YouRoomUiTest {
     @Test fun plannerTimeInputPersistsAcrossTabsAndDoesNotChangeStudySlots() {
         enterDemo()
         compose.onNodeWithTag("tab_planner").performClick()
-        compose.onNodeWithTag("planner_end").performClick()
-        compose.onNodeWithTag("planner_hour_wheel").performSemanticsAction(SemanticsActions.SetProgress) { it(9f) }
-        compose.onNodeWithTag("planner_minute_wheel").performSemanticsAction(SemanticsActions.SetProgress) { it(35f) }
-        compose.onNodeWithTag("planner_time_confirm").performClick()
+        compose.onNodeWithTag("planner_end_hour_wheel").performSemanticsAction(SemanticsActions.SetProgress) { it(9f) }
+        compose.onNodeWithTag("planner_end_minute_wheel").performSemanticsAction(SemanticsActions.SetProgress) { it(35f) }
         compose.onNodeWithTag("planner_end").assertTextContains("09:35")
         compose.onNodeWithTag("planner_adjust").performClick()
         generatePlanner()
@@ -130,7 +128,7 @@ class YouRoomUiTest {
         compose.onNodeWithTag("planner_end").assertTextContains("09:35")
     }
 
-    @Test fun plannerSwitchesCampusesWithoutKeepingWestRoomsAndCanExplainItsRules() {
+    @Test fun plannerSwitchesCampusesWithoutKeepingWestRoomsOrTheRemovedRulesHeading() {
         enterDemo()
         compose.onNodeWithTag("tab_planner").performClick()
         generatePlanner()
@@ -141,42 +139,30 @@ class YouRoomUiTest {
         compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_step_0"))
         compose.onNodeWithTag("planner_step_0").assertTextContains("演示楼-A101")
         compose.onNodeWithText("2-201").assertDoesNotExist()
-        compose.onNodeWithTag("planner_list").performScrollToNode(hasText("规则"))
-        compose.onNodeWithText("规则").performClick()
-        compose.onNodeWithText("规划规则").assertExists()
-        compose.onNodeWithText("额外十分钟收藏不足以抵消一次换房。", substring = true).assertExists()
-        compose.onNodeWithText("关闭").performClick()
+        compose.onNodeWithText("规则").assertDoesNotExist()
+        compose.onNodeWithText("规划规则").assertDoesNotExist()
     }
 
-    @Test fun plannerWheelCancelAndReopenKeepStartAndEndIndependent() {
+    @Test fun plannerInlineWheelsKeepStartAndEndIndependentWithoutConfirmation() {
         enterDemo()
         compose.onNodeWithTag("tab_planner").performClick()
-        compose.onNodeWithTag("planner_start").performClick()
-        compose.onNodeWithTag("planner_hour_wheel").performSemanticsAction(SemanticsActions.SetProgress) { it(22f) }
-        compose.onNodeWithTag("planner_time_cancel").performClick()
-        compose.onNodeWithTag("planner_start").assertTextContains("08:00")
-        compose.onNodeWithTag("planner_start").performClick()
-        assertEquals(8f, compose.onNodeWithTag("planner_hour_wheel").fetchSemanticsNode()
-            .config[SemanticsProperties.ProgressBarRangeInfo].current)
-        compose.onNodeWithTag("planner_minute_wheel").performSemanticsAction(SemanticsActions.SetProgress) { it(12f) }
-        compose.onNodeWithTag("planner_time_confirm").performClick()
+        compose.onNodeWithTag("planner_start_minute_wheel").performSemanticsAction(SemanticsActions.SetProgress) { it(12f) }
         compose.onNodeWithTag("planner_start").assertTextContains("08:12")
         compose.onNodeWithTag("planner_end").assertTextContains("12:00")
-        compose.onNodeWithTag("planner_end").performClick()
-        assertEquals(12f, compose.onNodeWithTag("planner_hour_wheel").fetchSemanticsNode()
+        assertEquals(12f, compose.onNodeWithTag("planner_end_hour_wheel").fetchSemanticsNode()
             .config[SemanticsProperties.ProgressBarRangeInfo].current)
-        assertEquals(0f, compose.onNodeWithTag("planner_minute_wheel").fetchSemanticsNode()
+        assertEquals(0f, compose.onNodeWithTag("planner_end_minute_wheel").fetchSemanticsNode()
             .config[SemanticsProperties.ProgressBarRangeInfo].current)
-        compose.onNodeWithTag("planner_time_cancel").performClick()
+        compose.onNodeWithTag("planner_time_confirm").assertDoesNotExist()
+        compose.onNodeWithTag("planner_time_cancel").assertDoesNotExist()
     }
 
     @Test fun invalidPlanningTimesNeverLeavePreviousResultsVisible() {
         enterDemo()
         compose.onNodeWithTag("tab_planner").performClick()
         generatePlanner()
-        compose.onNodeWithTag("planner_start").performScrollTo().performClick()
-        compose.onNodeWithTag("planner_hour_wheel").performSemanticsAction(SemanticsActions.SetProgress) { it(18f) }
-        compose.onNodeWithTag("planner_time_confirm").performClick()
+        compose.onNodeWithTag("planner_start_hour_wheel").performScrollTo()
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(18f) }
         compose.onNodeWithTag("planner_results").assertDoesNotExist()
         generatePlanner()
         compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_message"))
@@ -815,6 +801,78 @@ class YouRoomUiTest {
         compose.onNodeWithText("2-201").assertDoesNotExist()
         assertEquals(initialDivider, compose.onNodeWithTag("campus_divider").fetchSemanticsNode().boundsInRoot)
         assertEquals(initialBody, compose.onNodeWithTag("campus_body").fetchSemanticsNode().boundsInRoot)
+    }
+
+    @Test fun allThreeTabsShareOneStationaryHeaderWhileOnlyBodiesSlide() {
+        enterDemo()
+        val header = compose.onNodeWithTag("campus_header").fetchSemanticsNode().boundsInRoot
+        val divider = compose.onNodeWithTag("campus_divider").fetchSemanticsNode().boundsInRoot
+        for ((tag, page) in listOf("tab_planner" to 1, "tab_preferences" to 2, "tab_rooms" to 0)) {
+            compose.mainClock.autoAdvance = false
+            compose.onNodeWithTag(tag).performClick()
+            compose.mainClock.advanceTimeBy(144)
+            compose.onAllNodesWithTag("campus_header").assertCountEquals(1)
+            assertEquals(header, compose.onNodeWithTag("campus_header").fetchSemanticsNode().boundsInRoot)
+            assertEquals(divider, compose.onNodeWithTag("campus_divider").fetchSemanticsNode().boundsInRoot)
+            val incoming = compose.onNodeWithTag("workspace_page_$page").fetchSemanticsNode().boundsInRoot
+            val body = compose.onNodeWithTag("workspace_pages").fetchSemanticsNode().boundsInRoot
+            assertTrue("incoming page must translate", kotlin.math.abs(incoming.left - body.left) > 1f || incoming.width < body.width - 1f)
+            compose.mainClock.advanceTimeBy(1400)
+            compose.mainClock.autoAdvance = true
+            compose.waitForIdle()
+            assertEquals(header, compose.onNodeWithTag("campus_header").fetchSemanticsNode().boundsInRoot)
+            compose.onAllNodesWithTag("campus_header").assertCountEquals(1)
+        }
+    }
+
+    @Test fun preferencesHeaderIsFixedWhileScrollingAndCanSwitchCampuses() {
+        enterDemo()
+        compose.onNodeWithTag("tab_preferences").performClick()
+        val header = compose.onNodeWithTag("campus_header").fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithTag("preferences_list").performScrollToNode(hasText("关于数据"))
+        assertEquals(header, compose.onNodeWithTag("campus_header").fetchSemanticsNode().boundsInRoot)
+        compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeLeft() }
+        compose.onNodeWithTag("campus_label").assertTextEquals("沙河")
+        compose.onNodeWithTag("preferences_campus_body_content_04").assertExists()
+        compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeRight() }
+        compose.onNodeWithTag("campus_label").assertTextEquals("西土城")
+    }
+
+    @Test fun plannerCampusBodyFadesWithoutMovingAndKeepsTheSameTimeWheelNodes() {
+        enterDemo()
+        compose.onNodeWithTag("tab_planner").performClick()
+        val body = compose.onNodeWithTag("planner_campus_body").fetchSemanticsNode().boundsInRoot
+        val start = compose.onNodeWithTag("planner_start_hour_wheel").fetchSemanticsNode()
+        val initialTime = compose.onNodeWithTag("planner_start").fetchSemanticsNode().config[SemanticsProperties.Text]
+        val action = compose.onNodeWithTag("campus_swipe_region").fetchSemanticsNode().config[SemanticsActions.CustomActions].single()
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { action.action() }
+        compose.mainClock.advanceTimeBy(240)
+        assertEquals(body, compose.onNodeWithTag("planner_campus_body").fetchSemanticsNode().boundsInRoot)
+        assertEquals(start.boundsInRoot, compose.onNodeWithTag("planner_start_hour_wheel").fetchSemanticsNode().boundsInRoot)
+        compose.mainClock.advanceTimeBy(700)
+        compose.mainClock.autoAdvance = true
+        compose.onNodeWithTag("campus_label").assertTextEquals("沙河")
+        assertEquals(start.id, compose.onNodeWithTag("planner_start_hour_wheel").fetchSemanticsNode().id)
+        assertEquals(initialTime, compose.onNodeWithTag("planner_start").fetchSemanticsNode().config[SemanticsProperties.Text])
+        compose.onNodeWithTag("planner_campus_body_content_04").assertExists()
+    }
+
+    @Test fun rapidTabRetargetingEndsWithOneHeaderAndTheLatestInteractivePage() {
+        enterDemo()
+        compose.onNodeWithTag("tab_planner").assertIsDisplayed()
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag("tab_planner").performClick()
+        compose.mainClock.advanceTimeBy(96)
+        compose.onNodeWithTag("tab_preferences").performClick()
+        compose.mainClock.advanceTimeBy(96)
+        compose.onNodeWithTag("tab_rooms").performClick()
+        compose.mainClock.advanceTimeBy(1600)
+        compose.mainClock.autoAdvance = true
+        compose.onAllNodesWithTag("campus_header").assertCountEquals(1)
+        compose.onNodeWithTag("planner_screen").assertDoesNotExist()
+        compose.onNodeWithTag("preferences_list").assertDoesNotExist()
+        compose.onNodeWithTag("slot_1").assertIsEnabled()
     }
 
     @Test fun reversingBeforeTheBodySwapKeepsWestContentAndSharedSlots() {

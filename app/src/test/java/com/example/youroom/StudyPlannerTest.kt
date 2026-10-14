@@ -135,12 +135,53 @@ class StudyPlannerTest {
         assertEquals(0, plan.changes)
     }
 
-    @Test fun outsideTimetableAndInvalidCrossDayTargetsAreRejected() {
+    @Test fun preEightTargetsAreAllowedButDaytimeGapsAndInvalidCrossDayTargetsAreRejected() {
         val data = snapshot(slot(1, 480, 525, a))
-        assertTrue(run(data, PlanningGoal(470, 525, false)).options.isEmpty())
+        assertEquals(55, run(data, PlanningGoal(470, 525, false)).options.first().plan.studyMinutes)
         assertTrue(run(data, PlanningGoal(480, 540, false)).options.isEmpty())
         assertTrue(run(data, PlanningGoal(1300, 500)).options.isEmpty())
         assertTrue(run(data, PlanningGoal(480, 480)).options.isEmpty())
+    }
+
+    @Test fun beforeEightAndAfterEightFiftyFiveEveryKnownRoomCanBeChosen() {
+        val data = snapshot(slot(1, 480, 525, a), slot(14, 1210, 1255, b))
+        for (goal in listOf(PlanningGoal(0, 480, false), PlanningGoal(1255, 1439, false))) {
+            val plan = run(data, goal, mapOf(b.id to favorite(b))).options.first().plan
+            assertEquals(goal.end - goal.start, plan.studyMinutes)
+            assertEquals(goal.end - goal.start, plan.favoriteMinutes)
+            assertEquals(b.id, (plan.steps.single() as PlanningStep.Study).classroom.id)
+            assertEquals(0, plan.changes)
+        }
+    }
+
+    @Test fun earlyAndLateAvailabilityStillRespectsExclusionsCampusDateAndRealGenerationTime() {
+        val data = snapshot(slot(1, 480, 525, a, b))
+        val early = PlanningGoal(420, 479, false)
+        val late = PlanningGoal(1255, 1350, false)
+        for (goal in listOf(early, late)) {
+            val plan = run(data, goal, mapOf(b.id to favorite(b).copy(excluded = true))).options.first().plan
+            assertEquals(a.id, (plan.steps.single() as PlanningStep.Study).classroom.id)
+            assertTrue(run(data, goal, mapOf(a.id to a.emptyProfile().copy(excluded = true),
+                b.id to b.emptyProfile().copy(excluded = true))).options.isEmpty())
+            assertTrue(StudyPlanner.plan(data, Campus.SHAHE, day, emptyMap(), goal).options.isEmpty())
+            assertTrue(StudyPlanner.plan(data, Campus.XITUCHENG, day.plusDays(1), emptyMap(), goal).options.isEmpty())
+        }
+        assertEquals(PlanningProblem.PAST_TIME,
+            StudyPlanner.plan(data, Campus.XITUCHENG, day, emptyMap(), early, notBeforeMinute = 500).problem)
+    }
+
+    @Test fun crossingEightStillRequiresTheRoomToBeFreeInTheFirstLesson() {
+        val data = snapshot(slot(1, 480, 525, a), slot(2, 530, 575, b))
+        val plan = run(data, PlanningGoal(470, 525, false), mapOf(b.id to favorite(b))).options.first().plan
+        assertEquals(a.id, (plan.steps.single() as PlanningStep.Study).classroom.id)
+        assertEquals(0, plan.changes)
+        assertTrue(run(data, PlanningGoal(480, 525, false), mapOf(a.id to a.emptyProfile().copy(excluded = true))).options.isEmpty())
+    }
+
+    @Test fun noSnapshotRoomsAreInventedForEarlyOrLatePlanning() {
+        val empty = snapshot(slot(1, 480, 525))
+        for (goal in listOf(PlanningGoal(420, 479, false), PlanningGoal(1255, 1350, false)))
+            assertTrue(run(empty, goal, mapOf(a.id to favorite(a))).options.isEmpty())
     }
 
     @Test fun feedbackTypesMatchTheirShortcutsAndNoSolutionUsesTheRequestedCopy() {

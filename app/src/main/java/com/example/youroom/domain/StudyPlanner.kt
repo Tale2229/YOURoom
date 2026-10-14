@@ -64,7 +64,8 @@ object StudyPlanner {
         val base = PlanningPolicy.windows(goal)
         val starts = base.map { it.start }.toMutableSet()
         val ends = base.map { it.end }.toMutableSet()
-        slots.flatMap { listOf(it.start.hour * 60 + it.start.minute, it.end.hour * 60 + it.end.minute) }.forEach {
+        (slots.flatMap { listOf(it.start.hour * 60 + it.start.minute, it.end.hour * 60 + it.end.minute) } +
+            listOf(PlanningPolicy.teachingStart, PlanningPolicy.teachingEnd)).forEach {
             if (it - goal.start in -PlanningPolicy.shiftLimit..(PlanningPolicy.shiftLimit + PlanningPolicy.lossLimit)) starts += it
             if (it - goal.end in -(PlanningPolicy.shiftLimit + PlanningPolicy.lossLimit)..PlanningPolicy.shiftLimit) ends += it
         }

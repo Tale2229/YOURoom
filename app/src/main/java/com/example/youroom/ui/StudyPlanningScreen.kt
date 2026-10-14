@@ -1,10 +1,10 @@
 package com.example.youroom.ui
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -32,14 +32,37 @@ private data class PlanningRequest(val snapshot: ClassroomSnapshot?, val campus:
     val notBefore: Int?)
 private data class FinishedPlanning(val request: PlanningRequest, val result: PlanningResult)
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StudyPlanningScreen(state: YouRoomState, goal: PlanningGoal, requested: Boolean,
     onGoal: (PlanningGoal) -> Unit, onGenerate: () -> Unit, onCampus: (Campus) -> Unit,
     onRefresh: () -> Unit, onRoom: (String?) -> Unit, notBeforeMinute: Int? = null,
-    clock: Clock = Clock.system(SchoolZone)) {
-    var editingStart by remember { mutableStateOf<Boolean?>(null) }
-    var rules by remember { mutableStateOf(false) }
+    clock: Clock = Clock.system(SchoolZone), showHeader: Boolean = true,
+    sharedHeaderMoving: Boolean = false, interactive: Boolean = true) {
+    val westList = rememberLazyListState()
+    val shaheList = rememberLazyListState()
+    var heldGoal by remember { mutableStateOf(goal) }
+    var heldRequested by remember { mutableStateOf(requested) }
+    CampusFrame(state, onCampus, showHeader, sharedHeaderMoving, interactive,
+        bodyTag = "planner_campus_body") { page, active, _, ready ->
+        val displayedGoal = if (ready) goal else heldGoal
+        val displayedRequested = if (ready) requested else heldRequested
+        SideEffect { if (ready) { heldGoal = goal; heldRequested = requested } }
+        StudyPlanningContent(page, displayedGoal, displayedRequested,
+            { if (active) onGoal(it) }, { if (active) onGenerate() },
+            { if (active) onRefresh() }, { if (active) onRoom(it) }, notBeforeMinute, clock,
+            if (page.campus == Campus.XITUCHENG) westList else shaheList, active)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun StudyPlanningContent(state: YouRoomState, goal: PlanningGoal, requested: Boolean,
+    onGoal: (PlanningGoal) -> Unit, onGenerate: () -> Unit, onRefresh: () -> Unit,
+    onRoom: (String?) -> Unit, notBeforeMinute: Int?, clock: Clock, listState: LazyListState,
+    interactive: Boolean) {
+    var startMoving by remember { mutableStateOf(false) }
+    var endMoving by remember { mutableStateOf(false) }
+    var wheelGoal by remember(goal) { mutableStateOf(goal) }
     var originMenu by remember { mutableStateOf(false) }
     var choice by remember(state.campus, goal) { mutableIntStateOf(0) }
     val snapshot = state.campusSnapshot
@@ -65,21 +88,21 @@ fun StudyPlanningScreen(state: YouRoomState, goal: PlanningGoal, requested: Bool
         .map { CampusTopology.location(it, state.campus).building }.distinct().sorted() }
 
     Column(Modifier.fillMaxSize().testTag("planner_screen")) {
-        CampusHeader(state, onCampus)
-        HorizontalDivider(Modifier.padding(horizontal = 24.dp))
         LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("planner_list"),
-            contentPadding = PaddingValues(bottom = 24.dp)) {
+            state = listState, userScrollEnabled = interactive, contentPadding = PaddingValues(bottom = 24.dp)) {
             if (state.demo) item { StatusNotice("演示规划 · 空闲安排为虚构，标记不写入真实数据。") }
             if (stale) item { StatusNotice("缓存已跨日，请刷新今日数据后规划。", isError = true) }
             item {
                 Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("自习规划", Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium)
-                        TextButton(onClick = { rules = true }, shape = MaterialTheme.shapes.small) { Text("规则") }
-                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        PlanningTimeButton("开始时间", goal.start, Modifier.weight(1f).testTag("planner_start")) { editingStart = true }
-                        PlanningTimeButton("结束时间", goal.end, Modifier.weight(1f).testTag("planner_end")) { editingStart = false }
+                        WheelTimePicker("开始时间", goal.start, "planner_start", Modifier.weight(1f),
+                            onMoving = { startMoving = it }) {
+                            wheelGoal = wheelGoal.copy(start = it); onGoal(wheelGoal)
+                        }
+                        WheelTimePicker("结束时间", goal.end, "planner_end", Modifier.weight(1f),
+                            onMoving = { endMoving = it }) {
+                            wheelGoal = wheelGoal.copy(end = it); onGoal(wheelGoal)
+                        }
                     }
                     PlanningToggle("允许调整时间", goal.flexible, "planner_adjust") { onGoal(goal.copy(flexible = it)) }
                     Box {
@@ -93,7 +116,7 @@ fun StudyPlanningScreen(state: YouRoomState, goal: PlanningGoal, requested: Bool
                                 onClick = { originMenu = false; onGoal(goal.copy(origin = origin)) }) }
                         }
                     }
-                    Button(onClick = onGenerate, enabled = !pending && snapshot != null && !stale,
+                    Button(onClick = onGenerate, enabled = interactive && !pending && !startMoving && !endMoving && snapshot != null && !stale,
                         shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                             .testTag("planner_generate")) { Text(if (pending) "计算中…" else "生成规划") }
                     if (snapshot == null || stale) TextButton(onClick = onRefresh,
@@ -112,16 +135,19 @@ fun StudyPlanningScreen(state: YouRoomState, goal: PlanningGoal, requested: Bool
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(message, Modifier.weight(1f).testTag("planner_message"), style = MaterialTheme.typography.bodyMedium)
                     when (result.problem) {
-                        PlanningProblem.PAST_TIME -> TextButton(onClick = {
+                        PlanningProblem.PAST_TIME -> FilledTonalButton(onClick = {
                             PlanningTimeActions.startFromNow(goal, clock)?.let(onGoal)
                         }, enabled = PlanningTimeActions.startFromNow(goal, clock) != null,
                             modifier = Modifier.heightIn(min = 48.dp).testTag("planner_from_now"),
+                            shape = MaterialTheme.shapes.small,
                             contentPadding = PaddingValues(horizontal = 8.dp)) { Text("从现在起") }
-                        PlanningProblem.INVALID_TIME -> Row(Modifier.testTag("planner_duration_buttons")) {
+                        PlanningProblem.INVALID_TIME -> Row(Modifier.testTag("planner_duration_buttons"),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             listOf(1, 2, 4).forEach { hours ->
-                                TextButton(onClick = { PlanningTimeActions.endAfterHours(goal, hours)?.let(onGoal) },
+                                FilledTonalButton(onClick = { PlanningTimeActions.endAfterHours(goal, hours)?.let(onGoal) },
                                     enabled = PlanningTimeActions.endAfterHours(goal, hours) != null,
                                     modifier = Modifier.width(48.dp).heightIn(min = 48.dp).testTag("planner_duration_${hours}h"),
+                                    shape = MaterialTheme.shapes.small,
                                     contentPadding = PaddingValues(horizontal = 4.dp)) { Text("${hours}h") }
                             }
                         }
@@ -164,30 +190,6 @@ fun StudyPlanningScreen(state: YouRoomState, goal: PlanningGoal, requested: Bool
                     PlanningTimelineStep(step, Modifier.testTag("planner_step_$index"), onRoom)
                 }
             }
-        }
-    }
-    editingStart?.let { start ->
-        val minute = if (start) goal.start else goal.end
-        key(start) {
-            WheelTimePickerDialog(if (start) "开始时间" else "结束时间", minute,
-                onDismiss = { editingStart = null }, onConfirm = { selected ->
-                    onGoal(if (start) goal.copy(start = selected) else goal.copy(end = selected))
-                    editingStart = null
-                })
-        }
-    }
-    if (rules) AlertDialog(onDismissRequest = { rules = false }, title = { Text("规划规则") },
-        text = { Text("收藏加分，排除教室不可用，自定义词条不评分。\n\n最多换教室 2 次；按相邻节次的时间边界，将全部课间（包括午间）视为可用。上课期间仍须列为空闲，不补造缺失节次。搬动及等候扣除自习时间。\n\n代价：损失每分钟 ×3，起止偏移每分钟 ×1，换房一次 +20，换楼另 +12，步行每分钟 ×2，收藏自习每分钟 −1。额外十分钟收藏不足以抵消一次换房。\n\n时间候选按 5 分钟步进，并补充课表边界及对应整体平移。楼间、走廊和上下楼耗时均为估算，不是地图导航。",
-            Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) },
-        confirmButton = { TextButton(onClick = { rules = false }) { Text("关闭") } })
-}
-
-@Composable
-private fun PlanningTimeButton(label: String, minute: Int, modifier: Modifier, onClick: () -> Unit) {
-    OutlinedButton(onClick = onClick, modifier = modifier.heightIn(min = 72.dp), shape = MaterialTheme.shapes.small) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(label, style = MaterialTheme.typography.bodySmall)
-            Text(planningTime(minute), style = MaterialTheme.typography.headlineMedium)
         }
     }
 }

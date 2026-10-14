@@ -1,15 +1,9 @@
 package com.example.youroom.ui
 
 import android.content.res.Configuration
-import androidx.compose.animation.*
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -20,109 +14,36 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import com.example.youroom.data.DemoData
 import com.example.youroom.domain.*
 import com.example.youroom.ui.theme.YouRoomTheme
-import kotlinx.coroutines.flow.first
 
 @Composable
 fun ClassroomScreen(state: YouRoomState, onFilters: (SearchFilters) -> Unit,
     onRefresh: () -> Unit, onRoomEditor: (String, RoomEditor) -> Unit, onFavorite: (Classroom) -> Unit,
     onCampus: (Campus) -> Unit = {}, onAddTag: (String) -> Unit = {},
     onRemoveTag: (String) -> Unit = {}, onTagOrder: (List<String>) -> Unit = {},
-    onExcluded: (Classroom) -> Unit = {}) {
+    onExcluded: (Classroom) -> Unit = {}, showHeader: Boolean = true,
+    sharedHeaderMoving: Boolean = false, interactive: Boolean = true) {
     val westList = androidx.compose.foundation.lazy.rememberLazyListState()
     val shaheList = androidx.compose.foundation.lazy.rememberLazyListState()
     val viewportDates = remember { mutableMapOf<Pair<Campus, Boolean>, java.time.LocalDate>() }
-    val pages = remember(state.demo) { mutableMapOf<Campus, YouRoomState>() }
-    pages[state.campus] = state
-    val listState = if (state.campus == Campus.XITUCHENG) westList else shaheList
-    val pager = rememberPagerState(initialPage = state.campus.ordinal) { Campus.entries.size }
-    val desiredPage by rememberUpdatedState(state.campus.ordinal)
-    val headerMoving by remember(pager) { derivedStateOf {
-        pager.isScrollInProgress || pager.settledPage != desiredPage
-    } }
-    var bodyCampus by remember { mutableStateOf(state.campus) }
-    val bodyAlpha = remember { Animatable(1f) }
-    var replacingBody by remember { mutableStateOf(false) }
-    val moving = headerMoving || replacingBody || bodyCampus != state.campus
-    LaunchedEffect(state.campus, state.campusSnapshot?.queryDate, state.demo, moving) {
-        if (!moving) state.campusSnapshot?.queryDate?.let { date ->
-            val previous = viewportDates.put(state.campus to state.demo, date)
-            if (previous != null && previous != date) listState.scrollToItem(0)
-        }
-    }
-    LaunchedEffect(state.campus) {
-        if (pager.currentPage != state.campus.ordinal || pager.currentPageOffsetFraction != 0f) {
-            pager.animateScrollToPage(state.campus.ordinal, animationSpec = tween(320))
-        }
-    }
-    LaunchedEffect(state.campus) {
-        val target = state.campus
-        if (bodyCampus == target && !headerMoving && bodyAlpha.value == 1f) return@LaunchedEffect
-        replacingBody = true
-        try {
-            if (bodyCampus != target) {
-                // The title leads. Keep the content still first, then replace it at
-                // zero opacity, so neither the grid nor the list ever slides sideways.
-                bodyAlpha.animateTo(0f, tween(durationMillis = 160, delayMillis = 160))
-                bodyCampus = target
-            }
-            snapshotFlow { !headerMoving }.first { it }
-            bodyAlpha.animateTo(1f, tween(160))
-        } finally {
-            // A rapid reversal cancels this coroutine. The next target takes over
-            // the current alpha and never publishes the cancelled campus later.
-            replacingBody = false
-        }
-    }
     RoomSearchFocusBoundary(Modifier.fillMaxSize()) {
-    Column(Modifier.fillMaxSize().imePadding()) {
-        HorizontalPager(state = pager, beyondViewportPageCount = 1, userScrollEnabled = false,
-            modifier = Modifier.fillMaxWidth().wrapContentHeight().clipToBounds().testTag("campus_pager"),
-            key = { Campus.entries[it].dataKey }) { index ->
-            val displayed = Campus.entries[index]
-            val header = if (displayed == state.campus) state else (pages[displayed] ?: state).copy(campus = displayed)
-            val pageModifier = if (pager.currentPage == index) Modifier else Modifier.clearAndSetSemantics {}
-            YouRoomTheme(campus = displayed) {
-                Surface(Modifier.fillMaxWidth().then(pageModifier)) {
-                    CampusHeader(header.copy(today = state.today), onCampus)
+    Box(Modifier.fillMaxSize().imePadding()) {
+        CampusFrame(state, onCampus, showHeader, sharedHeaderMoving, interactive,
+            keepBothCampuses = true, bodyTag = "campus_body") { page, active, moving, ready ->
+            val list = if (page.campus == Campus.XITUCHENG) westList else shaheList
+            LaunchedEffect(page.campus, page.campusSnapshot?.queryDate, page.demo, active) {
+                if (active) page.campusSnapshot?.queryDate?.let { date ->
+                    val previous = viewportDates.put(page.campus to page.demo, date)
+                    if (previous != null && previous != date) list.scrollToItem(0)
                 }
             }
-        }
-        HorizontalDivider(Modifier.padding(horizontal = 24.dp).testTag("campus_divider"))
-        Box(Modifier.weight(1f).fillMaxWidth().clipToBounds().testTag("campus_body")) {
-            Campus.entries.forEach { displayed ->
-                key(displayed, state.demo) {
-                    val observed = if (displayed == state.campus) state else pages[displayed] ?: state.copy(
-                        campus = displayed, snapshot = state.campusSnapshots[displayed],
-                        filters = state.filters.copy(buildings = emptySet()), fromCache = !state.demo,
-                        refreshing = false, error = null, selectedRoomId = null)
-                    pages.putIfAbsent(displayed, observed)
-                    val visible = displayed == bodyCampus
-                    val ready = visible && displayed == state.campus && !headerMoving
-                    // Warm both lists, but freeze responses and item/selection animations
-                    // during title movement. Filtering resumes on the incoming page only.
-                    var held by remember { mutableStateOf(observed) }
-                    val page = if (ready) observed else held
-                    SideEffect { if (ready) held = observed }
-                    val active = ready && !moving
-                    YouRoomTheme(campus = displayed) {
-                        Surface(Modifier.fillMaxSize().testTag("campus_content_${displayed.dataKey}")
-                            .zIndex(if (visible) 1f else 0f)
-                            .then(if (visible) Modifier else Modifier.clearAndSetSemantics {})
-                            .graphicsLayer { alpha = if (visible) bodyAlpha.value else 0f }) {
-                            ClassroomPage(page, if (displayed == Campus.XITUCHENG) westList else shaheList,
-                                active, moving, searchEnabled = ready,
-                                { if (active) onFilters(it) }, { if (active) onRefresh() },
-                                { id, editor -> if (active) onRoomEditor(id, editor) }, { if (active) onFavorite(it) },
-                                { if (active) onAddTag(it) }, { if (active) onRemoveTag(it) },
-                                { if (active) onTagOrder(it) }, { if (active) onExcluded(it) })
-                        }
-                    }
-                }
-            }
+            ClassroomPage(page, list, active, moving, searchEnabled = ready,
+                { if (active) onFilters(it) }, { if (active) onRefresh() },
+                { id, editor -> if (active) onRoomEditor(id, editor) }, { if (active) onFavorite(it) },
+                { if (active) onAddTag(it) }, { if (active) onRemoveTag(it) },
+                { if (active) onTagOrder(it) }, { if (active) onExcluded(it) })
         }
     }
     }

@@ -54,6 +54,8 @@ fun planningTime(minute: Int) = "%02d:%02d".format(java.util.Locale.ROOT, minute
 
 /** Shared, inspectable policy. Costs are preference penalties, not actual walking time. */
 object PlanningPolicy {
+    const val teachingStart = 8 * 60
+    const val teachingEnd = 20 * 60 + 55
     const val shiftLimit = 15
     const val lossLimit = 20
     const val changeLimit = 2

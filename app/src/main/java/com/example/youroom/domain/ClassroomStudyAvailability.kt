@@ -2,7 +2,8 @@ package com.example.youroom.domain
 
 /** School availability, independent of the user's study / rest schedule.
  * All known inter-lesson breaks are usable, including lunch, even when this room
- * is occupied in either neighboring lesson. Missing lessons are never fabricated.
+ * is occupied in either neighboring lesson. Before 08:00 and from 20:55 until midnight
+ * every known room is usable. Missing lessons inside the teaching window are never fabricated.
  */
 internal class ClassroomStudyAvailability(slots: List<LessonSlot>) {
     private val lessons = slots.sortedBy { it.number }
@@ -13,7 +14,9 @@ internal class ClassroomStudyAvailability(slots: List<LessonSlot>) {
     }
 
     fun intervalsFor(freeSlots: Set<Int>): List<StudyWindow> {
-        val intervals = (breaks + lessons.filter { it.number in freeSlots }.map {
+        val outsideTeaching = listOf(StudyWindow(0, PlanningPolicy.teachingStart),
+            StudyWindow(PlanningPolicy.teachingEnd, 1440))
+        val intervals = (outsideTeaching + breaks + lessons.filter { it.number in freeSlots }.map {
             StudyWindow(it.start.hour * 60 + it.start.minute, it.end.hour * 60 + it.end.minute)
         }).filter { it.duration > 0 }.sortedWith(compareBy<StudyWindow> { it.start }.thenBy { it.end })
         val merged = mutableListOf<StudyWindow>()

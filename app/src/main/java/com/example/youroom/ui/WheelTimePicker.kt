@@ -1,31 +1,43 @@
 package com.example.youroom.ui
 
-import androidx.compose.foundation.clickable
+import androidx.compose.animation.SplineBasedFloatDecayAnimationSpec
+import androidx.compose.animation.core.generateDecayAnimationSpec
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.snapping.SnapLayoutInfoProvider
 import androidx.compose.foundation.gestures.snapping.SnapPosition
-import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
+import androidx.compose.foundation.gestures.snapping.snapFlingBehavior
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListLayoutInfo
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
+import com.example.youroom.domain.planningTime
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
-import kotlin.math.abs
-import kotlin.math.roundToInt
+import kotlin.math.*
 
-// Repeated values allow both wheels to cross midnight without changing the other column.
-// LazyColumn composes only the visible rows, not all the repeated cycles.
+// Virtual repeated rows provide native drag/fling/snap physics, without allocating a long list.
 internal const val TimeWheelCycles = 2001
 internal fun timeWheelValue(index: Int, count: Int) = Math.floorMod(index, count)
 internal fun timeWheelInitialIndex(value: Int, count: Int) = (TimeWheelCycles / 2) * count + value
@@ -35,33 +47,73 @@ internal fun timeWheelNearestIndex(value: Int, around: Int, count: Int): Int {
         .filter { it in 0 until count * TimeWheelCycles }.minBy { abs(it - around) }
 }
 
-private fun LazyListLayoutInfo.centeredIndex(fallback: Int): Int {
+// Equal angular steps around a cylinder, not equal screen-space rows. Fractional distance
+// changes continuously during dragging, inertia and snapping, including between ticks.
+internal const val TimeWheelAngle = .46f
+internal data class WheelProjection(val y: Float, val rotation: Float, val scale: Float, val alpha: Float)
+internal fun timeWheelProjection(distance: Float): WheelProjection {
+    val angle = (distance * TimeWheelAngle).coerceIn(-PI.toFloat() / 2, PI.toFloat() / 2)
+    val facing = cos(angle).coerceAtLeast(0f)
+    val depth = (1f - facing) / TimeWheelAngle
+    val perspective = 8f / (8f + depth)
+    return WheelProjection(sin(angle) / TimeWheelAngle * perspective,
+        -angle * 180f / PI.toFloat(), (.82f + .18f * facing) * perspective,
+        facing.pow(2.2f) * .9f + if (abs(distance) < .5f) .1f * (1f - abs(distance) * 2f) else 0f)
+}
+
+internal fun timeWheelTappedOffset(yInRows: Float): Int = (-3..3)
+    .minBy { abs(timeWheelProjection(it.toFloat()).y - yInRows) }
+
+private fun LazyListLayoutInfo.centerPosition(fallback: Int): Float {
     val center = (viewportStartOffset + viewportEndOffset) / 2f
-    return visibleItemsInfo.minByOrNull { abs(it.offset + it.size / 2f - center) }?.index ?: fallback
+    val item = visibleItemsInfo.minByOrNull { abs(it.offset + it.size / 2f - center) }
+        ?: return fallback.toFloat()
+    return item.index - (item.offset + item.size / 2f - center) / item.size
 }
 
 @Composable
-internal fun WheelTimePickerDialog(title: String, initialMinute: Int, onDismiss: () -> Unit,
-    onConfirm: (Int) -> Unit) {
-    var hour by rememberSaveable(initialMinute) { mutableIntStateOf(initialMinute / 60) }
-    var minute by rememberSaveable(initialMinute) { mutableIntStateOf(initialMinute % 60) }
+internal fun WheelTimePicker(title: String, minuteOfDay: Int, tag: String,
+    modifier: Modifier = Modifier, onMoving: (Boolean) -> Unit = {}, onTime: (Int) -> Unit) {
+    var settledHour by remember { mutableIntStateOf(minuteOfDay / 60) }
+    var settledMinute by remember { mutableIntStateOf(minuteOfDay % 60) }
+    var lastExternal by remember { mutableIntStateOf(minuteOfDay) }
     var hourMoving by remember { mutableStateOf(false) }
     var minuteMoving by remember { mutableStateOf(false) }
-    AlertDialog(onDismissRequest = onDismiss, shape = MaterialTheme.shapes.medium,
-        containerColor = MaterialTheme.colorScheme.background,
-        title = { Text(title) },
-        text = {
-            Row(Modifier.fillMaxWidth().testTag("planner_time_input"),
-                horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                TimeWheel("时", 24, hour, "planner_hour_wheel", Modifier.weight(1f),
-                    { hour = it }, { hourMoving = it })
-                TimeWheel("分", 60, minute, "planner_minute_wheel", Modifier.weight(1f),
-                    { minute = it }, { minuteMoving = it })
-            }
-        },
-        confirmButton = { TextButton(onClick = { onConfirm(hour * 60 + minute) },
-            enabled = !hourMoving && !minuteMoving, modifier = Modifier.testTag("planner_time_confirm")) { Text("确定") } },
-        dismissButton = { TextButton(onClick = onDismiss, modifier = Modifier.testTag("planner_time_cancel")) { Text("取消") } })
+    val currentOnTime by rememberUpdatedState(onTime)
+    val currentOnMoving by rememberUpdatedState(onMoving)
+    // Shortcuts/restoration update both wheels. Independent settlements combine synchronously
+    // against local values, avoiding a stale callback overwriting the other column.
+    SideEffect {
+        if (lastExternal != minuteOfDay) {
+            lastExternal = minuteOfDay
+            settledHour = minuteOfDay / 60
+            settledMinute = minuteOfDay % 60
+        }
+    }
+    LaunchedEffect(hourMoving, minuteMoving) { currentOnMoving(hourMoving || minuteMoving) }
+    DisposableEffect(Unit) { onDispose { currentOnMoving(false) } }
+    Column(modifier.testTag(tag).semantics {
+        text = AnnotatedString(planningTime(minuteOfDay))
+        stateDescription = "$title ${planningTime(minuteOfDay)}"
+    }, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TimeWheel("小时", 24, minuteOfDay / 60, "${tag}_hour_wheel", Modifier.weight(1f), {
+                settledHour = it
+                currentOnTime(settledHour * 60 + settledMinute)
+            }, { hourMoving = it })
+            Text(":", Modifier.offset { IntOffset(0, -2) }.width(12.dp)
+                .testTag("${tag}_colon").clearAndSetSemantics {},
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontSize = MaterialTheme.typography.headlineMedium.fontSize * .8f), color = MaterialTheme.colorScheme.primary,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            TimeWheel("分钟", 60, minuteOfDay % 60, "${tag}_minute_wheel", Modifier.weight(1f), {
+                settledMinute = it
+                currentOnTime(settledHour * 60 + settledMinute)
+            }, { minuteMoving = it })
+        }
+    }
 }
 
 @Composable
@@ -70,60 +122,115 @@ private fun TimeWheel(unit: String, count: Int, value: Int, tag: String, modifie
     val initial = remember { timeWheelInitialIndex(value, count) }
     val list = rememberLazyListState(initialFirstVisibleItemIndex = initial)
     val scope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
+    val currentHaptic by rememberUpdatedState(haptic)
+    var externalAnimation by remember { mutableStateOf(false) }
+    var synchronizedValue by remember { mutableIntStateOf(value) }
+    val currentValue by rememberUpdatedState(value)
     val currentOnValue by rememberUpdatedState(onValue)
     val currentOnMoving by rememberUpdatedState(onMoving)
-    val centered by remember { derivedStateOf { list.layoutInfo.centeredIndex(initial) } }
+    val position by remember { derivedStateOf { list.layoutInfo.centerPosition(initial) } }
+    val centered by remember { derivedStateOf { position.roundToInt() } }
     val rowHeight = with(LocalDensity.current) {
         MaterialTheme.typography.headlineMedium.lineHeight.toDp() + 12.dp
     }.coerceAtLeast(48.dp)
+    val rowPx = with(LocalDensity.current) { rowHeight.toPx() }
+    val density = LocalDensity.current
+    val fling = remember(list, density) {
+        snapFlingBehavior(SnapLayoutInfoProvider(list, SnapPosition.Center),
+            TimeWheelDecay(SplineBasedFloatDecayAnimationSpec(density)).generateDecayAnimationSpec(),
+            spring(dampingRatio = 1f, stiffness = 400f))
+    }
     val colors = MaterialTheme.colorScheme
-    LaunchedEffect(list) {
-        snapshotFlow { list.layoutInfo.centeredIndex(initial) to list.isScrollInProgress }
-            .distinctUntilChanged().collect { (index, moving) ->
-                currentOnValue(timeWheelValue(index, count))
-                currentOnMoving(moving)
+    LaunchedEffect(value, rowPx) {
+        if (timeWheelValue(centered, count) != value) {
+            val target = timeWheelNearestIndex(value, centered, count)
+            externalAnimation = true
+            try {
+                // A low-stiffness, lightly damped spring accelerates, coasts and settles with a
+                // small inertial tail. New targets or direct dragging cancel this motion safely.
+                list.animateScrollBy((target - position) * rowPx,
+                    spring(dampingRatio = .88f, stiffness = 85f, visibilityThreshold = .1f))
+                list.scrollToItem(target)
+            } finally {
+                // A cancelled old animation may report idle before the new one starts. Only
+                // acknowledge its target if it is still the controlled value; a replacement
+                // target remains pending and cannot be overwritten by that old idle event.
+                if (currentValue == value) synchronizedValue = value
+                externalAnimation = false
             }
+        } else synchronizedValue = value
+    }
+    LaunchedEffect(list) {
+        var previous = list.layoutInfo.centerPosition(initial)
+        var wasMoving = false
+        snapshotFlow { list.layoutInfo.centerPosition(initial) to list.isScrollInProgress }
+            .distinctUntilChanged().collect { (next, moving) ->
+                if (moving || wasMoving) repeat(timeWheelCenterCrossings(previous, next)) {
+                    currentHaptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
+                }
+                previous = next
+                wasMoving = moving
+            }
+    }
+    LaunchedEffect(list) {
+        var wasMoving = false
+        snapshotFlow { list.isScrollInProgress }.distinctUntilChanged().collect { moving ->
+            currentOnMoving(moving)
+            if (wasMoving && !moving && !externalAnimation && synchronizedValue == currentValue) {
+                val settled = timeWheelValue(list.layoutInfo.centerPosition(initial).roundToInt(), count)
+                if (settled != currentValue) currentOnValue(settled)
+            }
+            wasMoving = moving
+        }
     }
     fun select(index: Int) {
         scope.launch { list.animateScrollToItem(index.coerceIn(0, count * TimeWheelCycles - 1)) }
     }
-    Box(modifier.height(rowHeight * 5)) {
-        // A quiet center guide; the number and unit carry the selection, not a filled card.
-        Column(Modifier.align(Alignment.Center).fillMaxWidth().height(rowHeight),
-            verticalArrangement = Arrangement.SpaceBetween) {
-            HorizontalDivider(color = colors.outlineVariant)
-            HorizontalDivider(color = colors.outlineVariant)
-        }
-        LazyColumn(state = list, flingBehavior = rememberSnapFlingBehavior(list, SnapPosition.Center),
-            contentPadding = PaddingValues(vertical = rowHeight * 2),
+    Box(modifier.widthIn(min = 48.dp).height(rowHeight * 4.5f).clipToBounds()) {
+        Box(Modifier.align(Alignment.Center).fillMaxWidth().height(rowHeight)
+            .background(colors.primary.copy(alpha = .045f), MaterialTheme.shapes.small))
+        // Invisible list owns touch/velocity and accessibility. Visible digits are separately
+        // projected, so outer rows remain on the curved face throughout the gesture.
+        LazyColumn(state = list, flingBehavior = fling,
+            contentPadding = PaddingValues(vertical = rowHeight * 1.75f),
             modifier = Modifier.fillMaxSize().testTag(tag).semantics {
-                contentDescription = if (unit == "时") "小时" else "分钟"
-                stateDescription = "%02d%s".format(java.util.Locale.ROOT, value, unit)
-                progressBarRangeInfo = ProgressBarRangeInfo(value.toFloat(), 0f..(count - 1).toFloat(), count - 2)
+                contentDescription = unit
+                stateDescription = "%02d".format(java.util.Locale.ROOT, timeWheelValue(centered, count))
+                progressBarRangeInfo = ProgressBarRangeInfo(timeWheelValue(centered, count).toFloat(),
+                    0f..(count - 1).toFloat(), count - 2)
                 setProgress { requested ->
                     select(timeWheelNearestIndex(requested.roundToInt().coerceIn(0, count - 1), centered, count)); true
                 }
                 customActions = listOf(
-                    CustomAccessibilityAction("上一${if (unit == "时") "小时" else "分钟"}") { select(centered - 1); true },
-                    CustomAccessibilityAction("下一${if (unit == "时") "小时" else "分钟"}") { select(centered + 1); true })
+                    CustomAccessibilityAction("上一$unit") { select(centered - 1); true },
+                    CustomAccessibilityAction("下一$unit") { select(centered + 1); true })
             }.onKeyEvent {
                 if (it.type == KeyEventType.KeyDown && (it.key == Key.DirectionUp || it.key == Key.DirectionDown)) {
                     select(centered + if (it.key == Key.DirectionUp) -1 else 1); true
                 } else false
-            }.focusable()) {
-            items(count * TimeWheelCycles) { index ->
-                val distance = abs(index - centered)
-                val selected = distance == 0
-                Box(Modifier.fillMaxWidth().height(rowHeight).clickable { select(index) }
-                    .clearAndSetSemantics {}, contentAlignment = Alignment.Center) {
-                    Text("%02d".format(java.util.Locale.ROOT, timeWheelValue(index, count)),
-                        color = if (selected) colors.primary else colors.onSurface.copy(alpha = if (distance == 1) .65f else .28f),
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+            }.focusable().pointerInput(rowPx) {
+                detectTapGestures { tap ->
+                    select(centered + timeWheelTappedOffset((tap.y - size.height / 2f) / rowPx))
                 }
-            }
+            }) {
+            items(count * TimeWheelCycles) { Spacer(Modifier.fillMaxWidth().height(rowHeight)) }
         }
-        Text(unit, Modifier.align(Alignment.CenterEnd).padding(end = 2.dp).clearAndSetSemantics {},
-            style = MaterialTheme.typography.bodySmall, color = colors.primary)
+        for (offset in -3..3) {
+            val index = centered + offset
+            if (index !in 0 until count * TimeWheelCycles) continue
+            val distance = index - position
+            Text("%02d".format(java.util.Locale.ROOT, timeWheelValue(index, count)),
+                Modifier.align(Alignment.Center).clearAndSetSemantics {}.graphicsLayer {
+                    val projection = timeWheelProjection(index - position)
+                    translationY = projection.y * rowPx
+                    rotationX = projection.rotation
+                    scaleX = projection.scale
+                    scaleY = projection.scale
+                    alpha = projection.alpha
+                    cameraDistance = rowPx * 12f
+                }, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Medium,
+                color = lerp(colors.onSurfaceVariant, colors.primary, (1f - abs(distance)).coerceIn(0f, 1f)))
+        }
     }
 }

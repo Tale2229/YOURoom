@@ -4,6 +4,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DeleteOutline
@@ -12,21 +14,37 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.youroom.domain.allTags
 import com.example.youroom.domain.PersonalTags
 import com.example.youroom.domain.hasTerm
+import com.example.youroom.domain.Campus
 
 @Composable
 fun PreferencesScreen(state: YouRoomState, onRoom: (String?) -> Unit,
-    onClear: (String) -> Unit, onLogout: () -> Unit) {
+    onClear: (String) -> Unit, onLogout: () -> Unit, onCampus: (Campus) -> Unit = {},
+    showHeader: Boolean = true, sharedHeaderMoving: Boolean = false, interactive: Boolean = true) {
+    val westList = rememberLazyListState()
+    val shaheList = rememberLazyListState()
+    CampusFrame(state, onCampus, showHeader, sharedHeaderMoving, interactive,
+        bodyTag = "preferences_campus_body") { page, active, _, _ ->
+        PreferencesContent(page, { if (active) onRoom(it) }, { if (active) onClear(it) },
+            { if (active) onLogout() }, if (page.campus == Campus.XITUCHENG) westList else shaheList, active)
+    }
+}
+
+@Composable
+private fun PreferencesContent(state: YouRoomState, onRoom: (String?) -> Unit,
+    onClear: (String) -> Unit, onLogout: () -> Unit, listState: LazyListState, interactive: Boolean) {
     var confirmExit by remember { mutableStateOf(false) }
     var clearId by remember { mutableStateOf<String?>(null) }
     val profiles = state.campusProfiles.filter {
         it.favorite || it.excluded || state.tagOrder.any(it::hasTerm) || it.note.isNotBlank()
     }.sortedWith(compareByDescending<com.example.youroom.domain.RoomProfile> { it.favorite }.thenBy { it.name })
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().testTag("preferences_list"), state = listState,
+        userScrollEnabled = interactive, contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
             Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("个人偏好", style = MaterialTheme.typography.headlineMedium)
@@ -78,7 +96,7 @@ fun PreferencesScreen(state: YouRoomState, onRoom: (String?) -> Unit,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                     Text(if (state.demo) "结束演示" else if (state.viewingCache) "返回登录" else "退出登录")
                 }
-                Text("YouRoom 1.8.7 · 非学校官方应用", style = MaterialTheme.typography.labelSmall,
+                Text("YouRoom 1.9 · 非学校官方应用", style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
