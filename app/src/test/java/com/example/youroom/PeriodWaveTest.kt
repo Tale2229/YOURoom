@@ -5,7 +5,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PeriodWaveTest {
-    @Test fun beginningAndEndAreFlatAndInvalidInputsAreSafe() {
+    @Test fun invalidInputsAreSafeAndBothEndpointsAreFlat() {
         for (p in listOf(-1f, 0f, 1f, 2f, Float.NaN, Float.POSITIVE_INFINITY)) {
             for (i in 0..13) assertEquals(0f, PeriodWave.amplitude(p, i, 14), 0f)
         }
@@ -52,4 +52,5 @@ class PeriodWaveTest {
         assertEquals(450, PeriodWave.durationMillis)
         assertEquals(3f, PeriodWave.maximumExtensionDp, 0f)
     }
+
 }

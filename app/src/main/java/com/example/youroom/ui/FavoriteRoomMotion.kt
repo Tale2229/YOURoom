@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.first
 
 internal object FavoriteMotionTiming {
     const val Close = 260
-    const val Exit = 220
+    const val Exit = 140
     const val Move = 280
     const val Enter = 220
 }

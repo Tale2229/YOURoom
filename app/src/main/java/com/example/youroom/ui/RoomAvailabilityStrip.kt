@@ -34,6 +34,7 @@ import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 private class PeriodStripSize { var width = 0f }
+private val PeriodStripTopPadding = 8.dp
 
 /** A single popup stays attached while its anchor moves between the strip's original bars. */
 internal class PeriodStripTooltipPositionProvider(private val index: Int, private val count: Int,
@@ -54,6 +55,7 @@ internal class PeriodStripTooltipPositionProvider(private val index: Int, privat
 internal fun RoomAvailabilityStrip(roomId: String, freeSlots: Set<Int>, slots: List<LessonSlot>,
     enabled: Boolean, modifier: Modifier = Modifier, inspectionKey: Any? = null,
     wave: RoomPeriodWave? = null, onInspection: () -> Unit = {}) {
+    val inspectionEnabled = enabled && wave?.isRunning != true
     // Reset transient inspection when the room, response/date, or real period times change.
     var inspected by remember(roomId, slots, inspectionKey) { mutableStateOf<Int?>(null) }
     var pointerHeld by remember(roomId, slots, inspectionKey) { mutableStateOf(false) }
@@ -66,18 +68,21 @@ internal fun RoomAvailabilityStrip(roomId: String, freeSlots: Set<Int>, slots: L
     val gap = with(density) { 3.dp.roundToPx().toFloat() }
     fun numberAt(x: Float): Int? = PeriodStripGeometry.nearestIndex(x - gutter,
         geometry.width - 2 * gutter, slots.size, gap, direction == LayoutDirection.Rtl)?.let { slots[it].number }
-    LaunchedEffect(enabled) { if (!enabled) { inspected = null; pointerHeld = false } }
+    LaunchedEffect(inspectionEnabled) { if (!inspectionEnabled) { inspected = null; pointerHeld = false } }
     LaunchedEffect(pointerHeld, inspected) {
         // Accessibility/keyboard inspection has no pointer release to dismiss it.
         if (!pointerHeld && inspected != null) { delay(2_000); inspected = null }
     }
-    fun inspectAccessibly(number: Int): Boolean { latestInspection(); inspected = number; return true }
+    fun inspectAccessibly(number: Int): Boolean {
+        if (!inspectionEnabled) return false
+        latestInspection(); inspected = number; return true
+    }
     Box(modifier.fillMaxWidth().testTag("room_period_strip_$roomId")
         .onSizeChanged { geometry.width = it.width.toFloat() }
-        .pointerInput(roomId, slots, inspectionKey, enabled, direction, gutter, gap) {
+        .pointerInput(roomId, slots, inspectionKey, inspectionEnabled, direction, gutter, gap) {
             awaitEachGesture {
                 val down = awaitFirstDown(pass = PointerEventPass.Initial)
-                if (!enabled || slots.isEmpty()) return@awaitEachGesture
+                if (!inspectionEnabled || slots.isEmpty()) return@awaitEachGesture
                 inspected = null
                 var x = down.position.x
                 try {
@@ -117,29 +122,29 @@ internal fun RoomAvailabilityStrip(roomId: String, freeSlots: Set<Int>, slots: L
                 } finally { inspected = null; pointerHeld = false }
             }
         }) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
+        Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = PeriodStripTopPadding, bottom = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             slots.forEachIndexed { index, slot -> key(slot.number) {
-                val shown = enabled && inspected == slot.number
+                val shown = inspectionEnabled && inspected == slot.number
                 val color = availabilityColor(slot.number in freeSlots)
                 val visual = if (direction == LayoutDirection.Rtl) slots.lastIndex - index else index
                 val lift by animateDpAsState(if (shown) (-4).dp else 0.dp, tween(90), label = "period_inspection_lift")
                 Box(Modifier.weight(1f).height(5.dp).offset { IntOffset(0, lift.roundToPx()) }
                     .testTag("room_period_${roomId}_${slot.number}")
                     .onKeyEvent { event ->
-                        if (enabled && event.type == KeyEventType.KeyUp && event.key in listOf(Key.Enter, Key.Spacebar)) {
+                        if (inspectionEnabled && event.type == KeyEventType.KeyUp && event.key in listOf(Key.Enter, Key.Spacebar)) {
                             inspectAccessibly(slot.number)
                         } else false
-                    }.focusable(enabled).semantics {
+                    }.focusable(inspectionEnabled).semantics {
                         contentDescription = "第 ${slot.number} 节，${slot.timeLabel}"
                         stateDescription = if (slot.number in freeSlots) "课表空闲" else "未列为空闲"
                         selected = shown
-                        if (enabled) {
+                        if (inspectionEnabled) {
                             onLongClick("查看节次时间") { inspectAccessibly(slot.number) }
                             onClick("查看节次时间") { inspectAccessibly(slot.number) }
                         }
                     }.drawBehind {
-                        val extension = (if (enabled) wave?.amplitude(visual, slots.size) ?: 0f else 0f) *
+                        val extension = (wave?.amplitude(visual, slots.size) ?: 0f) *
                             PeriodWave.maximumExtensionDp.dp.toPx()
                         // Extend upwards into existing padding. The baseline, hit
                         // boxes, colors and row/list measurements never animate.
@@ -147,10 +152,10 @@ internal fun RoomAvailabilityStrip(roomId: String, freeSlots: Set<Int>, slots: L
                     })
             } }
         }
-        slots.firstOrNull { enabled && it.number == inspected }?.let { slot ->
+        slots.firstOrNull { inspectionEnabled && it.number == inspected }?.let { slot ->
             val position = remember(slot.number, slots, density) { with(density) {
                 PeriodStripTooltipPositionProvider(slots.indexOf(slot), slots.size, 24.dp.roundToPx(), 3.dp.roundToPx(),
-                    16.dp.roundToPx(), 4.dp.roundToPx(), 5.dp.roundToPx(),
+                    PeriodStripTopPadding.roundToPx(), 4.dp.roundToPx(), 5.dp.roundToPx(),
                     SlotTimeTooltipPositionProvider(28.dp.roundToPx(), 8.dp.roundToPx()))
             } }
             // Updating number/anchor does not remove and recreate an Android popup window.

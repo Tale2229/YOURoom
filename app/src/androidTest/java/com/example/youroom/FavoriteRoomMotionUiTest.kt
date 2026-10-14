@@ -151,4 +151,23 @@ class FavoriteRoomMotionUiTest {
         assertEquals(classrooms.map { it.id }, displayed.map { it.classroom.id })
         assertTrue(profiles.isEmpty())
     }
+
+    @Test fun disappearanceUsesTheShorterBudgetWithoutChangingCloseMoveOrEnterTiming() {
+        assertEquals(140, FavoriteMotionTiming.Exit)
+        assertEquals(260, FavoriteMotionTiming.Close)
+        assertEquals(280, FavoriteMotionTiming.Move)
+        assertEquals(220, FavoriteMotionTiming.Enter)
+        render()
+        for (favorite in listOf(true, false)) {
+            compose.runOnIdle { pending = true }
+            begin(classrooms.last())
+            compose.mainClock.advanceTimeBy(FavoriteMotionTiming.Close + FavoriteMotionTiming.Exit + 48L)
+            phase(FavoriteMotionPhase.WAIT, 0f)
+            assertEquals(favorite, profiles.getValue(classrooms.last().id).favorite)
+            compose.runOnIdle { pending = false }
+            compose.mainClock.advanceTimeBy(700)
+            phase(FavoriteMotionPhase.IDLE, 1f)
+        }
+        compose.mainClock.autoAdvance = true
+    }
 }

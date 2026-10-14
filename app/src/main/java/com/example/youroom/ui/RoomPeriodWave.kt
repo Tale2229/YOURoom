@@ -1,41 +1,51 @@
 package com.example.youroom.ui
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.runtime.*
 import com.example.youroom.domain.PeriodWave
+import kotlinx.coroutines.flow.first
 
-/** One clock per row; its progress is read by drawing, never by list composition. */
+/** One draw-only pulse per opening. Input changes never cancel an already-started pass. */
 internal class RoomPeriodWave {
+    private var running by mutableStateOf(false)
+    private var request by mutableIntStateOf(0)
     private val progress = Animatable(1f)
-    private var interrupted by mutableStateOf(false)
-    private var played = false
+    private var consumed = false
     private var hasContext = false
     private var previousContext: Any? = null
 
-    fun interrupt() { interrupted = true }
-    fun amplitude(visualIndex: Int, count: Int): Float =
-        if (interrupted) 0f else PeriodWave.amplitude(progress.value, visualIndex, count)
+    val isRunning: Boolean get() = running
+
+    fun interrupt() { consumed = true }
+
+    suspend fun awaitStopped() { snapshotFlow { running }.first { !it } }
+
+    fun amplitude(visualIndex: Int, count: Int): Float {
+        if (!running) return 0f
+        return PeriodWave.amplitude(progress.value, visualIndex, count)
+    }
 
     @Composable
     fun Run(expanded: Boolean, enabled: Boolean, dragging: Boolean, settled: Boolean, context: Any?) {
-        LaunchedEffect(expanded, enabled, dragging, settled, context, interrupted) {
-            // The incoming effect owns cleanup, so a cancelled old animation
-            // cannot later overwrite the new opening's progress.
-            progress.snapTo(1f)
+        // Only start/end flags recompose; changing progress is read in drawBehind.
+        val playing = running
+        LaunchedEffect(request) {
+            if (request != 0) {
+                try {
+                    progress.snapTo(0f)
+                    progress.animateTo(1f, tween(PeriodWave.durationMillis, easing = LinearEasing))
+                } finally { running = false }
+            }
+        }
+        SideEffect {
             val changed = hasContext && previousContext != context
             hasContext = true; previousContext = context
-            if (!expanded) { played = false; interrupted = false; return@LaunchedEffect }
-            if (changed || !enabled || dragging || interrupted) {
-                played = true
-                if (changed || !enabled || dragging) interrupt()
-                return@LaunchedEffect
+            when {
+                !expanded -> consumed = false
+                changed || !enabled || dragging -> consumed = true
+                !settled -> Unit
+                !consumed && !playing -> { consumed = true; running = true; request++ }
             }
-            if (!settled || played) return@LaunchedEffect
-            played = true
-            progress.snapTo(0f)
-            progress.animateTo(1f, tween(PeriodWave.durationMillis, easing = LinearEasing))
         }
     }
 }

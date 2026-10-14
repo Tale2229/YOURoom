@@ -53,15 +53,18 @@ fun RoomTagsDialog(room: RoomMatch, state: YouRoomState, onDismiss: () -> Unit,
 
 @Composable
 fun RoomNoteDialog(room: RoomMatch, onDismiss: () -> Unit, onChange: (RoomProfile) -> Unit) {
-    var draft by remember(room.classroom.id) { mutableStateOf(room.profile) }
-    LaunchedEffect(room.profile) { draft = room.profile }
-    fun update(value: String) { draft = draft.copy(note = value.take(500)); onChange(draft) }
+    // Old notes remain stored until explicitly edited; just limit the editor's draft.
+    var draft by remember(room.classroom.id) { mutableStateOf(room.profile.copy(note = RoomNotes.limit(room.profile.note))) }
+    LaunchedEffect(room.profile) { draft = room.profile.copy(note = RoomNotes.limit(room.profile.note)) }
+    fun update(value: String) { draft = draft.copy(note = RoomNotes.limit(value)); onChange(draft) }
     AlertDialog(onDismissRequest = onDismiss, shape = MaterialTheme.shapes.small,
         modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth().padding(horizontal = 20.dp).testTag("room_note_dialog"),
         properties = DialogProperties(usePlatformDefaultWidth = false), containerColor = MaterialTheme.colorScheme.background,
         title = { Text("${room.classroom.name} · 备注", style = MaterialTheme.typography.titleLarge) },
         text = { OutlinedTextField(draft.note, ::update, Modifier.fillMaxWidth().testTag("room_note"),
-            label = { Text("个人备注") }, minLines = 2, maxLines = 4) },
+            label = { Text("个人备注") }, minLines = 2, maxLines = 4,
+            supportingText = { Text("${RoomNotes.length(draft.note)}/${RoomNotes.maximumLength}",
+                Modifier.testTag("room_note_count")) }) },
         confirmButton = { TextButton(onClick = onDismiss, modifier = Modifier.testTag("close_room_note")) { Text("关闭") } },
         dismissButton = { TextButton(onClick = { update("") }, modifier = Modifier.testTag("clear_room_note")) { Text("清空") } })
 }

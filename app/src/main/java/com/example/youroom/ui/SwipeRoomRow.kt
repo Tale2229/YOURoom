@@ -8,7 +8,9 @@ import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Label
+import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -32,6 +34,8 @@ import com.example.youroom.domain.*
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineStart
 import kotlin.math.abs
 import kotlin.math.sign
 import kotlin.math.roundToInt
@@ -57,14 +61,19 @@ internal fun RoomActionButtons(profile: RoomProfile, onFavorite: () -> Unit, onT
         val buttons = listOf(
             Triple(if (profile.favorite) Icons.Outlined.Star else Icons.Outlined.StarBorder,
                 if (profile.favorite) "取消收藏 ${profile.name}" else "收藏 ${profile.name}", onFavorite),
-            Triple(Icons.AutoMirrored.Outlined.Label, "修改标签 ${profile.name}", onTags),
-            Triple(Icons.Outlined.Edit, "修改备注 ${profile.name}", onNote),
+            Triple(if (profile.outlets || profile.allTags.isNotEmpty()) Icons.AutoMirrored.Filled.Label else Icons.AutoMirrored.Outlined.Label,
+                "修改标签 ${profile.name}", onTags),
+            Triple(if (profile.note.isNotBlank()) Icons.Filled.Edit else Icons.Outlined.Edit, "修改备注 ${profile.name}", onNote),
             Triple(if (profile.excluded) Icons.Filled.Cancel else Icons.Outlined.Block,
                 if (profile.excluded) "取消排除 ${profile.name}" else "排除 ${profile.name}", onExcluded))
         buttons.forEachIndexed { index, (icon, description, action) ->
             IconButton(onClick = action, enabled = enabled, modifier = Modifier.width(if (compact) 40.dp else 48.dp).heightIn(min = 48.dp)
-                .testTag("room_action_${profile.roomId}_$index")) {
-                Icon(icon, description, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
+                .testTag("room_action_${profile.roomId}_$index").semantics {
+                    if (index == 1) stateDescription = if (profile.outlets || profile.allTags.isNotEmpty()) "已有标签" else "无标签"
+                    if (index == 2) stateDescription = if (profile.note.isNotBlank()) "已有备注" else "无备注"
+                }) {
+                Icon(icon, description, Modifier.size(22.dp).testTag("room_action_icon_${profile.roomId}_$index"),
+                    tint = MaterialTheme.colorScheme.primary)
             }
         }
     }
@@ -74,10 +83,12 @@ internal fun RoomActionButtons(profile: RoomProfile, onFavorite: () -> Unit, onT
 private fun RoomActionRail(profile: RoomProfile, onFavorite: () -> Unit, onTags: () -> Unit,
     onNote: () -> Unit, onExcluded: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     val colors = MaterialTheme.colorScheme
-    Column(modifier.fillMaxHeight().padding(horizontal = 12.dp, vertical = 4.dp), verticalArrangement = Arrangement.SpaceBetween) {
+    Column(modifier.fillMaxHeight().padding(horizontal = 12.dp), verticalArrangement = Arrangement.Center) {
         HorizontalDivider(Modifier.fillMaxWidth()
             .testTag("room_action_line_${profile.roomId}_top_thin"), color = colors.outlineVariant)
+        Spacer(Modifier.height(2.dp))
         RoomActionButtons(profile, onFavorite, onTags, onNote, onExcluded, enabled = enabled, compact = true)
+        Spacer(Modifier.height(2.dp))
         // The rail and its decoration stay entirely above the fixed period strip.
         HorizontalDivider(Modifier.fillMaxWidth()
             .testTag("room_action_line_${profile.roomId}_bottom_thin"), color = colors.outlineVariant)
@@ -94,7 +105,8 @@ internal fun ExcludedRoomMarker(profile: RoomProfile) {
 internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List<String>, expanded: Boolean,
     active: Boolean, onExpanded: (Boolean) -> Unit, onFavorite: () -> Unit, onTags: () -> Unit,
     onNote: () -> Unit, onExcluded: () -> Unit, modifier: Modifier = Modifier, inspectionKey: Any? = null,
-    interactionEnabled: Boolean = active, favoriteClosing: Boolean = false) {
+    interactionEnabled: Boolean = active, favoriteClosing: Boolean = false,
+    onActionPending: (Boolean) -> Unit = {}) {
     val profile = match.profile
     val swipe = remember(profile.roomId) { AnchoredDraggableState(false) }
     val density = LocalDensity.current.density
@@ -125,22 +137,25 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
         swipe.settledValue && !swipe.offset.isNaN() && abs(swipe.offset + railWidth) < .5f
     } }
     val wave = remember(profile.roomId) { RoomPeriodWave() }
+    val actionScope = rememberCoroutineScope()
+    var pendingAction by remember(profile.roomId) { mutableStateOf(false) }
     wave.Run(expanded, active && interactionEnabled, dragging, settledOpen, inspectionKey to slots)
     val labels = remember(profile, terms) { terms.filter { it != PersonalTags.favorite && profile.hasTerm(it) } }
     val colors = MaterialTheme.colorScheme
+    val noteHeight = with(LocalDensity.current) { MaterialTheme.typography.bodySmall.lineHeight.toDp() }
     Column(modifier.fillMaxWidth().clipToBounds().background(colors.background).testTag("room_row_${profile.roomId}").semantics {
         stateDescription = listOfNotNull(if (profile.favorite) "已收藏" else null,
             if (profile.excluded) "已排除" else null).joinToString("，")
-        if (active && interactionEnabled) customActions = listOf(CustomAccessibilityAction(if (expanded) "收起教室操作" else "展开教室操作") {
+        if (active && interactionEnabled && !pendingAction) customActions = listOf(CustomAccessibilityAction(if (expanded) "收起教室操作" else "展开教室操作") {
             if (expanded) wave.interrupt()
             latestExpanded(!expanded); true
         })
     }) {
     Box(Modifier.fillMaxWidth().heightIn(min = 58.dp).clipToBounds().testTag("room_swipe_${profile.roomId}")
-        .pointerInput(swipe, active, interactionEnabled, railWidth, density, inspectionKey) {
+        .pointerInput(swipe, active, interactionEnabled, railWidth, density, inspectionKey, pendingAction) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
-            if (!active || !interactionEnabled) return@awaitEachGesture
+            if (!active || !interactionEnabled || pendingAction) return@awaitEachGesture
             val before = latestIntent
             val velocity = VelocityTracker().apply { addPosition(down.uptimeMillis, down.position) }
             var startOffset = 0f
@@ -186,17 +201,31 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
         }
     }) {
         if (revealed && active) Box(Modifier.matchParentSize().background(colors.surfaceContainer)) {
-            val actionsReady = expanded && !dragging && settledOpen && interactionEnabled
-            RoomActionRail(profile, { wave.interrupt(); latestExpanded(false); onFavorite() },
+            val actionsReady = expanded && !dragging && settledOpen && interactionEnabled && !pendingAction
+            fun afterWave(action: () -> Unit) {
+                if (pendingAction) return
+                wave.interrupt(); latestExpanded(false)
+                pendingAction = true
+                onActionPending(true)
+                actionScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                    try { wave.awaitStopped() }
+                    finally {
+                        // Disposal cannot keep drawing a tail, but must not drop
+                        // an accepted favorite/exclusion click when the row leaves.
+                        try { action() } finally { pendingAction = false; onActionPending(false) }
+                    }
+                }
+            }
+            RoomActionRail(profile, { afterWave(onFavorite) },
                 { wave.interrupt(); onTags() }, { wave.interrupt(); onNote() },
-                { wave.interrupt(); latestExpanded(false); onExcluded() },
+                { afterWave(onExcluded) },
                 Modifier.align(AbsoluteAlignment.CenterRight).width(RoomActionRailWidth).testTag("room_actions_${profile.roomId}")
                     .then(if (actionsReady) Modifier else Modifier.clearAndSetSemantics {}), enabled = actionsReady)
         }
         Box(Modifier.fillMaxWidth().absoluteOffset {
             IntOffset(if (swipe.offset.isNaN()) 0 else swipe.requireOffset().roundToInt(), 0)
         }.background(colors.background, RectangleShape).testTag("room_face_${profile.roomId}")
-            .then(if (expanded) Modifier.clickable(enabled = interactionEnabled) {
+            .then(if (expanded) Modifier.clickable(enabled = interactionEnabled && !pendingAction) {
                 wave.interrupt(); latestExpanded(false)
             } else Modifier)) {
                 Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 16.dp)) {
@@ -208,15 +237,22 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
                     Text(listOfNotNull(match.classroom.buildingLabel, match.classroom.capacity?.let { "容量 $it" })
                         .plus(labels).joinToString(" · "), Modifier.padding(top = 4.dp),
                         style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
-                    if (profile.note.isNotBlank()) Text(profile.note, Modifier.padding(top = 4.dp), maxLines = 1,
-                        overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                    Box(Modifier.fillMaxWidth().padding(top = 4.dp).height(noteHeight).clipToBounds()
+                        .testTag("room_note_line_${profile.roomId}")
+                        .then(if (profile.note.isBlank()) Modifier.clearAndSetSemantics {} else Modifier),
+                        contentAlignment = Alignment.CenterStart) {
+                        Text(RoomNotes.limit(profile.note).ifBlank { " " },
+                            Modifier.testTag("room_note_text_${profile.roomId}"),
+                            minLines = 1, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                    }
                 }
             if (profile.favorite) FavoriteCornerMarker(profile.roomId,
                 Modifier.align(AbsoluteAlignment.TopRight).absoluteOffset(x = (-24).dp))
         }
     }
         RoomAvailabilityStrip(profile.roomId, match.freeSlots, slots, active && interactionEnabled,
-            inspectionKey = inspectionKey, wave = wave, onInspection = wave::interrupt)
+            inspectionKey = inspectionKey, wave = wave)
         HorizontalDivider(Modifier.padding(horizontal = 24.dp).testTag("room_divider_${profile.roomId}"))
         Spacer(Modifier.height(16.dp))
     }

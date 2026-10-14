@@ -78,7 +78,7 @@ fun PreferencesScreen(state: YouRoomState, onRoom: (String?) -> Unit,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                     Text(if (state.demo) "结束演示" else if (state.viewingCache) "返回登录" else "退出登录")
                 }
-                Text("YouRoom 1.8.5 · 非学校官方应用", style = MaterialTheme.typography.labelSmall,
+                Text("YouRoom 1.8.7 · 非学校官方应用", style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }

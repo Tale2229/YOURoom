@@ -46,16 +46,16 @@ class RoomPeriodWaveUiTest {
                 YouRoomTheme(campus = campus, darkTheme = dark) {
                     wave.Run(expanded, enabled, dragging, settled, revision to direction)
                     Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.background) {
-                        RoomAvailabilityStrip(id, free, slots, enabled, wave = wave, onInspection = wave::interrupt)
+                        RoomAvailabilityStrip(id, free, slots, enabled, wave = wave)
                     }
                 }
             }
         }
         compose.mainClock.autoAdvance = false
     }
-    private fun open() {
+    private fun open(elapsed: Long = 160) {
         compose.runOnIdle { expanded = true; settled = true }
-        compose.mainClock.advanceTimeBy(64)
+        compose.mainClock.advanceTimeBy(elapsed)
     }
     private fun flat() = compose.runOnIdle {
         assertTrue((0..13).all { wave.amplitude(it, 14) == 0f })
@@ -64,18 +64,30 @@ class RoomPeriodWaveUiTest {
         assertTrue((0..13).any { wave.amplitude(it, 14) > 0f })
     }
 
-    @Test fun startsOnlyAfterFullSettlementThenPlaysOncePerOpening() {
+    private fun waitForLeftPeak() {
+        for (frame in 0..40) {
+            val atEdge = compose.runOnIdle {
+                wave.amplitude(0, 14) > .5f
+            }
+            if (atEdge) return
+            compose.mainClock.advanceTimeBy(16)
+        }
+        fail("Wave never reached the requested physical edge")
+    }
+
+    @Test fun startsOnlyAfterFullSettlementAndPlaysOncePerOpening() {
         render()
         compose.runOnIdle { expanded = true }
         compose.mainClock.advanceTimeBy(600)
         flat()
         compose.runOnIdle { settled = true }
-        compose.mainClock.advanceTimeBy(64)
+        compose.mainClock.advanceTimeBy(160)
         moving()
-        compose.mainClock.advanceTimeBy(PeriodWave.durationMillis + 64L)
+        compose.mainClock.advanceTimeBy(600)
         flat()
         compose.runOnIdle { settled = false }
-        compose.mainClock.advanceTimeBy(32)
+        compose.mainClock.advanceTimeBy(700)
+        flat()
         compose.runOnIdle { settled = true }
         compose.mainClock.advanceTimeBy(64)
         flat()
@@ -85,17 +97,22 @@ class RoomPeriodWaveUiTest {
         compose.mainClock.autoAdvance = true
     }
 
-    @Test fun clicksAndNewDragsStopImmediatelyAndDoNotResumeOnTheSameOpenRail() {
+    @Test fun clicksAndNewDragsFinishTheCurrentTraversalWithoutResumingTheSameOpening() {
         render(); open(); moving()
+        val before = compose.runOnIdle { (0..13).map { wave.amplitude(it, 14) } }
         compose.runOnIdle { wave.interrupt() }
-        flat()
-        compose.mainClock.advanceTimeBy(96)
+        compose.runOnIdle { assertEquals(before, (0..13).map { wave.amplitude(it, 14) }); assertTrue(wave.isRunning) }
+        compose.mainClock.advanceTimeBy(32)
+        moving()
+        compose.mainClock.advanceTimeBy(700)
         flat()
         compose.runOnIdle { expanded = false }
         compose.mainClock.advanceTimeBy(32)
         open(); moving()
         compose.runOnIdle { dragging = true }
         compose.mainClock.advanceTimeBy(32)
+        moving()
+        compose.mainClock.advanceTimeBy(700)
         flat()
         compose.runOnIdle { dragging = false }
         compose.mainClock.advanceTimeBy(64)
@@ -103,18 +120,20 @@ class RoomPeriodWaveUiTest {
         compose.mainClock.autoAdvance = true
     }
 
-    @Test fun responseChangeOrDisablingCancelsAndAClosedRailCanRearm() {
+    @Test fun responseChangeAndDisablingBothRetainTheFiniteTailAndAClosedRailCanRearm() {
         render(); open(); moving()
         compose.runOnIdle { revision++ }
         compose.mainClock.advanceTimeBy(32)
-        flat()
-        compose.mainClock.advanceTimeBy(96)
+        moving()
+        compose.mainClock.advanceTimeBy(700)
         flat()
         compose.runOnIdle { expanded = false }
         compose.mainClock.advanceTimeBy(32)
         open(); moving()
         compose.runOnIdle { enabled = false }
         compose.mainClock.advanceTimeBy(32)
+        moving()
+        compose.mainClock.advanceTimeBy(700)
         flat()
         compose.runOnIdle { enabled = true }
         compose.mainClock.advanceTimeBy(64)
@@ -122,12 +141,20 @@ class RoomPeriodWaveUiTest {
         compose.mainClock.autoAdvance = true
     }
 
-    @Test fun inspectingTimeInterruptsTheWaveButDoesNotCloseTheActions() {
-        render(); open(); moving()
-        compose.onNodeWithTag("room_period_${id}_6", useUnmergedTree = true)
-            .performSemanticsAction(SemanticsActions.OnLongClick) { assertTrue(it()) }
+    @Test fun pointerKeyboardAndAccessibleTimeInspectionAreBlockedThroughPlaybackAndItsTail() {
+        render(); open(64); moving()
+        val bar = compose.onNodeWithTag("room_period_${id}_6", useUnmergedTree = true)
+        assertFalse(bar.fetchSemanticsNode().config.contains(SemanticsActions.OnLongClick))
+        assertFalse(bar.fetchSemanticsNode().config.contains(SemanticsActions.OnClick))
+        val strip = compose.onNodeWithTag("room_period_strip_$id")
+        strip.performTouchInput { down(center); advanceEventTime(260); up() }
+        compose.onNodeWithTag("room_time_${id}_tooltip").assertDoesNotExist()
+        compose.runOnIdle { wave.interrupt() }
         compose.mainClock.advanceTimeBy(32)
-        flat()
+        assertFalse(bar.fetchSemanticsNode().config.contains(SemanticsActions.OnLongClick))
+        compose.mainClock.advanceTimeBy(700)
+        bar.performSemanticsAction(SemanticsActions.OnLongClick) { assertTrue(it()) }
+        compose.mainClock.advanceTimeBy(32)
         compose.onNodeWithTag("room_time_${id}_label_6").assertTextEquals("6 · 13:00–13:45")
         compose.runOnIdle { assertTrue(expanded) }
         compose.mainClock.autoAdvance = true
@@ -138,11 +165,11 @@ class RoomPeriodWaveUiTest {
         val strip = compose.onNodeWithTag("room_period_strip_$id")
         for (target in Campus.entries) for (night in listOf(false, true)) for (layout in LayoutDirection.entries) {
             compose.runOnIdle { expanded = false; campus = target; dark = night; direction = layout }
-            compose.mainClock.advanceTimeBy(32)
+            compose.mainClock.advanceTimeBy(700)
             val before = strip.fetchSemanticsNode().boundsInRoot
             val bars = slots.map { compose.onNodeWithTag("room_period_${id}_${it.number}", useUnmergedTree = true)
                 .fetchSemanticsNode().boundsInRoot }
-            open(); moving()
+            open(64); moving()
             assertEquals(before, strip.fetchSemanticsNode().boundsInRoot)
             slots.forEachIndexed { i, slot ->
                 assertEquals(bars[i], compose.onNodeWithTag("room_period_${id}_${slot.number}", useUnmergedTree = true)
@@ -168,10 +195,44 @@ class RoomPeriodWaveUiTest {
     }
 
     @Test fun animationFramesOnlyRedrawAndNeverRecomposeTheContainingScreen() {
-        render(); open(); moving()
+        render(); open(64); moving()
         val count = compose.runOnIdle { compositions }
-        compose.mainClock.advanceTimeBy(600)
+        compose.mainClock.advanceTimeBy(256)
         compose.runOnIdle { assertEquals(count, compositions) }
+        moving()
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Test fun thePulseReachesTheLeftThenBecomesFlatAndNeverReturnsOrDwells() {
+        render(); open(64)
+        waitForLeftPeak()
+        compose.mainClock.advanceTimeBy(200)
+        flat()
+        compose.mainClock.advanceTimeBy(2_000)
+        flat()
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Test fun anEarlyStopRequestStillVisitsTheLeftmostBarBeforeFinishing() {
+        render(); open(64)
+        compose.runOnIdle { wave.interrupt() }
+        waitForLeftPeak()
+        compose.runOnIdle { assertTrue(wave.isRunning) }
+        compose.mainClock.advanceTimeBy(160)
+        flat()
+        compose.runOnIdle { assertFalse(wave.isRunning) }
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Test fun quicklyReopeningWaitsForThePreviousPassBeforeStartingTheNextPass() {
+        render(); open()
+        compose.runOnIdle { expanded = false }
+        compose.mainClock.advanceTimeBy(32)
+        compose.runOnIdle { expanded = true }
+        compose.mainClock.advanceTimeBy(300)
+        moving()
+        compose.runOnIdle { assertTrue(wave.isRunning) }
+        compose.mainClock.advanceTimeBy(700)
         flat()
         compose.mainClock.autoAdvance = true
     }

@@ -136,6 +136,7 @@ private fun ClassroomPage(state: YouRoomState, listState: LazyListState, active:
     onRemoveTag: (String) -> Unit, onTagOrder: (List<String>) -> Unit, onExcluded: (Classroom) -> Unit) {
     var showFilters by remember { mutableStateOf(false) }
     var expandedRoom by remember(state.campus, state.demo) { mutableStateOf<String?>(null) }
+    var pendingActionRoom by remember(state.campus, state.demo) { mutableStateOf<String?>(null) }
     var previousEditorRoom by remember(state.campus, state.demo) { mutableStateOf<String?>(null) }
     val snapshot = state.campusSnapshot
     val search = rememberClassroomSearch(state, enabled = searchEnabled)
@@ -222,7 +223,11 @@ private fun ClassroomPage(state: YouRoomState, listState: LazyListState, active:
                 onExcluded = { onExcluded(room.classroom) },
                 modifier = rowMotion.graphicsLayer { alpha = if (isMovingFavorite) favorites.alpha.value else 1f },
                 inspectionKey = snapshot?.let { it.queryDate to it.fetchedAt },
-                interactionEnabled = active && !favorites.busy, favoriteClosing = isMovingFavorite)
+                interactionEnabled = active && !favorites.busy && (pendingActionRoom == null || pendingActionRoom == id),
+                favoriteClosing = isMovingFavorite,
+                onActionPending = { pending ->
+                    if (pending) pendingActionRoom = id else if (pendingActionRoom == id) pendingActionRoom = null
+                })
         }
     }
 }

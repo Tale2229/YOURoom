@@ -19,4 +19,5 @@ object PeriodWave {
         val value = sin(PI * phase).toFloat()
         return value * value
     }
+
 }

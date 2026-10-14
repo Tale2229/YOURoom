@@ -245,7 +245,7 @@ class RoomAvailabilityUiTest {
         compose.onNodeWithTag(tooltip).assertDoesNotExist()
     }
 
-    @Test fun onlyTheUpperRegionSlidesAndExpandedRowsStillAllowTimeInspection() {
+    @Test fun onlyTheUpperRegionSlidesAndAnOpenRowBecomesInspectableAfterOnePass() {
         render(list = true)
         val strip = compose.onNodeWithTag(stripTag).fetchSemanticsNode().boundsInRoot
         val bars = (1..14).map { face(it).fetchSemanticsNode().boundsInRoot }
@@ -254,6 +254,7 @@ class RoomAvailabilityUiTest {
         compose.onNodeWithTag(tooltip).assertDoesNotExist()
         assertEquals(strip, compose.onNodeWithTag(stripTag).fetchSemanticsNode().boundsInRoot)
         for (i in 1..14) assertEquals(bars[i - 1], face(i).fetchSemanticsNode().boundsInRoot)
+        // The one-shot wave finishes automatically; no editor/response change is needed.
         hold(14)
         label(14).assertTextEquals("14 · 20:10–20:55")
         val six = point(6)
