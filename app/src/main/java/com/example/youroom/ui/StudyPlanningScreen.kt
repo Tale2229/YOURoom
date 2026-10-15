@@ -1,8 +1,9 @@
 package com.example.youroom.ui
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -17,16 +18,25 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Check
-import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.stateDescription
 import com.example.youroom.domain.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.withContext
 import java.time.Clock
+import kotlinx.coroutines.launch
 
 val PlanningGoalSaver = listSaver<PlanningDraft, Any>(
     save = { listOf("v3", it.start, it.end, it.flexible, it.origin ?: "", it.savedWindows.size) +
@@ -42,123 +52,119 @@ val PlanningGoalSaver = listSaver<PlanningDraft, Any>(
         if (it.size >= 6) it.drop(4).chunked(2).map { pair -> StudyWindow(pair[0] as Int,pair[1] as Int) }
         else emptyList())) })
 
-private data class PlanningRequest(val snapshot: ClassroomSnapshot?, val campus: Campus,
-    val today: java.time.LocalDate, val profiles: Map<String, RoomProfile>, val goal: PlanningGoal)
-private data class FinishedPlanning(val request: PlanningRequest, val result: PlanningResult)
-
 @Composable
-fun StudyPlanningScreen(state: YouRoomState, goal: PlanningDraft, requested: Boolean,
+fun StudyPlanningScreen(state: YouRoomState, goal: PlanningDraft, plans: Map<Campus,PlanningExecution>,
     onGoal: (PlanningDraft) -> Unit, onGenerate: () -> Unit, onCampus: (Campus) -> Unit,
     onRefresh: () -> Unit, onRoom: (String?) -> Unit,
+    onOption: (Campus,Long,Int) -> Unit = { _,_,_ -> },
     clock: Clock = Clock.system(SchoolZone), showHeader: Boolean = true,
     sharedHeaderMoving: Boolean = false, interactive: Boolean = true) {
     val westList = rememberLazyListState()
     val shaheList = rememberLazyListState()
     var heldGoal by remember { mutableStateOf(goal) }
-    var heldRequested by remember { mutableStateOf(requested) }
     CampusFrame(state, onCampus, showHeader, sharedHeaderMoving, interactive,
         bodyTag = "planner_campus_body") { page, active, _, ready ->
         val displayedGoal = if (ready) goal else heldGoal
-        val displayedRequested = if (ready) requested else heldRequested
-        SideEffect { if (ready) { heldGoal = goal; heldRequested = requested } }
-        StudyPlanningContent(page, displayedGoal, displayedRequested,
+        SideEffect { if (ready) heldGoal = goal }
+        StudyPlanningContent(page, displayedGoal, plans[page.campus],
             { if (active) onGoal(it) }, { if (active) onGenerate() },
-            { if (active) onRefresh() }, { if (active) onRoom(it) }, clock,
+            { if (active) onRefresh() }, { if (active) onRoom(it) },
+            { id,index -> if (active) onOption(page.campus,id,index) },clock,
             if (page.campus == Campus.XITUCHENG) westList else shaheList, active)
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun StudyPlanningContent(state: YouRoomState, goal: PlanningDraft, requested: Boolean,
+private fun StudyPlanningContent(state: YouRoomState, goal: PlanningDraft, execution: PlanningExecution?,
     onGoal: (PlanningDraft) -> Unit, onGenerate: () -> Unit, onRefresh: () -> Unit,
-    onRoom: (String?) -> Unit, clock: Clock, listState: LazyListState,
+    onRoom: (String?) -> Unit, onOption: (Long,Int) -> Unit,clock: Clock, listState: LazyListState,
     interactive: Boolean) {
     var startMoving by remember { mutableStateOf(false) }
     var endMoving by remember { mutableStateOf(false) }
     var wheelGoal by remember(goal) { mutableStateOf(goal) }
     var expectedDialog by remember(state.campus) { mutableStateOf(false) }
     var additionError by remember(goal, state.campus) { mutableStateOf<PlanningResult?>(null) }
-    var choice by remember(state.campus,goal.savedWindows,goal.flexible,goal.expectedRooms) { mutableIntStateOf(0) }
     val snapshot = state.campusSnapshot
     val planningToday = if (state.demo) state.today else java.time.LocalDate.now(clock.withZone(SchoolZone))
     val stale = snapshot?.isCurrentOn(planningToday) == false
     val confirmedGoal = remember(goal.savedWindows,goal.flexible,goal.expectedRooms) { PlanningSchedule.confirmedGoal(goal) }
-    val request = remember(snapshot, state.campus, planningToday, state.profiles, confirmedGoal, requested) {
-        if (requested && confirmedGoal != null) PlanningRequest(snapshot, state.campus, planningToday, state.profiles, confirmedGoal) else null
-    }
-    val finished by produceState<FinishedPlanning?>(null, request) {
-        val input = request ?: return@produceState
-        val result = withContext(Dispatchers.Default) {
-            val context = kotlin.coroutines.coroutineContext
-            input.snapshot?.let { StudyPlanner.planConfirmed(it, input.campus, input.today, input.profiles,
-                input.goal) { context.ensureActive() } } ?: PlanningResult(message = "请先获取当前校区的今日数据。")
-        }
-        // Marshal the completion explicitly: also prevents test frame-clock dispatchers
-        // from applying a worker snapshot in the middle of UI measurement.
-        withContext(Dispatchers.Main.immediate) { value = FinishedPlanning(input, result) }
-    }
-    val result = finished?.takeIf { it.request == request }?.result
-    val pending = request != null && result == null
-    LaunchedEffect(result) { choice = 0 }
+    val result = execution?.result
+    val pending = execution?.pending == true
+    val choice = execution?.selectedOption ?: 0
     val expectedCount = goal.expectedRooms.count { it.startsWith("${state.campus.dataKey}:") }
+    var westClosed by rememberSaveable(state.demo) { mutableStateOf(false) }
+    var shaheClosed by rememberSaveable(state.demo) { mutableStateOf(false) }
+    val collapsed=if (state.campus==Campus.XITUCHENG) westClosed else shaheClosed
+    fun closePanel(value: Boolean) { if (state.campus==Campus.XITUCHENG) westClosed=value else shaheClosed=value }
+    val editorScroll=rememberScrollState()
+    val scope=rememberCoroutineScope()
+    val displaySlots=remember(snapshot) { snapshot?.slots.orEmpty().sortedBy { it.start } }
+    LaunchedEffect(collapsed) { if (collapsed) { startMoving=false; endMoving=false } }
 
     if (expectedDialog) ExpectedRoomDialog(state, goal.expectedRooms,
         { onGoal(goal.copy(expectedRooms = it)) }, { expectedDialog = false })
 
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    // Reserve a real detail viewport, including the target strip and comparison header.
+    // On short screens the input area can scroll independently instead of starving it.
+    val editorMaximum=minOf(maxHeight*.6f,maxHeight-104.dp).coerceAtLeast(0.dp)
     Column(Modifier.fillMaxSize().testTag("planner_screen")) {
-        LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("planner_list"),
-            state = listState, userScrollEnabled = interactive, contentPadding = PaddingValues(bottom = 24.dp)) {
-            if (state.demo) item { StatusNotice("演示规划 · 空闲安排为虚构，标记不写入真实数据。") }
-            if (stale) item { StatusNotice("缓存已跨日，请刷新今日数据后规划。", isError = true) }
-            item {
+        AnimatedVisibility(!collapsed,enter=expandVertically(tween(220),expandFrom=Alignment.Top)+fadeIn(tween(140)),
+            exit=shrinkVertically(tween(220),shrinkTowards=Alignment.Top)+fadeOut(tween(120)),label="planning input panel") {
+            Column(Modifier.fillMaxWidth().heightIn(max=editorMaximum).verticalScroll(editorScroll).testTag("planner_editor")) {
+            if (state.demo) StatusNotice("演示规划 · 空闲安排为虚构，标记不写入真实数据。")
+            if (stale) StatusNotice("缓存已跨日，请刷新今日数据后规划。", isError = true)
                 Column(Modifier.padding(horizontal = 24.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        WheelTimePicker("开始时间", goal.start, "planner_start", Modifier.weight(1f),
-                            onMoving = { startMoving = it }, viewportRows = 3.5f) {
-                            wheelGoal = wheelGoal.copy(start = it); onGoal(wheelGoal)
-                        }
-                        WheelTimePicker("结束时间", goal.end, "planner_end", Modifier.weight(1f),
-                            onMoving = { endMoving = it }, viewportRows = 3.5f) {
-                            wheelGoal = wheelGoal.copy(end = it); onGoal(wheelGoal)
-                        }
-                    }
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        PlanningPeriods(goal, interactive && !pending && !startMoving && !endMoving, Modifier.weight(1f)) { index ->
-                            onGoal(PlanningSchedule.remove(goal,index))
-                        }
-                        IconButton(onClick = {
+                    PlanningTimeControls(goal,
+                        addEnabled = interactive && !startMoving && !endMoving && !pending && goal.savedWindows.size < PlanningPolicy.periodLimit,
+                        expectedEnabled = interactive && snapshot != null && !stale,
+                        flexibleEnabled = interactive && !pending,
+                        generateEnabled = interactive && !pending && !startMoving && !endMoving && confirmedGoal != null && snapshot != null && !stale,
+                        expectedCount = expectedCount, pending = pending,
+                        onStartMoving = { startMoving = it }, onEndMoving = { endMoving = it },
+                        onStart = { wheelGoal = wheelGoal.copy(start = it); onGoal(wheelGoal) },
+                        onEnd = { wheelGoal = wheelGoal.copy(end = it); onGoal(wheelGoal) },
+                        onAdd = {
                             val now = if (state.demo) null else java.time.LocalTime.now(clock.withZone(SchoolZone))
                                 .let { (it.toSecondOfDay()+59)/60 }
                             val addition = PlanningSchedule.add(goal,now)
                             if (addition.goal != null) onGoal(addition.goal)
                             else additionError = addition.error
-                        }, enabled = interactive && !startMoving && !endMoving && !pending &&
-                            goal.savedWindows.size < PlanningPolicy.periodLimit,
-                            modifier = Modifier.size(48.dp).testTag("planner_add_period")) {
-                            Icon(Icons.Outlined.Add,"添加时段",Modifier.size(20.dp))
-                        }
-                    }
-                    Row(Modifier.fillMaxWidth().testTag("planner_actions"), verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Box(Modifier.weight(1f)) {
-                            PlanningAction("期望教室", false, interactive && snapshot != null && !stale,
-                                Modifier.fillMaxWidth().testTag("planner_expected")) { expectedDialog = true }
-                            if (expectedCount > 0) Badge(Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-3).dp)
-                                .testTag("planner_expected_badge").semantics(mergeDescendants = true) {}, containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary) { Text(expectedCount.toString()) }
-                        }
-                        PlanningAction("宽松模式", goal.flexible, interactive && !pending,
-                            Modifier.weight(1f).testTag("planner_adjust"), toggle = true) { onGoal(goal.copy(flexible = !goal.flexible)) }
-                        PlanningAction(if (pending) "计算中…" else "生成规划", false,
-                            interactive && !pending && !startMoving && !endMoving && confirmedGoal != null && snapshot != null && !stale,
-                            Modifier.weight(1f).testTag("planner_generate"), primary = true,
-                            onClick = { additionError = null; onGenerate() })
-                    }
+                        }, onExpected = { expectedDialog = true },
+                        onFlexible = { onGoal(goal.copy(flexible = !goal.flexible)) },
+                        onGenerate = { additionError = null; onGenerate() })
                     if (snapshot == null || stale) TextButton(onClick = onRefresh,
                         enabled = !state.refreshing && !state.demo, shape = MaterialTheme.shapes.small) { Text("获取今日数据") }
                 }
+            }
+        }
+        if (!collapsed) HorizontalDivider(Modifier.padding(horizontal=24.dp).testTag("planner_input_divider"))
+        Column(Modifier.weight(1f).fillMaxWidth().testTag("planner_results_area")
+            .semantics {
+                stateDescription=if (collapsed) "规划输入已收起" else "规划输入已展开"
+                customActions=listOf(CustomAccessibilityAction(if (collapsed) "展开规划输入" else "收起规划输入") {
+                    if (interactive) { closePanel(!collapsed); true } else false
+                })
+            }.planningPanelGestures(collapsed,interactive,{ !listState.canScrollBackward },::closePanel)) {
+            if (collapsed) Box(Modifier.fillMaxWidth().height(28.dp).testTag("planner_expand_handle")
+                .clickable(enabled=interactive,role=Role.Button,interactionSource=remember { MutableInteractionSource() },
+                    indication=null,onClickLabel="展开规划输入") { closePanel(false) },contentAlignment=Alignment.Center) {
+                Box(Modifier.width(28.dp).height(2.dp).background(MaterialTheme.colorScheme.outlineVariant))
+            }
+            PlanningTargetStrip(displaySlots,goal.savedWindows,clock, actions = PlanningRangeActions(
+                enabled = interactive && !pending && !startMoving && !endMoving,
+                onEdit = { index ->
+                    onGoal(PlanningSchedule.remove(goal,index)); closePanel(false)
+                    scope.launch { editorScroll.animateScrollTo(0) }
+                }, onDelete = { index -> onGoal(PlanningSchedule.remove(goal,index)) }))
+            PlanningWorkspace(execution,state.campus,interactive,{ id,index ->
+                onOption(id,index); scope.launch { listState.animateScrollToItem(0) }
+            }) {
+            LazyColumn(Modifier.fillMaxSize().testTag("planner_list"),state=listState,userScrollEnabled=interactive,
+                contentPadding=PaddingValues(bottom=24.dp)) {
+            if (execution != null && execution.input.today != planningToday) item {
+                StatusNotice("以下为 ${execution.input.today} 生成的计划，仅供回看。")
             }
             if (pending) item {
                 Row(Modifier.padding(horizontal = 24.dp, vertical = 12.dp).testTag("planner_loading"),
@@ -171,46 +177,22 @@ private fun StudyPlanningContent(state: YouRoomState, goal: PlanningDraft, reque
                 PlanningFeedback(feedback,goal,clock,onGoal)
             } }
             if (result?.options?.isNotEmpty() == true) {
-                item {
-                    Column(Modifier.padding(horizontal = 24.dp).testTag("planner_results"),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        HorizontalDivider()
-                        result.options.forEachIndexed { index, option ->
-                            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("planner_option_$index")
-                                .clickable { choice = index }, verticalAlignment = Alignment.CenterVertically) {
-                                RadioButton(selected = choice == index, onClick = { choice = index })
-                                Text(option.label, style = MaterialTheme.typography.titleMedium)
-                            }
-                        }
-                    }
-                }
                 val plan = result.options[choice.coerceIn(result.options.indices)].plan
-                item {
-                    Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (plan.windows.size == 1) Text("${planningTime(plan.window.start)}—${planningTime(plan.window.end)}",
-                            Modifier.testTag("planner_window"), style = MaterialTheme.typography.headlineMedium,
-                            color = MaterialTheme.colorScheme.primary)
-                        else Column(Modifier.testTag("planner_window").semantics(mergeDescendants = true) {}) {
-                            plan.windows.forEachIndexed { index,window ->
-                                Text("${index+1} · ${planningTime(window.start)}—${planningTime(window.end)}",
-                                    Modifier.testTag("planner_window_$index"), style = MaterialTheme.typography.titleLarge,
-                                    color = MaterialTheme.colorScheme.primary)
-                            }
-                        }
-                        Text("自习 ${plan.studyMinutes} 分钟 · 收藏 ${plan.favoriteMinutes} 分钟 · 换教室 ${plan.changes} 次",
-                            Modifier.testTag("planner_metrics"), style = MaterialTheme.typography.bodyMedium)
-                        Text("相较目标损失 ${plan.lostMinutes} 分钟 · 搬动 ${plan.walkingMinutes} 分钟（估算）",
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        if (plan.windows != goal.windows)
-                            Text("原目标 ${goal.windows.joinToString("、") { "${planningTime(it.start)}—${planningTime(it.end)}" }}，以下是建议区间。",
-                                style = MaterialTheme.typography.bodySmall)
+                val uses=PlanningDisplay.rooms(plan)
+                val frozen=execution!!.input.snapshot
+                val frozenSlots=frozen.slots.sortedBy { it.start }
+                itemsIndexed(uses,key={ _,use -> use.classroom.id }) { index, use ->
+                    Crossfade(use,animationSpec=tween(160),label="plan room use") { shown ->
+                        PlanningRoomRow(shown,frozenSlots,frozen.index.freeSlotsByRoom[shown.classroom.id].orEmpty(),
+                            shown.classroom.id in execution.input.goal.expectedRooms,interactive,
+                            execution.id,Modifier.testTag("planner_step_$index"),onRoom)
                     }
-                }
-                itemsIndexed(plan.steps) { index, step ->
-                    PlanningTimelineStep(step, Modifier.testTag("planner_step_$index"), onRoom)
                 }
             }
         }
+    }
+    }
+    }
     }
 }
 
@@ -243,48 +225,18 @@ private fun PlanningFeedback(feedback: PlanningResult, goal: PlanningDraft, cloc
 }
 
 @Composable
-private fun PlanningAction(label: String, selected: Boolean, enabled: Boolean, modifier: Modifier,
-    toggle: Boolean = false, primary: Boolean = false, onClick: () -> Unit) {
-    val interaction = remember { MutableInteractionSource() }
-    val action = if (toggle) Modifier.toggleable(selected, enabled = enabled, role = Role.Checkbox,
-        interactionSource = interaction, indication = null, onValueChange = { onClick() })
-    else Modifier.clickable(enabled = enabled, role = Role.Button, interactionSource = interaction, indication = null, onClick = onClick)
-    Box(modifier.heightIn(min = 48.dp).then(action), contentAlignment = Alignment.Center) {
-        Surface(Modifier.fillMaxWidth().height(36.dp), shape = MaterialTheme.shapes.small,
-            color = if (primary) MaterialTheme.colorScheme.primary.copy(alpha = if (enabled) 1f else .38f)
-                else if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-            contentColor = if (primary) MaterialTheme.colorScheme.onPrimary else if (enabled) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.onSurface.copy(alpha = .38f),
-            border = if (primary) null else BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)) {
-            Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center) {
-                if (selected) Icon(Icons.Outlined.Check,null,Modifier.size(12.dp))
-                Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
+private fun PlanningRoomRow(use: PlanningRoomUse, slots: List<LessonSlot>, free: Set<Int>, expected: Boolean,
+    enabled: Boolean, generation: Long, modifier: Modifier, onRoom: (String?) -> Unit) {
+    Column(modifier.fillMaxWidth().clickable(enabled=enabled,interactionSource=remember { MutableInteractionSource() },
+        indication=null) { onRoom(use.classroom.id) }.padding(top=12.dp,bottom=6.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal=24.dp),verticalAlignment=Alignment.CenterVertically,
+            horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+            Text(use.classroom.name,Modifier.weight(1f),style=MaterialTheme.typography.titleLarge)
+            if (use.favorite) Icon(Icons.Filled.Star,"已收藏",Modifier.size(16.dp),tint=MaterialTheme.colorScheme.primary)
+            if (expected) Icon(Icons.Filled.PushPin,"期望教室",Modifier.size(16.dp).graphicsLayer { rotationZ=ExpectedPinTilt },
+                tint=MaterialTheme.colorScheme.primary)
         }
-    }
-}
-
-@Composable
-private fun PlanningTimelineStep(step: PlanningStep, modifier: Modifier, onRoom: (String?) -> Unit) {
-    Column(modifier.fillMaxWidth().then(if (step is PlanningStep.Study)
-        Modifier.clickable { onRoom(step.classroom.id) } else Modifier)
-        .padding(horizontal = 24.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("${planningTime(step.start)}—${planningTime(step.end)}", style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.primary)
-        when (step) {
-            is PlanningStep.Study -> {
-                Text(step.classroom.name, style = MaterialTheme.typography.titleLarge)
-                Text(if (step.favorite) "已收藏" else step.classroom.buildingLabel, style = MaterialTheme.typography.bodySmall)
-            }
-            is PlanningStep.Transfer -> {
-                Text(if (step.from.id == step.to.id) "暂离教室，等候下一空闲时段" else "搬动至 ${step.to.name}",
-                    style = MaterialTheme.typography.titleMedium)
-                Text("步行约 ${step.walkingMinutes} 分钟" + if (step.waitingMinutes > 0) " · 等候 ${step.waitingMinutes} 分钟" else "",
-                    style = MaterialTheme.typography.bodySmall)
-            }
-            is PlanningStep.Break -> Text("间隔", style = MaterialTheme.typography.titleMedium)
-        }
-        HorizontalDivider()
+        PlanningRoomStrip(use,slots,free,enabled,generation)
+        HorizontalDivider(Modifier.padding(horizontal=24.dp))
     }
 }

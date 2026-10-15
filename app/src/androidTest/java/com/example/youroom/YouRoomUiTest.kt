@@ -28,6 +28,7 @@ import org.junit.Test
 
 class YouRoomUiTest {
     @get:Rule val compose = createComposeRule()
+    private lateinit var capturedModel: YouRoomViewModel
 
     @Before fun renderIsolatedApp() {
         // Never read a real user's Token, database or preferences during instrumentation.
@@ -57,6 +58,7 @@ class YouRoomUiTest {
         }
         compose.setContent {
             val model: YouRoomViewModel = viewModel(factory = factory)
+            androidx.compose.runtime.SideEffect { capturedModel = model }
             YouRoomApp(model)
         }
     }
@@ -97,10 +99,10 @@ class YouRoomUiTest {
         compose.onNodeWithTag("tab_planner").performClick()
         compose.onNodeWithTag("planner_screen").assertExists()
         generatePlanner()
-        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_window"))
-        compose.onNodeWithTag("planner_window").assertTextEquals("08:00—12:00")
-        compose.onNodeWithTag("planner_metrics").assertTextContains("换教室 0 次", substring = true)
-        compose.onNodeWithTag("planner_metrics").assertTextContains("收藏 240 分钟", substring = true)
+        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_step_0"))
+        assertPlanWindow("08:00—12:00")
+        assertEquals(0, capturedModel.planning.executions.value.getValue(Campus.XITUCHENG).result!!.options.first().plan.changes)
+        assertEquals(240, capturedModel.planning.executions.value.getValue(Campus.XITUCHENG).result!!.options.first().plan.favoriteMinutes)
         compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_step_0"))
         compose.onNodeWithTag("planner_step_0").performClick()
         compose.onNodeWithTag("room_actions_dialog").assertExists()
@@ -121,13 +123,13 @@ class YouRoomUiTest {
         compose.onNodeWithTag("planner_end").assertTextContains("09:35")
         compose.onNodeWithTag("planner_adjust").performClick()
         generatePlanner()
-        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_window"))
-        compose.onNodeWithTag("planner_window").assertTextEquals("08:00—09:35")
+        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_step_0"))
+        assertPlanWindow("08:00—09:35")
         compose.onNodeWithTag("tab_rooms").performClick()
         compose.onNodeWithTag("slot_1").assertIsSelected()
         compose.onNodeWithTag("slot_2").assertIsSelected()
         compose.onNodeWithTag("tab_planner").performClick()
-        compose.onNodeWithTag("planner_saved_period_0").assertTextContains("08:00–09:35")
+        compose.onNodeWithTag("planner_target_range_0").assertTextContains("08:00–09:35")
         compose.onNodeWithTag("planner_start").assertTextContains("09:35")
         compose.onNodeWithTag("planner_end").assertTextContains("10:35")
     }
@@ -138,13 +140,76 @@ class YouRoomUiTest {
         generatePlanner()
         compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeLeft() }
         compose.onNodeWithTag("campus_label").assertTextEquals("沙河")
-        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_generate"))
+        compose.onNodeWithTag("planner_generate").performScrollTo()
+        compose.onNodeWithTag("planner_step_0").assertDoesNotExist()
+        compose.onNodeWithTag("planner_generate").performClick()
         awaitPlanner()
         compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_step_0"))
         compose.onNodeWithTag("planner_step_0").assertTextContains("演示楼-A101")
         compose.onNodeWithText("2-201").assertDoesNotExist()
         compose.onNodeWithText("规则").assertDoesNotExist()
         compose.onNodeWithText("规划规则").assertDoesNotExist()
+    }
+
+    @Test fun classroomFavoriteTagAndExclusionEditsKeepTheGeneratedPlanUntilAnotherClick() {
+        enterDemo()
+        compose.onNodeWithTag("tab_planner").performClick()
+        generatePlanner()
+        val first = capturedModel.planning.executions.value.getValue(Campus.XITUCHENG)
+        compose.onNodeWithTag("tab_rooms").performClick()
+        revealRoom("01:2-201")
+        compose.onNodeWithContentDescription("收藏 2-201").performClick()
+        revealRoom("01:2-201")
+        compose.onNodeWithContentDescription("修改标签 2-201").performClick()
+        compose.onNodeWithTag("filter_outlets").performClick()
+        compose.onNodeWithTag("close_room_tags").performClick()
+        revealRoom("01:2-201")
+        compose.onNodeWithContentDescription("排除 2-201").performClick()
+        compose.onNodeWithTag("tab_planner").performClick()
+        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_step_0"))
+        assertPlanWindow("08:00—12:00")
+        assertEquals(0, capturedModel.planning.executions.value.getValue(Campus.XITUCHENG).result!!.options.first().plan.favoriteMinutes)
+        org.junit.Assert.assertSame(first, capturedModel.planning.executions.value[Campus.XITUCHENG])
+        compose.onNodeWithTag("tab_preferences").performClick()
+        compose.onNodeWithTag("tab_planner").performClick()
+        org.junit.Assert.assertSame(first, capturedModel.planning.executions.value[Campus.XITUCHENG])
+        generatePlanner()
+        val next = capturedModel.planning.executions.value.getValue(Campus.XITUCHENG)
+        assertTrue(next.id > first.id)
+        assertTrue(next.input.profiles.getValue("01:2-201").excluded)
+        assertTrue(next.result!!.options.flatMap { it.plan.steps }.filterIsInstance<PlanningStep.Study>()
+            .none { it.classroom.id == "01:2-201" })
+    }
+
+    @Test fun expectedRoomsModesAndRemovingAllPeriodsDoNotEraseAnExistingPlan() {
+        enterDemo()
+        compose.onNodeWithTag("tab_planner").performClick()
+        generatePlanner()
+        val first = capturedModel.planning.executions.value.getValue(Campus.XITUCHENG)
+        compose.onNodeWithTag("planner_expected").performScrollTo()
+        compose.onNodeWithTag("planner_expected").performClick()
+        compose.onNodeWithTag("expected_classroom_wheel").performSemanticsAction(SemanticsActions.SetProgress) { it(1f) }
+        compose.onNodeWithTag("expected_pin").performClick()
+        compose.onNodeWithTag("expected_close").performClick()
+        compose.onNodeWithTag("planner_expected_badge").assertTextEquals("1")
+        compose.onNodeWithTag("planner_adjust").performClick()
+
+        removePeriod(0)
+        compose.onNodeWithTag("planner_generate").performScrollTo()
+        compose.onNodeWithTag("planner_generate").assertIsNotEnabled()
+        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_step_0"))
+        assertPlanWindow("08:00—12:00")
+        org.junit.Assert.assertSame(first, capturedModel.planning.executions.value[Campus.XITUCHENG])
+        compose.onNodeWithTag("planner_start_hour_wheel").performScrollTo()
+        compose.onNodeWithTag("planner_start_hour_wheel").performSemanticsAction(SemanticsActions.SetProgress) { it(10f) }
+        compose.onNodeWithTag("planner_end_hour_wheel").performSemanticsAction(SemanticsActions.SetProgress) { it(11f) }
+        compose.onNodeWithTag("planner_add_period").performScrollTo().performClick()
+        org.junit.Assert.assertSame(first, capturedModel.planning.executions.value[Campus.XITUCHENG])
+        generatePlanner()
+        val next = capturedModel.planning.executions.value.getValue(Campus.XITUCHENG)
+        assertTrue(next.id > first.id)
+        assertEquals(listOf(StudyWindow(600,660)), next.input.goal.windows)
+        assertEquals(setOf("01:2-240"), next.input.goal.expectedRooms)
     }
 
     @Test fun plannerInlineWheelsKeepStartAndEndIndependentWithoutConfirmation() {
@@ -168,9 +233,9 @@ class YouRoomUiTest {
         compose.onNodeWithTag("planner_start_hour_wheel").performScrollTo()
             .performSemanticsAction(SemanticsActions.SetProgress) { it(18f) }
         generatePlanner()
-        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_window"))
-        compose.onNodeWithTag("planner_window").assertTextEquals("08:00—12:00")
-        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_add_period"))
+        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_step_0"))
+        assertPlanWindow("08:00—12:00")
+        compose.onNodeWithTag("planner_add_period").performScrollTo()
         compose.onNodeWithTag("planner_add_period").performClick()
         compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_message"))
         compose.onNodeWithTag("planner_message").assertTextContains("结束时间必须晚于开始时间", substring = true)
@@ -251,21 +316,30 @@ class YouRoomUiTest {
     }
 
     private fun generatePlanner() {
-        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_add_period"))
-        if (compose.onAllNodesWithTag("planner_saved_period_0").fetchSemanticsNodes().isEmpty()) {
+        compose.onNodeWithTag("planner_add_period").performScrollTo()
+        if (compose.onAllNodesWithTag("planner_target_range_0").fetchSemanticsNodes().isEmpty()) {
             compose.onNodeWithTag("planner_add_period").performClick()
         }
-        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_generate"))
+        compose.onNodeWithTag("planner_generate").performScrollTo()
         compose.onNodeWithTag("planner_generate").performClick()
         awaitPlanner()
     }
 
     private fun awaitPlanner() {
         compose.waitUntil(20_000) {
-            compose.onAllNodesWithTag("planner_generate").fetchSemanticsNodes().any { node ->
-                node.config.getOrNull(SemanticsProperties.Text)?.any { it.text == "生成规划" } == true
-            }
+            capturedModel.planning.executions.value[capturedModel.state.value.campus]?.pending == false
         }
+    }
+
+    private fun removePeriod(index: Int) {
+        compose.onNodeWithTag("planner_target_range_$index",true).performClick()
+        compose.onNodeWithTag("planner_remove_period_$index").performClick()
+    }
+
+    private fun assertPlanWindow(expected: String) = compose.runOnIdle {
+        val execution=capturedModel.planning.executions.value.getValue(capturedModel.state.value.campus)
+        val plan=execution.result!!.options[execution.selectedOption].plan
+        assertEquals(expected,"${planningTime(plan.window.start)}—${planningTime(plan.window.end)}")
     }
 
     private fun enterDemo() {

@@ -24,13 +24,16 @@ class ExpectedRoomUiTest {
     @get:Rule val compose = createComposeRule()
     private var goal by mutableStateOf(PlanningDraft())
     private var campus by mutableStateOf(Campus.XITUCHENG)
-    private var requested by mutableStateOf(false)
     private var profiles by mutableStateOf<Map<String,RoomProfile>>(emptyMap())
     private fun render() {
         compose.setContent { YouRoomTheme(campus = campus) {
             val data=DemoData.snapshot(campus)
-            StudyPlanningScreen(YouRoomState(initializing=false,demo=true,campus=campus,snapshot=data,today=data.queryDate,profiles=profiles),
-                goal,requested,{goal=it;requested=false},{requested=true},{},{},{},showHeader=false)
+            val state=YouRoomState(initializing=false,demo=true,campus=campus,snapshot=data,today=data.queryDate,profiles=profiles)
+            val scope=rememberCoroutineScope()
+            val holder=remember { PlanningSession(scope) }
+            val executions by holder.executions.collectAsState()
+            StudyPlanningScreen(state,goal,executions,{goal=it},{holder.generate(state,goal)},{},{},{},
+                { campus,id,index -> holder.select(campus,id,index) },showHeader=false)
         } }
     }
     private fun select(tag: String,index: Int) {
@@ -42,32 +45,31 @@ class ExpectedRoomUiTest {
         .config[SemanticsProperties.ProgressBarRangeInfo].current.toInt()
     private fun open() = compose.onNodeWithTag("planner_expected").performScrollTo().performClick()
 
-    @Test fun theThreeActionsShareOneRowInTheRequestedOrder() {
+    @Test fun theFourActionsShareOneColumnInTheRequestedOrder() {
         render()
-        val bounds=listOf("planner_expected","planner_adjust","planner_generate").map {
+        val bounds=listOf("planner_add_period","planner_expected","planner_adjust","planner_generate").map {
             compose.onNodeWithTag(it).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         }
-        assertEquals(bounds[0].top,bounds[1].top,1f)
-        assertEquals(bounds[1].top,bounds[2].top,1f)
-        assertTrue(bounds[0].right < bounds[1].left && bounds[1].right < bounds[2].left)
-        compose.onNodeWithTag("planner_adjust").assertTextContains("宽松模式").assertIsOn().performClick().assertIsOff()
+        bounds.forEach { assertEquals(bounds[0].left,it.left,1f);assertEquals(bounds[0].size,it.size) }
+        bounds.zipWithNext().forEach { (a,b) -> assertTrue(a.bottom<=b.top) }
+        compose.onNodeWithTag("planner_adjust").assertContentDescriptionEquals("宽松模式").assertIsOn().performClick().assertIsOff()
         assertFalse(goal.flexible)
         compose.onNodeWithTag("planner_origin").assertDoesNotExist()
         compose.onNodeWithText("允许调整时间").assertDoesNotExist()
     }
 
-    @Test fun onlyPlusCreatesPeriodBlocksBelowTheWheels() {
+    @Test fun onlyPlusCreatesTargetAnnotationsAndTheButtonStaysBesideTheWheels() {
         render()
         compose.onNodeWithTag("planner_current_period").assertDoesNotExist()
-        compose.onNodeWithTag("planner_saved_period_0").assertDoesNotExist()
+        compose.onNodeWithTag("planner_target_range_0").assertDoesNotExist()
         val add=compose.onNodeWithTag("planner_add_period").fetchSemanticsNode().boundsInRoot
         val wheel=compose.onNodeWithTag("planner_end_minute_wheel").fetchSemanticsNode().boundsInRoot
-        assertTrue(add.top >= wheel.bottom)
+        assertTrue(add.left >= wheel.right)
         compose.onNodeWithTag("planner_add_period").performClick()
         compose.waitForIdle()
-        compose.onNodeWithTag("planner_saved_period_0").assertTextContains("08:00–12:00")
+        compose.onNodeWithTag("planner_target_range_0").assertTextContains("08:00–12:00")
         compose.onNodeWithTag("planner_current_period").assertDoesNotExist()
-        compose.onNodeWithTag("planner_saved_period_1").assertDoesNotExist()
+        compose.onNodeWithTag("planner_target_range_1").assertDoesNotExist()
     }
 
     @Test fun rollingTheWheelDoesNotCreateAPeriodBeforePlus() {
@@ -75,13 +77,13 @@ class ExpectedRoomUiTest {
         val wheel=compose.onNodeWithTag("planner_start_minute_wheel")
         val row=wheel.fetchSemanticsNode().boundsInRoot.height/3.5f
         wheel.performTouchInput { down(center); moveBy(Offset(0f,-row),delayMillis=500) }
-        compose.onNodeWithTag("planner_saved_period_0").assertDoesNotExist()
+        compose.onNodeWithTag("planner_target_range_0").assertDoesNotExist()
         wheel.performTouchInput { advanceEventTime(200); up() }
         compose.waitForIdle()
         compose.onNodeWithTag("planner_current_period").assertDoesNotExist()
-        compose.onNodeWithTag("planner_saved_period_0").assertDoesNotExist()
+        compose.onNodeWithTag("planner_target_range_0").assertDoesNotExist()
         compose.onNodeWithTag("planner_add_period").performClick()
-        compose.onNodeWithTag("planner_saved_period_0").assertTextContains("08:01–12:00")
+        compose.onNodeWithTag("planner_target_range_0").assertTextContains("08:01–12:00")
     }
 
     @Test fun pinsAddMultipleRoomsAndClosingUpdatesTheBadge() {
@@ -187,7 +189,7 @@ class ExpectedRoomUiTest {
         restoration.setContent {
             var saved by rememberSaveable(stateSaver=PlanningGoalSaver) { mutableStateOf(PlanningDraft()) }
             YouRoomTheme { StudyPlanningScreen(YouRoomState(initializing=false,demo=true,snapshot=data,today=data.queryDate),
-                saved,false,{saved=it},{},{},{},{},showHeader=false) }
+                saved,emptyMap(),{saved=it},{},{},{},{},showHeader=false) }
         }
         open()
         compose.onNodeWithTag("expected_pin").performClick()
@@ -196,7 +198,7 @@ class ExpectedRoomUiTest {
         compose.waitForIdle()
         restoration.emulateSavedInstanceStateRestore()
         compose.onNodeWithTag("planner_expected_badge").assertTextEquals("1")
-        compose.onNodeWithTag("planner_saved_period_0").assertExists()
+        compose.onNodeWithTag("planner_target_range_0").assertExists()
         compose.onNodeWithTag("planner_current_period").assertDoesNotExist()
     }
 
@@ -209,7 +211,7 @@ class ExpectedRoomUiTest {
         compose.onNodeWithTag("planner_generate").performClick()
         compose.waitUntil(20_000) {
             compose.onAllNodesWithTag("planner_generate").fetchSemanticsNodes().any {
-                it.config.getOrNull(SemanticsProperties.Text)?.any { text -> text.text == "生成规划" } == true
+                it.config.getOrNull(SemanticsProperties.StateDescription) != "计算中"
             }
         }
         compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_step_0"))

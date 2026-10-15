@@ -19,15 +19,13 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.youroom.ui.theme.YouRoomTheme
 import com.example.youroom.domain.PlanningDraft
-import com.example.youroom.domain.PlanningSchedule
 
 @Composable
 fun YouRoomApp(model: YouRoomViewModel) {
     val state by model.state.collectAsStateWithLifecycle()
+    val plans by model.planning.executions.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var goal by rememberSaveable(stateSaver = PlanningGoalSaver) { mutableStateOf(PlanningDraft()) }
-    var planRequested by rememberSaveable { mutableStateOf(false) }
-    var planningCampus by rememberSaveable { mutableStateOf(state.campus.dataKey) }
     var planningDate by rememberSaveable { mutableStateOf(state.today.toString()) }
     var planningDemo by rememberSaveable { mutableStateOf(state.demo) }
     var roomEditor by rememberSaveable { mutableStateOf(RoomEditor.ACTIONS) }
@@ -35,16 +33,9 @@ fun YouRoomApp(model: YouRoomViewModel) {
     fun manageRoom(id: String?) { roomEditor = RoomEditor.ACTIONS; model.selectRoom(id) }
     LaunchedEffect(state.today, state.demo) {
         if (planningDate != state.today.toString() || planningDemo != state.demo) {
-            planRequested = false
             goal = goal.copy(savedWindows = emptyList(), expectedRooms = if (planningDemo != state.demo) emptySet() else goal.expectedRooms)
         }
         planningDate = state.today.toString(); planningDemo = state.demo
-    }
-    LaunchedEffect(state.campus) {
-        if (planningCampus != state.campus.dataKey && goal.origin != null) {
-            goal = goal.copy(origin = null); planRequested = false
-        }
-        planningCampus = state.campus.dataKey
     }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { model.onForeground() }
     YouRoomTheme(campus = state.campus) {
@@ -73,11 +64,8 @@ fun YouRoomApp(model: YouRoomViewModel) {
                         "loading" -> LoadingScreen()
                         "login" -> LoginScreen(state, model::login, { tab = 0; model.showDemo() },
                             { tab = 0; model.viewCache() })
-                        else -> WorkspacePages(state, tab, model, goal, planRequested,
-                            {
-                                if (PlanningSchedule.confirmedGoal(goal) != PlanningSchedule.confirmedGoal(it)) planRequested = false
-                                goal = it
-                            }, { planRequested = true }, ::editRoom, ::manageRoom)
+                        else -> WorkspacePages(state, tab, model, goal, plans,
+                            { goal = it }, { model.generatePlanning(goal) }, ::editRoom, ::manageRoom)
                     }
                 }
             }
@@ -99,7 +87,8 @@ fun YouRoomApp(model: YouRoomViewModel) {
 
 @Composable
 private fun WorkspacePages(state: YouRoomState, tab: Int, model: YouRoomViewModel,
-    goal: PlanningDraft, requested: Boolean, onGoal: (PlanningDraft) -> Unit, onGenerate: () -> Unit,
+    goal: PlanningDraft, plans: Map<com.example.youroom.domain.Campus,PlanningExecution>,
+    onGoal: (PlanningDraft) -> Unit, onGenerate: () -> Unit,
     editRoom: (String, RoomEditor) -> Unit, manageRoom: (String?) -> Unit) {
     val header = rememberCampusHeaderMotion(state.campus)
     val headerMoving by remember(header) { derivedStateOf { header.moving } }
@@ -127,8 +116,8 @@ private fun WorkspacePages(state: YouRoomState, tab: Int, model: YouRoomViewMode
                             editRoom, model::toggleFavorite, model::setCampus, model::addCustomTag,
                             model::removePersonalTag, model::reorderPersonalTags, model::toggleExcluded,
                             showHeader = false, sharedHeaderMoving = headerMoving, interactive = active)
-                        1 -> StudyPlanningScreen(state, goal, requested, onGoal, onGenerate, model::setCampus,
-                            model::refresh, manageRoom, showHeader = false,
+                        1 -> StudyPlanningScreen(state, goal, plans, onGoal, onGenerate, model::setCampus,
+                            model::refresh, manageRoom, { campus,id,index -> model.planning.select(campus,id,index) },showHeader = false,
                             sharedHeaderMoving = headerMoving, interactive = active)
                         else -> PreferencesScreen(state, manageRoom, model::clearProfile, model::logout,
                             model::setCampus, showHeader = false, sharedHeaderMoving = headerMoving, interactive = active)

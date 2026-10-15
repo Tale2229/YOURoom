@@ -32,29 +32,48 @@ class StudyPlanningUiTest {
     private var state by mutableStateOf(YouRoomState(initializing=false,demo=true,snapshot=demo,today=demo.queryDate))
     private var clock by mutableStateOf<Clock>(Clock.system(SchoolZone))
     private var generationClicks = 0
+    private lateinit var session: PlanningSession
 
     private fun edit(next: PlanningDraft) {
-        if (PlanningSchedule.confirmedGoal(goal) != PlanningSchedule.confirmedGoal(next)) requested=false
         goal=next
     }
     private fun render() {
         compose.setContent { YouRoomTheme(campus=state.campus) {
-            StudyPlanningScreen(state,goal,requested,::edit,{generationClicks++;requested=true},{},{},{},
+            val scope=rememberCoroutineScope()
+            val holder=remember { PlanningSession(scope) }
+            SideEffect { session=holder }
+            val executions by holder.executions.collectAsState()
+            LaunchedEffect(Unit) { if (requested) holder.generate(state,goal) }
+            StudyPlanningScreen(state,goal,executions,::edit,{
+                generationClicks++;requested=true;holder.generate(state,goal)
+            },{},{},{},{ campus,id,index -> holder.select(campus,id,index) },
                 clock=clock,showHeader=false)
         } }
     }
     private fun waitForResult(tag: String) {
-        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_generate"))
-        compose.waitUntil(20_000) {
-            compose.onAllNodesWithTag("planner_generate").fetchSemanticsNodes().any {
-                it.config.getOrNull(SemanticsProperties.Text)?.any { text -> text.text == "生成规划" } == true
-            }
-        }
+        compose.onNodeWithTag("planner_generate").performScrollTo()
+        compose.waitUntil(20_000) { session.executions.value[state.campus]?.pending != true }
         compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag(tag))
+    }
+    private fun removePeriod(index: Int) {
+        compose.onNodeWithTag("planner_target_range_$index",true).performClick()
+        compose.onNodeWithTag("planner_remove_period_$index").performClick()
+    }
+    private fun assertPlanWindow(expected: String) = compose.runOnIdle {
+        val execution=session.executions.value.getValue(state.campus)
+        val plan=execution.result!!.options[execution.selectedOption].plan
+        val actual=plan.windows.mapIndexed { index,window ->
+            (if (plan.windows.size>1) "${index+1} · " else "")+"${planningTime(window.start)}—${planningTime(window.end)}"
+        }.joinToString("\n")
+        assertTrue("$actual must contain $expected",actual.contains(expected))
+    }
+    private fun assertPlanMetric(expected: Int, metric: (StudyPlan) -> Int) = compose.runOnIdle {
+        val execution=session.executions.value.getValue(state.campus)
+        assertEquals(expected,metric(execution.result!!.options[execution.selectedOption].plan))
     }
     private fun generate() {
         compose.onNodeWithTag("planner_generate").performScrollTo().performClick()
-        waitForResult("planner_results")
+        waitForResult("planner_step_0")
     }
     private fun add() = compose.onNodeWithTag("planner_add_period").performScrollTo().performClick()
     private fun message() = waitForResult("planner_message")
@@ -70,52 +89,45 @@ class StudyPlanningUiTest {
         assertTrue(kotlin.math.abs(fill.red-paper.red)+kotlin.math.abs(fill.green-paper.green)+kotlin.math.abs(fill.blue-paper.blue)>.015f)
     }
 
-    @Test fun periodWidthsStayFixedForOneTwoAndThreeCellsAndCaptionsKeepTheirGap() {
+    @Test fun confirmedTimesMoveBelowTheTargetBarsAndCaptionsScaleWithTheWheels() {
         render()
         compose.onNodeWithTag("planner_current_period").assertDoesNotExist()
-        compose.onNodeWithTag("planner_saved_period_0").assertDoesNotExist()
+        compose.onNodeWithTag("planner_target_range_0").assertDoesNotExist()
         for ((label,tag) in listOf("开始时间" to "planner_start_hour_wheel","结束时间" to "planner_end_hour_wheel")) {
             val caption=compose.onNodeWithText(label).fetchSemanticsNode().boundsInRoot
             val wheel=compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
-            assertEquals(with(compose.density) { 8.dp.toPx() },wheel.top-caption.bottom,1f)
+            assertEquals(with(compose.density) { (8*.9f).dp.toPx() },wheel.top-caption.bottom,1f)
         }
         add();compose.waitForIdle()
-        val width=compose.onNodeWithTag("planner_saved_period_0_face",true).fetchSemanticsNode().boundsInRoot.width
-        val strip=compose.onNodeWithTag("planner_saved_periods").fetchSemanticsNode().boundsInRoot.width
-        assertTrue(width < strip/2)
+        val strip=compose.onNodeWithTag("planner_target_bar",true).fetchSemanticsNode().boundsInRoot
+        assertTrue(compose.onNodeWithTag("planner_target_range_0",true).fetchSemanticsNode().boundsInRoot.top>=strip.bottom)
         repeat(2) {
             add(); compose.waitForIdle()
-            assertEquals(width,compose.onNodeWithTag("planner_saved_period_0_face",true).fetchSemanticsNode().boundsInRoot.width,1f)
+            compose.onNodeWithTag("planner_saved_periods").assertDoesNotExist()
         }
         compose.onNodeWithTag("planner_current_period").assertDoesNotExist()
         compose.onNodeWithTag("planner_add_period").assertIsNotEnabled()
     }
 
-    @Test fun threeConfirmedPeriodsFitOneRowWithCornerCrossesAndCompleteTimes() {
+    @Test fun threeConfirmedTimesStayCompleteWithoutPeriodBlocksOrCornerCrosses() {
         goal=PlanningDraft(840,900,savedWindows=listOf(StudyWindow(480,720),StudyWindow(720,780),StudyWindow(780,840)))
         render()
-        val faces=(0..2).map { compose.onNodeWithTag("planner_saved_period_"+it+"_face",true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot }
-        val strip=compose.onNodeWithTag("planner_saved_periods").fetchSemanticsNode().boundsInRoot
-        val add=compose.onNodeWithTag("planner_add_period").fetchSemanticsNode().boundsInRoot
+        val faces=(0..2).map { compose.onNodeWithTag("planner_target_range_"+it,true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot }
+        val strip=compose.onNodeWithTag("planner_target_bar",true).fetchSemanticsNode().boundsInRoot
         for (face in faces) {
-            assertEquals(faces[0].top,face.top,1f)
-            assertEquals(faces[0].width,face.width,1f)
-            assertEquals(with(compose.density) { 28.dp.toPx() },face.height,1f)
+            assertTrue(face.top>=strip.bottom)
         }
-        assertEquals(strip.left,faces.first().left,1f)
-        assertEquals(strip.right,faces.last().right,1f)
-        assertTrue(faces.last().right<=add.left)
+        faces.forEachIndexed { i,a -> faces.drop(i+1).forEach { b -> assertFalse(a.overlaps(b)) } }
+        compose.onNodeWithTag("planner_saved_periods").assertDoesNotExist()
         for ((index,text) in listOf("08:00–12:00","12:00–13:00","13:00–14:00").withIndex()) {
-            compose.onNodeWithTag("planner_saved_period_"+index).assertTextContains(text)
+            compose.onNodeWithTag("planner_target_range_"+index).assertTextContains(text)
             val results=mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
             compose.onNode(hasText(text),true).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
             assertFalse(results.single().hasVisualOverflow)
-            val remove=compose.onNodeWithTag("planner_remove_period_"+index).fetchSemanticsNode().boundsInRoot
-            assertTrue(remove.center.x>faces[index].center.x)
-            assertEquals(faces[index].top+with(compose.density) { 3.dp.toPx() },remove.center.y,1f)
+            compose.onNodeWithTag("planner_remove_period_"+index).assertDoesNotExist()
         }
         val image=compose.onNodeWithTag("planner_screen").captureToImage().asAndroidBitmap()
-        File(InstrumentationRegistry.getInstrumentation().targetContext.externalCacheDir,"planner-confirmations-1.12.1.png")
+        File(InstrumentationRegistry.getInstrumentation().targetContext.externalCacheDir,"planner-confirmations-1.14.png")
             .outputStream().use { image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) }
     }
 
@@ -124,7 +136,7 @@ class StudyPlanningUiTest {
         compose.onNodeWithTag("planner_start").assertTextContains("08:00")
         compose.onNodeWithTag("planner_end").assertTextContains("12:00")
         compose.onNodeWithTag("planner_current_period").assertDoesNotExist()
-        compose.onNodeWithTag("planner_remove_period_0").assertDoesNotExist()
+        compose.onNodeWithTag("planner_target_range_0").assertDoesNotExist()
         compose.onNodeWithTag("planner_generate").assertIsNotEnabled()
         compose.onNodeWithText("仅规划今日").assertDoesNotExist()
         compose.onNodeWithText("自习规划").assertDoesNotExist()
@@ -146,9 +158,9 @@ class StudyPlanningUiTest {
         compose.waitForIdle()
         assertEquals(721,goal.start)
         assertEquals(original.savedWindows,goal.savedWindows)
-        compose.onNodeWithTag("planner_saved_period_0").assertTextContains("08:00–12:00")
+        compose.onNodeWithTag("planner_target_range_0").assertTextContains("08:00–12:00")
         compose.onNodeWithTag("planner_current_period").assertDoesNotExist()
-        compose.onNodeWithTag("planner_saved_period_1").assertDoesNotExist()
+        compose.onNodeWithTag("planner_target_range_1").assertDoesNotExist()
     }
 
     @Test fun simultaneousHourChangesKeepBothDraftValuesAndPreferences() {
@@ -168,26 +180,26 @@ class StudyPlanningUiTest {
         repeat(2) { add();compose.waitForIdle() }
         assertEquals(listOf(StudyWindow(480,720),StudyWindow(720,780)),goal.savedWindows)
         compose.onNodeWithTag("planner_current_period").assertDoesNotExist()
-        compose.onNodeWithTag("planner_remove_period_2").assertDoesNotExist()
+        compose.onNodeWithTag("planner_target_range_2").assertDoesNotExist()
         generate()
-        compose.onNodeWithTag("planner_metrics").assertTextContains("自习 300 分钟",substring=true)
-        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_add_period"))
+        assertPlanMetric(300) { it.studyMinutes }
+        compose.onNodeWithTag("planner_add_period").performScrollTo()
         add();compose.waitForIdle()
         assertEquals(3,goal.savedWindows.size)
-        compose.onNodeWithTag("planner_remove_period_2").assertExists()
+        compose.onNodeWithTag("planner_target_range_2").assertExists()
         compose.onNodeWithTag("planner_current_period").assertDoesNotExist()
         assertEquals(840,goal.start)
         assertEquals(900,goal.end)
         generate()
-        compose.onNodeWithTag("planner_window").assertTextContains("3 · 13:00—14:00",substring=true)
-        compose.onNodeWithTag("planner_metrics").assertTextContains("自习 360 分钟",substring=true)
+        assertPlanWindow("3 · 13:00—14:00")
+        assertPlanMetric(360) { it.studyMinutes }
     }
 
     @Test fun deletingAConfirmedPeriodLoadsItsTimesAndAllowsReconfirmation() {
         goal=PlanningDraft(900,960,savedWindows=listOf(StudyWindow(480,720),StudyWindow(720,780),StudyWindow(780,840)))
         render()
         compose.onNodeWithTag("planner_add_period").assertIsNotEnabled()
-        compose.onNodeWithTag("planner_remove_period_1").performClick()
+        removePeriod(1)
         assertEquals(listOf(StudyWindow(480,720),StudyWindow(780,840)),goal.savedWindows)
         assertEquals(720,goal.start)
         assertEquals(780,goal.end)
@@ -202,11 +214,11 @@ class StudyPlanningUiTest {
 
     @Test fun removingTheLastConfirmationLeavesNoPeriodBlockAndDisablesGeneration() {
         render();add();compose.waitForIdle()
-        compose.onNodeWithTag("planner_remove_period_0").performClick()
+        removePeriod(0)
         compose.waitForIdle()
         assertTrue(goal.savedWindows.isEmpty())
         compose.onNodeWithTag("planner_current_period").assertDoesNotExist()
-        compose.onNodeWithTag("planner_remove_period_0").assertDoesNotExist()
+        compose.onNodeWithTag("planner_target_range_0").assertDoesNotExist()
         compose.onNodeWithTag("planner_generate").assertIsNotEnabled()
         assertEquals(480,goal.start)
         assertEquals(720,goal.end)
@@ -219,14 +231,14 @@ class StudyPlanningUiTest {
         compose.onNodeWithTag("planner_message").assertTextContains("时段不能重叠",substring=true)
         compose.onNodeWithTag("planner_duration_buttons").assertDoesNotExist()
         generate()
-        compose.onNodeWithTag("planner_metrics").assertTextContains("自习 240 分钟",substring=true)
+        assertPlanMetric(240) { it.studyMinutes }
         compose.onNodeWithTag("planner_message").assertDoesNotExist()
     }
 
     @Test fun anInvalidUnconfirmedDraftIsNotValidatedAtGeneration() {
         goal=PlanningDraft(780,780,false,savedWindows=listOf(StudyWindow(480,720)))
         render();generate()
-        compose.onNodeWithTag("planner_metrics").assertTextContains("自习 240 分钟",substring=true)
+        assertPlanMetric(240) { it.studyMinutes }
         compose.onNodeWithTag("planner_message").assertDoesNotExist()
         assertEquals(780,goal.end)
     }
@@ -234,14 +246,72 @@ class StudyPlanningUiTest {
     @Test fun rollingTheDraftAfterGenerationKeepsTheExistingConfirmedResult() {
         goal=PlanningSchedule.add(goal.copy(flexible=false)).goal!!
         render();generate()
-        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_end_hour_wheel"))
+        compose.onNodeWithTag("planner_end_hour_wheel").performScrollTo()
         compose.onNodeWithTag("planner_end_hour_wheel").performSemanticsAction(SemanticsActions.SetProgress) { it(1f) }
         compose.waitForIdle()
         assertTrue(goal.end<goal.start)
         assertTrue(requested)
-        waitForResult("planner_metrics")
-        compose.onNodeWithTag("planner_metrics").assertTextContains("自习 240 分钟",substring=true)
+        waitForResult("planner_step_0")
+        assertPlanMetric(240) { it.studyMinutes }
         assertEquals(1,generationClicks)
+    }
+
+    @Test fun editedDesiredRoomsModesAndConfirmedPeriodsDoNotReplaceTheGeneratedSnapshot() {
+        goal=PlanningDraft(flexible=false,savedWindows=listOf(StudyWindow(480,720)))
+        render();generate()
+        val old=compose.runOnIdle { session.executions.value.getValue(state.campus) }
+        compose.runOnIdle { edit(goal.copy(flexible=true,expectedRooms=setOf("01:2-240"),savedWindows=listOf(StudyWindow(600,660)))) }
+        waitForResult("planner_step_0")
+        assertPlanWindow("08:00—12:00")
+        compose.onNodeWithTag("planner_original_goal").assertDoesNotExist()
+        assertSame(old,session.executions.value.getValue(state.campus))
+        assertEquals(1,generationClicks)
+        generate()
+        assertTrue(session.executions.value.getValue(state.campus).id>old.id)
+        assertEquals(listOf(StudyWindow(600,660)),session.executions.value.getValue(state.campus).input.goal.windows)
+        assertEquals(setOf("01:2-240"),session.executions.value.getValue(state.campus).input.goal.expectedRooms)
+        assertEquals(2,generationClicks)
+    }
+
+    @Test fun liveFavoritesExclusionsTagsAndRefreshCannotChangeTheExistingPlan() {
+        goal=PlanningDraft(flexible=false,savedWindows=listOf(StudyWindow(480,720)))
+        render();generate()
+        val old=compose.runOnIdle { session.executions.value.getValue(state.campus) }
+        val room=old.result!!.options.first().plan.steps.filterIsInstance<PlanningStep.Study>().first().classroom
+        compose.runOnIdle { state=state.copy(profiles=mapOf(room.id to room.emptyProfile().copy(favorite=true,excluded=true,tags=setOf("新标记"))),
+            snapshot=demo.copy(fetchedAt=demo.fetchedAt.plusSeconds(60))) }
+        waitForResult("planner_step_0")
+        compose.onNodeWithTag("planner_step_0").assertTextContains(room.name)
+        assertSame(old,session.executions.value.getValue(state.campus))
+        assertEquals(1,generationClicks)
+        generate()
+        val next=session.executions.value.getValue(state.campus)
+        assertTrue(next.id>old.id)
+        assertTrue(next.result!!.options.first().plan.steps.filterIsInstance<PlanningStep.Study>().all { it.classroom.id!=room.id })
+    }
+
+    @Test fun deletingAllConfirmedPeriodsKeepsThePreviousPlanVisible() {
+        goal=PlanningDraft(flexible=false,savedWindows=listOf(StudyWindow(480,720)))
+        render();generate()
+        val old=compose.runOnIdle { session.executions.value.getValue(state.campus) }
+        removePeriod(0)
+        compose.waitForIdle()
+        assertTrue(goal.savedWindows.isEmpty())
+        compose.onNodeWithTag("planner_generate").assertIsNotEnabled()
+        waitForResult("planner_step_0")
+        assertPlanWindow("08:00—12:00")
+        assertSame(old,session.executions.value.getValue(state.campus))
+        assertEquals(1,generationClicks)
+    }
+
+    @Test fun aSecondButtonClickReplacesEvenAnIdenticalRequest() {
+        goal=PlanningDraft(flexible=false,savedWindows=listOf(StudyWindow(480,720)))
+        render();generate()
+        val old=compose.runOnIdle { session.executions.value.getValue(state.campus) }
+        generate()
+        assertTrue(session.executions.value.getValue(state.campus).id>old.id)
+        assertEquals(old.input,session.executions.value.getValue(state.campus).input)
+        assertEquals(2,generationClicks)
     }
 
     @Test fun pastAddFeedbackUsesTheSameFromNowButtonWithoutAutoConfirming() {
@@ -305,9 +375,9 @@ class StudyPlanningUiTest {
         assertEquals(listOf(StudyWindow(780,840)),goal.savedWindows)
         compose.runOnIdle { setRealTime(15,0) }
         generate()
-        compose.onNodeWithTag("planner_metrics").assertTextContains("自习 60 分钟",substring=true)
+        assertPlanMetric(60) { it.studyMinutes }
         compose.onNodeWithTag("planner_message").assertDoesNotExist()
-        compose.onNodeWithTag("planner_window").assertTextContains("13:00—14:00")
+        assertPlanWindow("13:00—14:00")
     }
 
     @Test fun addChecksClickTimeAndRejectsOneSecondBeyondTheGraceBoundary() {
@@ -331,12 +401,13 @@ class StudyPlanningUiTest {
         compose.onNodeWithTag("planner_duration_buttons").assertDoesNotExist()
     }
 
-    @Test fun aDateChangeStillRemovesPreviouslyGeneratedPlans() {
+    @Test fun aDateChangeKeepsTheHistoricalPlanWithoutRegeneratingIt() {
         goal=goal.copy(savedWindows=listOf(StudyWindow(480,720)))
         requested=true
-        render();waitForResult("planner_results")
+        render();waitForResult("planner_step_0")
         compose.runOnIdle { state=state.copy(today=state.today.plusDays(1)) }
-        compose.onNodeWithTag("planner_results").assertDoesNotExist()
+        waitForResult("planner_step_0")
+        compose.onNodeWithTag("planner_step_0").assertIsDisplayed()
         compose.onNodeWithTag("planner_generate").performScrollTo().assertIsNotEnabled()
     }
 
@@ -345,15 +416,15 @@ class StudyPlanningUiTest {
         goal=goal.copy(savedWindows=listOf(StudyWindow(480,720)))
         render()
         compose.onNodeWithTag("planner_generate").assertIsNotEnabled()
-        compose.onNodeWithTag("planner_results").assertDoesNotExist()
+        compose.onNodeWithTag("planner_step_0").assertDoesNotExist()
     }
 
     @Test fun lunchStillWorksForConfirmedPeriodsWithoutInferenceControls() {
         goal=PlanningDraft(900,960,false,savedWindows=listOf(StudyWindow(690,825)))
         requested=true
-        render();waitForResult("planner_metrics")
-        compose.onNodeWithTag("planner_metrics").assertTextContains("自习 135 分钟",substring=true)
-        compose.onNodeWithTag("planner_metrics").assertTextContains("换教室 0 次",substring=true)
+        render();waitForResult("planner_step_0")
+        assertPlanMetric(135) { it.studyMinutes }
+        assertPlanMetric(0) { it.changes }
         compose.onNodeWithTag("planner_long_breaks").assertDoesNotExist()
         compose.onNodeWithText("允许推测午休空闲").assertDoesNotExist()
         compose.onAllNodes(hasText("推测",substring=true)).assertCountEquals(0)
@@ -367,8 +438,8 @@ class StudyPlanningUiTest {
         state=state.copy(snapshot=data,profiles=mapOf(favorite.id to favorite.emptyProfile().copy(favorite=true)))
         goal=PlanningDraft(flexible=false,savedWindows=listOf(StudyWindow(735,780)))
         requested=true
-        render();waitForResult("planner_metrics")
-        compose.onNodeWithTag("planner_metrics").assertTextContains("收藏 45 分钟",substring=true)
+        render();waitForResult("planner_step_0")
+        assertPlanMetric(45) { it.favoriteMinutes }
         waitForResult("planner_step_0")
         compose.onNodeWithTag("planner_step_0").assertTextContains(favorite.name)
     }
@@ -377,20 +448,20 @@ class StudyPlanningUiTest {
         val restore=StateRestorationTester(compose)
         restore.setContent {
             var saved by rememberSaveable(stateSaver=PlanningGoalSaver) { mutableStateOf(PlanningDraft()) }
-            YouRoomTheme { StudyPlanningScreen(state,saved,false,{saved=it},{},{},{},{},showHeader=false) }
+            YouRoomTheme { StudyPlanningScreen(state,saved,emptyMap(),{saved=it},{},{},{},{},showHeader=false) }
         }
         repeat(2) { add();compose.waitForIdle() }
         restore.emulateSavedInstanceStateRestore()
-        compose.onNodeWithTag("planner_saved_period_0").assertTextContains("08:00–12:00")
-        compose.onNodeWithTag("planner_saved_period_1").assertTextContains("12:00–13:00")
+        compose.onNodeWithTag("planner_target_range_0").assertTextContains("08:00–12:00")
+        compose.onNodeWithTag("planner_target_range_1").assertTextContains("12:00–13:00")
         compose.onNodeWithTag("planner_current_period").assertDoesNotExist()
         compose.onNodeWithTag("planner_start").assertTextContains("13:00")
         compose.onNodeWithTag("planner_end").assertTextContains("14:00")
-        compose.onNodeWithTag("planner_remove_period_2").assertDoesNotExist()
+        compose.onNodeWithTag("planner_target_range_2").assertDoesNotExist()
         compose.onNodeWithTag("planner_add_period").assertIsEnabled().performClick()
         compose.waitForIdle()
         restore.emulateSavedInstanceStateRestore()
-        compose.onNodeWithTag("planner_saved_period_2").assertTextContains("13:00–14:00")
+        compose.onNodeWithTag("planner_target_range_2").assertTextContains("13:00–14:00")
         compose.onNodeWithTag("planner_current_period").assertDoesNotExist()
         compose.onNodeWithTag("planner_add_period").assertIsNotEnabled()
     }

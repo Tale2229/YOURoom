@@ -37,6 +37,28 @@ object StudyPlanner {
         profiles: Map<String, RoomProfile>, goal: PlanningGoal, checkCancelled: () -> Unit = {}): PlanningResult =
         calculate(snapshot,campus,today,profiles,goal,null,false,checkCancelled)
 
+    /** All five objectives share preparation and a time-forward search. Existing single-result
+     * entry points remain available for regression/reference checks. */
+    internal fun portfolio(snapshot: ClassroomSnapshot, campus: Campus, today: LocalDate,
+        profiles: Map<String,RoomProfile>, goal: PlanningGoal, checkCancelled: () -> Unit = {}): PlanningResult {
+        if (snapshot.campusId != campus.dataKey || !snapshot.isCurrentOn(today))
+            return PlanningResult(message = "请先获取当前校区的今日数据。")
+        if (snapshot.slots.isEmpty()) return PlanningResult(message = "今日节次数据不完整。")
+        val data=prepare(snapshot,campus,profiles,checkCancelled,goal.expectedRooms)
+        val baseline=MultiStudyPlanner.plan(if (data.hasExpected) data.copy(expected=BooleanArray(data.rooms.size)) else data,
+            snapshot.slots,campus,goal,null,checkCancelled,portfolio=true)
+        if (!data.hasExpected || baseline.options.isEmpty()) return baseline
+        val basePlans=baseline.options.map { it.plan.copy(expectedMinutes=
+            ExpectedRoomPreference.minutes(it.plan.steps,it.plan.windows,goal.expectedRooms)) }
+        val champion=basePlans.first()
+        // Desired rooms cannot add moves or reduce usable time. Establish that exact
+        // baseline first, then share prepared spans/travel with a tightly bounded search;
+        // do not multiply every unrestricted state by global move/expected-tail resources.
+        val desired=MultiStudyPlanner.plan(data.copy(maximumChanges=champion.changes,maximumLoss=champion.lostMinutes),
+            snapshot.slots,campus,goal,null,checkCancelled,portfolio=true,expectedOnly=true,portfolioBaseline=champion)
+        return PlanningPortfolio.result(basePlans+desired.options.map { it.plan },true,champion)
+    }
+
     private fun calculate(snapshot: ClassroomSnapshot, campus: Campus, today: LocalDate,
         profiles: Map<String, RoomProfile>, goal: PlanningGoal, notBeforeMinute: Int?,
         validateInput: Boolean, checkCancelled: () -> Unit): PlanningResult {

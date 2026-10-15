@@ -8,6 +8,8 @@ import com.example.youroom.data.*
 import com.example.youroom.data.local.FilterSettings
 import com.example.youroom.domain.*
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -76,9 +78,16 @@ class YouRoomViewModel(
     private val repository: ClassroomDataSource,
     private val settings: FilterSettings,
     private val clock: Clock = Clock.system(SchoolZone),
+    planningDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(YouRoomState(today = today()))
     val state: StateFlow<YouRoomState> = mutableState.asStateFlow()
+    val planning = PlanningSession(viewModelScope,planningDispatcher)
+
+    fun generatePlanning(draft: PlanningDraft) {
+        updateToday()
+        planning.generate(state.value,draft)
+    }
     private var realWorkspaces = Campus.entries.associateWith { CampusWorkspace() }
     private var demoWorkspaces = emptyMap<Campus, CampusWorkspace>()
     private var storedProfiles: Map<String, RoomProfile> = emptyMap()
@@ -175,6 +184,7 @@ class YouRoomViewModel(
         viewModelScope.launch {
             try {
                 repository.login(account.trim(), password)
+                planning.clear()
                 mutableState.update { it.copy(loggedIn = true, loggingIn = false, viewingCache = false) }
                 refresh()
             } catch (error: Exception) {
@@ -217,6 +227,7 @@ class YouRoomViewModel(
     }
 
     fun showDemo() {
+        planning.clear()
         cancelRefresh()
         demoFilters = SearchFilters(setOf(1, 2))
         demoBuildings = Campus.entries.associateWith { emptySet() }
@@ -236,6 +247,7 @@ class YouRoomViewModel(
     }
 
     fun openLogin() {
+        planning.clear()
         cancelRefresh()
         demoWorkspaces = emptyMap()
         mutableState.update { it.copy(demo = false, loggedIn = false, viewingCache = false,

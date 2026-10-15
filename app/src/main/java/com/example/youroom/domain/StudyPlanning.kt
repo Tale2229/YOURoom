@@ -70,8 +70,17 @@ data class StudyPlan(
 
 data class PlanningOption(val label: String, val plan: StudyPlan)
 enum class PlanningProblem { INVALID_TIME, PAST_TIME, OVERLAP, TOO_MANY }
+enum class PlanningDirection(val title: String, val shortTitle: String) {
+    BALANCED("综合推荐", "综合"), CHANGES("换教室最少", "少换教室"),
+    BUILDINGS("跨教学楼最少", "少跨楼"), FAVORITES("收藏教室覆盖最多", "多收藏"),
+    EXPECTED("期望教室覆盖最多", "多期望")
+}
+
+/** Indices reference one immutable, deduplicated option pool within a generation. */
+data class PlanningGroup(val direction: PlanningDirection, val optionIndices: List<Int>, val message: String? = null)
+
 data class PlanningResult(val options: List<PlanningOption> = emptyList(), val message: String? = null,
-    val problem: PlanningProblem? = null)
+    val problem: PlanningProblem? = null, val groups: List<PlanningGroup> = emptyList())
 
 fun planningTime(minute: Int) = "%02d:%02d".format(java.util.Locale.ROOT, minute / 60, minute % 60)
 

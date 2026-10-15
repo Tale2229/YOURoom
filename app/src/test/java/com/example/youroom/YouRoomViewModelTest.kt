@@ -30,7 +30,7 @@ class YouRoomViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val source = FakeSource(authenticated).apply(setupSource)
         val settings = FakeSettings()
-        val model = YouRoomViewModel(source, settings, testClock)
+        val model = YouRoomViewModel(source, settings, testClock,StandardTestDispatcher(testScheduler))
         val store = ViewModelStore().apply { put("test", model) }
         try { runCurrent(); block(model, source, settings) }
         finally { store.clear(); Dispatchers.resetMain() }
@@ -53,6 +53,34 @@ class YouRoomViewModelTest {
         assertTrue(PersonalTags.comfortable in model.state.value.filters.tags)
         model.setCampus(Campus.SHAHE)
         assertTrue(PersonalTags.comfortable in model.state.value.filters.tags)
+    }
+
+    @Test fun profileCatalogFilterAndSnapshotChangesCannotRegenerateOrClearAPlan() = checkModel { model, _, _ ->
+        val draft=PlanningDraft(flexible=false,savedWindows=listOf(StudyWindow(480,720)))
+        model.generatePlanning(draft);runCurrent()
+        val old=model.planning.executions.value.getValue(Campus.XITUCHENG)
+        assertNotNull(old.result)
+        val room=model.state.value.snapshot!!.classrooms.first()
+        model.toggleFavorite(room);runCurrent()
+        model.toggleExcluded(room);runCurrent()
+        model.saveProfile(model.state.value.profiles.getValue(room.id).copy(tags=setOf("靠窗")))
+        model.addCustomTag("午后")
+        model.setFilters(model.state.value.filters.copy(tags=setOf("靠窗")))
+        model.refresh();runCurrent()
+        model.setCampus(Campus.SHAHE);runCurrent()
+        assertNull(model.planning.executions.value[Campus.SHAHE])
+        model.setCampus(Campus.XITUCHENG);runCurrent()
+        assertSame(old,model.planning.executions.value.getValue(Campus.XITUCHENG))
+        model.generatePlanning(draft.copy(savedWindows=listOf(StudyWindow(600,720))));runCurrent()
+        assertTrue(model.planning.executions.value.getValue(Campus.XITUCHENG).id>old.id)
+    }
+
+    @Test fun demoAndLoginTransitionsIsolateGeneratedPlans() = checkModel(false) { model, _, _ ->
+        val draft=PlanningDraft(savedWindows=listOf(StudyWindow(480,720)))
+        model.showDemo();model.generatePlanning(draft);runCurrent()
+        assertTrue(model.planning.executions.value.isNotEmpty())
+        model.openLogin();runCurrent()
+        assertTrue(model.planning.executions.value.isEmpty())
     }
 
     @Test fun lateResponseFromCanceledRequestCannotReplaceActiveCampus() = checkModel { model, source, _ ->
