@@ -148,7 +148,7 @@ private fun ClassroomPage(state: YouRoomState, listState: LazyListState, active:
                 favoriteClosing = isMovingFavorite,
                 onActionPending = { pending ->
                     if (pending) pendingActionRoom = id else if (pendingActionRoom == id) pendingActionRoom = null
-                })
+                }, editorOpen = state.selectedRoomId == id)
         }
     }
 }

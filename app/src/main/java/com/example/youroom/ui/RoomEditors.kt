@@ -41,11 +41,8 @@ fun RoomTagsDialog(room: RoomMatch, state: YouRoomState, onDismiss: () -> Unit,
                             }, onRemoveTag, onTagOrder, showFavorite = false)
                     }
                     HorizontalDivider(Modifier.padding(top = 12.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        TextButton(onClick = { update(draft.withoutPersonalTags()) },
-                            modifier = Modifier.testTag("reset_room_tags")) { Text("重置") }
-                        TextButton(onClick = onDismiss, modifier = Modifier.testTag("close_room_tags")) { Text("关闭") }
-                    }
+                    DialogFooterActions(draft.allTags.isNotEmpty() || draft.outlets, "reset_room_tags", "close_room_tags",
+                        { update(draft.withoutPersonalTags()) }, onDismiss)
                 }
             }
         }

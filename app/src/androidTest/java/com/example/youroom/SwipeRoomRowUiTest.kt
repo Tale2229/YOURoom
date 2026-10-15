@@ -38,6 +38,7 @@ class SwipeRoomRowUiTest {
     private var pending = false
     private var tagClicks = 0
     private var noteClicks = 0
+    private var editorOpen by mutableStateOf(false)
 
     private fun renderRow() {
         compose.setContent {
@@ -49,7 +50,7 @@ class SwipeRoomRowUiTest {
                     { profile = profile.copy(favorite = !profile.favorite) }, { tagClicks++ }, { noteClicks++ },
                     { profile = profile.copy(excluded = !profile.excluded) },
                     interactionEnabled = active && interactionEnabled, favoriteClosing = favoriteClosing,
-                    onActionPending = { pending = it }) }
+                    onActionPending = { pending = it }, editorOpen = editorOpen) }
                 }
             }
         }
@@ -391,6 +392,40 @@ class SwipeRoomRowUiTest {
             val period = compose.onNodeWithTag("room_period_${room.id}_6", useUnmergedTree = true)
             assertTrue(period.fetchSemanticsNode().config.contains(SemanticsActions.OnLongClick))
         }
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Test fun openingIsInspectableButAnAcceptedRightSwipeStartsTheClosingWave() {
+        renderRow(); reveal()
+        val period = compose.onNodeWithTag("room_period_${room.id}_6", useUnmergedTree = true)
+        assertTrue(period.fetchSemanticsNode().config.contains(SemanticsActions.OnLongClick))
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag("room_swipe_${room.id}").performTouchInput { swipeRight(durationMillis=96) }
+        compose.mainClock.advanceTimeBy(64)
+        assertFalse(period.fetchSemanticsNode().config.contains(SemanticsActions.OnLongClick))
+        compose.mainClock.advanceTimeBy(600)
+        compose.onNodeWithTag("room_actions_${room.id}").assertDoesNotExist()
+        assertTrue(period.fetchSemanticsNode().config.contains(SemanticsActions.OnLongClick))
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Test fun editorDismissalClosesWithoutAWaveAndOnlyThenRevealsTheSavedMetadata() {
+        renderRow(); reveal()
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { editorOpen=true; profile=profile.copy(outlets=true,note="靠窗") }
+        compose.mainClock.advanceTimeBy(300)
+        compose.onNodeWithTag("room_note_text_${room.id}",true).assertTextEquals(" ")
+        compose.onNodeWithTag("room_subtitle_${room.id}",true).assertTextEquals("教学楼 2 · 容量 180")
+        compose.runOnIdle { assertEquals("靠窗",profile.note); editorOpen=false; expanded=false }
+        compose.mainClock.advanceTimeBy(32)
+        compose.onNodeWithTag("room_note_text_${room.id}",true).assertTextEquals(" ")
+        val period=compose.onNodeWithTag("room_period_${room.id}_6",true)
+        assertTrue(period.fetchSemanticsNode().config.contains(SemanticsActions.OnLongClick))
+        compose.mainClock.advanceTimeBy(600)
+        compose.onNodeWithTag("room_actions_${room.id}").assertDoesNotExist()
+        compose.onNodeWithTag("room_note_text_${room.id}",true).assertTextEquals("靠窗")
+        compose.onNodeWithTag("room_subtitle_${room.id}",true).assertTextContains("有插座",substring=true)
+        assertTrue(period.fetchSemanticsNode().config.contains(SemanticsActions.OnLongClick))
         compose.mainClock.autoAdvance = true
     }
 

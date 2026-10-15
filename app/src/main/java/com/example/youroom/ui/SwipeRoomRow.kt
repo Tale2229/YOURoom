@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -28,6 +29,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.example.youroom.domain.*
@@ -40,8 +44,8 @@ import kotlin.math.abs
 import kotlin.math.sign
 import kotlin.math.roundToInt
 
-private val RoomActionRailWidth = 184.dp // Four compact 40dp buttons, plus 12dp on each side.
-private class RowSwipeAnimation { var job: Job? = null }
+private val RoomActionRailWidth = RoomActionFlip.railWidthDp.dp
+private class RowSwipeAnimation { var job: Job? = null; var openingSpeed = 0f }
 
 @Composable
 private fun FavoriteCornerMarker(roomId: String, modifier: Modifier = Modifier) {
@@ -56,7 +60,8 @@ private fun FavoriteCornerMarker(roomId: String, modifier: Modifier = Modifier) 
 @Composable
 internal fun RoomActionButtons(profile: RoomProfile, onFavorite: () -> Unit, onTags: () -> Unit,
     onNote: () -> Unit, onExcluded: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true,
-    compact: Boolean = false) {
+    compact: Boolean = false, flip: RoomActionFlipMotion? = null) {
+    val density = LocalDensity.current.density
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         val buttons = listOf(
             Triple(if (profile.favorite) Icons.Outlined.Star else Icons.Outlined.StarBorder,
@@ -72,7 +77,12 @@ internal fun RoomActionButtons(profile: RoomProfile, onFavorite: () -> Unit, onT
                     if (index == 1) stateDescription = if (profile.outlets || profile.allTags.isNotEmpty()) "已有标签" else "无标签"
                     if (index == 2) stateDescription = if (profile.note.isNotBlank()) "已有备注" else "无备注"
                 }) {
-                Icon(icon, description, Modifier.size(22.dp).testTag("room_action_icon_${profile.roomId}_$index"),
+                Icon(icon, description, Modifier.size(22.dp).testTag("room_action_icon_${profile.roomId}_$index")
+                    .graphicsLayer {
+                        // A perspective flip around the vertical axis, never a flat spin.
+                        rotationY = flip?.angles?.get(index)?.value ?: 0f
+                        cameraDistance = 12f * density
+                    },
                     tint = MaterialTheme.colorScheme.primary)
             }
         }
@@ -81,13 +91,14 @@ internal fun RoomActionButtons(profile: RoomProfile, onFavorite: () -> Unit, onT
 
 @Composable
 private fun RoomActionRail(profile: RoomProfile, onFavorite: () -> Unit, onTags: () -> Unit,
-    onNote: () -> Unit, onExcluded: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+    onNote: () -> Unit, onExcluded: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true,
+    flip: RoomActionFlipMotion? = null) {
     val colors = MaterialTheme.colorScheme
     Column(modifier.fillMaxHeight().padding(horizontal = 12.dp), verticalArrangement = Arrangement.Center) {
         HorizontalDivider(Modifier.fillMaxWidth()
             .testTag("room_action_line_${profile.roomId}_top_thin"), color = colors.outlineVariant)
         Spacer(Modifier.height(2.dp))
-        RoomActionButtons(profile, onFavorite, onTags, onNote, onExcluded, enabled = enabled, compact = true)
+        RoomActionButtons(profile, onFavorite, onTags, onNote, onExcluded, enabled = enabled, compact = true, flip = flip)
         Spacer(Modifier.height(2.dp))
         // The rail and its decoration stay entirely above the fixed period strip.
         HorizontalDivider(Modifier.fillMaxWidth()
@@ -106,7 +117,7 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
     active: Boolean, onExpanded: (Boolean) -> Unit, onFavorite: () -> Unit, onTags: () -> Unit,
     onNote: () -> Unit, onExcluded: () -> Unit, modifier: Modifier = Modifier, inspectionKey: Any? = null,
     interactionEnabled: Boolean = active, favoriteClosing: Boolean = false,
-    onActionPending: (Boolean) -> Unit = {}) {
+    onActionPending: (Boolean) -> Unit = {}, editorOpen: Boolean = false) {
     val profile = match.profile
     val swipe = remember(profile.roomId) { AnchoredDraggableState(false) }
     val density = LocalDensity.current.density
@@ -137,17 +148,22 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
         swipe.settledValue && !swipe.offset.isNaN() && abs(swipe.offset + railWidth) < .5f
     } }
     val wave = remember(profile.roomId) { RoomPeriodWave() }
+    val flip = remember(profile.roomId) { RoomActionFlipMotion() }
     val actionScope = rememberCoroutineScope()
     var pendingAction by remember(profile.roomId) { mutableStateOf(false) }
-    wave.Run(expanded, active && interactionEnabled, dragging, settledOpen, inspectionKey to slots)
+    wave.Run()
+    flip.Observe({ swipe.offset / density }, { animation.openingSpeed }, { dragging }, active)
     val labels = remember(profile, terms) { terms.filter { it != PersonalTags.favorite && profile.hasTerm(it) } }
+    val metadata = remember(profile.roomId, inspectionKey) { RoomMetadataMotion(labels, RoomNotes.limit(profile.note)) }
+    metadata.Run(labels, RoomNotes.limit(profile.note), editorOpen, active,
+        { !swipe.offset.isNaN() && abs(swipe.offset) < .5f && !dragging })
     val colors = MaterialTheme.colorScheme
     val noteHeight = with(LocalDensity.current) { MaterialTheme.typography.bodySmall.lineHeight.toDp() }
     Column(modifier.fillMaxWidth().clipToBounds().background(colors.background).testTag("room_row_${profile.roomId}").semantics {
         stateDescription = listOfNotNull(if (profile.favorite) "已收藏" else null,
             if (profile.excluded) "已排除" else null).joinToString("，")
         if (active && interactionEnabled && !pendingAction) customActions = listOf(CustomAccessibilityAction(if (expanded) "收起教室操作" else "展开教室操作") {
-            if (expanded) wave.interrupt()
+            if (expanded) wave.play()
             latestExpanded(!expanded); true
         })
     }) {
@@ -172,7 +188,6 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
                         if (!change.pressed) break
                         if (abs(delta.y) > viewConfiguration.touchSlop && abs(delta.y) >= abs(delta.x)) break
                         if (abs(delta.x) <= viewConfiguration.touchSlop || abs(delta.x) <= abs(delta.y) * 1.2f) continue
-                        if (latestIntent) wave.interrupt()
                         animation.job?.cancel()
                         startOffset = if (swipe.offset.isNaN()) 0f else swipe.requireOffset()
                         claimed = true; dragging = true
@@ -180,12 +195,16 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
                     } else {
                         swipe.dispatchRawDelta(change.positionChange().x)
                     }
+                    animation.openingSpeed = (-velocity.calculateVelocity().x / density).coerceAtLeast(0f)
                     change.consume()
                     if (!change.pressed) {
                         val open = RoomSwipePolicy.target(startOffset / density, swipe.requireOffset() / density,
                             railWidth / density, velocity.calculateVelocity().x / density)
                         finished = true
-                        if (latestActive) latestExpanded(open)
+                        if (latestActive) {
+                            if (!open && startOffset < -.5f) wave.play()
+                            latestExpanded(open)
+                        }
                         break
                     }
                 }
@@ -204,7 +223,7 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
             val actionsReady = expanded && !dragging && settledOpen && interactionEnabled && !pendingAction
             fun afterWave(action: () -> Unit) {
                 if (pendingAction) return
-                wave.interrupt(); latestExpanded(false)
+                wave.play(); latestExpanded(false)
                 pendingAction = true
                 onActionPending(true)
                 actionScope.launch(start = CoroutineStart.UNDISPATCHED) {
@@ -217,16 +236,16 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
                 }
             }
             RoomActionRail(profile, { afterWave(onFavorite) },
-                { wave.interrupt(); onTags() }, { wave.interrupt(); onNote() },
+                onTags, onNote,
                 { afterWave(onExcluded) },
                 Modifier.align(AbsoluteAlignment.CenterRight).width(RoomActionRailWidth).testTag("room_actions_${profile.roomId}")
-                    .then(if (actionsReady) Modifier else Modifier.clearAndSetSemantics {}), enabled = actionsReady)
+                    .then(if (actionsReady) Modifier else Modifier.clearAndSetSemantics {}), enabled = actionsReady, flip = flip)
         }
         Box(Modifier.fillMaxWidth().absoluteOffset {
             IntOffset(if (swipe.offset.isNaN()) 0 else swipe.requireOffset().roundToInt(), 0)
         }.background(colors.background, RectangleShape).testTag("room_face_${profile.roomId}")
             .then(if (expanded) Modifier.clickable(enabled = interactionEnabled && !pendingAction) {
-                wave.interrupt(); latestExpanded(false)
+                wave.play(); latestExpanded(false)
             } else Modifier)) {
                 Column(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -234,15 +253,14 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
                             maxLines = 2, overflow = TextOverflow.Ellipsis)
                         ExcludedRoomMarker(profile)
                     }
-                    Text(listOfNotNull(match.classroom.buildingLabel, match.classroom.capacity?.let { "容量 $it" })
-                        .plus(labels).joinToString(" · "), Modifier.padding(top = 4.dp),
-                        style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                    RoomSubtitle(listOfNotNull(match.classroom.buildingLabel, match.classroom.capacity?.let { "容量 $it" })
+                        .joinToString(" · "), metadata, profile.roomId)
                     Box(Modifier.fillMaxWidth().padding(top = 4.dp).height(noteHeight).clipToBounds()
                         .testTag("room_note_line_${profile.roomId}")
-                        .then(if (profile.note.isBlank()) Modifier.clearAndSetSemantics {} else Modifier),
+                        .then(if (metadata.note.isBlank()) Modifier.clearAndSetSemantics {} else Modifier),
                         contentAlignment = Alignment.CenterStart) {
-                        Text(RoomNotes.limit(profile.note).ifBlank { " " },
-                            Modifier.testTag("room_note_text_${profile.roomId}"),
+                        Text(metadata.note.ifBlank { " " },
+                            Modifier.testTag("room_note_text_${profile.roomId}").graphicsLayer { alpha = metadata.noteAlpha.value },
                             minLines = 1, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                     }
@@ -256,4 +274,16 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
         HorizontalDivider(Modifier.padding(horizontal = 24.dp).testTag("room_divider_${profile.roomId}"))
         Spacer(Modifier.height(16.dp))
     }
+}
+
+@Composable
+private fun RoomSubtitle(base: String, metadata: RoomMetadataMotion, roomId: String) {
+    val color = MaterialTheme.colorScheme.onSurfaceVariant
+    Text(buildAnnotatedString {
+        append(base)
+        if (metadata.labels.isNotEmpty()) withStyle(SpanStyle(color = color.copy(alpha = metadata.labelsAlpha.value))) {
+            append(" · "); append(metadata.labels.joinToString(" · "))
+        }
+    }, Modifier.padding(top = 4.dp).testTag("room_subtitle_$roomId"),
+        style = MaterialTheme.typography.bodySmall, color = color)
 }

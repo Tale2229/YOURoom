@@ -434,8 +434,8 @@ class YouRoomUiTest {
         compose.onNodeWithTag("extra_filters").performScrollTo().performClick()
         compose.onNodeWithText("最低标注容量").assertDoesNotExist()
         compose.onNodeWithText("重置筛选").assertDoesNotExist()
-        compose.onNodeWithTag("reset_filters").assertTextEquals("重置")
-        compose.onNodeWithTag("close_filters").assertTextEquals("关闭")
+        compose.onNodeWithTag("reset_filters").assertContentDescriptionEquals("重置")
+        compose.onNodeWithTag("close_filters").assertContentDescriptionEquals("关闭")
         val reset = compose.onNodeWithTag("reset_filters").fetchSemanticsNode().boundsInRoot
         val close = compose.onNodeWithTag("close_filters").fetchSemanticsNode().boundsInRoot
         val campus = compose.onNodeWithTag("filter_campus").fetchSemanticsNode().boundsInRoot
@@ -444,6 +444,9 @@ class YouRoomUiTest {
         assertTrue(close.top > campus.bottom)
         compose.onNodeWithTag("building_2").performClick()
         compose.onNodeWithTag("filter_favorite").performClick()
+        val image=compose.onNodeWithTag("filter_dialog").captureToImage().asAndroidBitmap()
+        File(InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null),"filter-footer-1.14.1.png")
+            .outputStream().use { image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) }
         compose.onNodeWithTag("reset_filters").performClick()
         compose.onNodeWithTag("building_all").assertIsSelected()
         compose.onNodeWithTag("filter_favorite").assertIsNotSelected()
@@ -688,6 +691,9 @@ class YouRoomUiTest {
         compose.onNodeWithTag("add_tag").performClick()
         compose.onNodeWithTag("filter_tag_靠窗").assertIsSelected()
         compose.onNodeWithTag("filter_outlets").performClick()
+        val image=compose.onNodeWithTag("room_tag_dialog").captureToImage().asAndroidBitmap()
+        File(InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null),"room-tags-footer-1.14.1.png")
+            .outputStream().use { image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) }
         compose.onNodeWithTag("close_room_tags").performClick()
         compose.onNodeWithTag("filter_badge").assertDoesNotExist()
         revealRoom("01:2-201")

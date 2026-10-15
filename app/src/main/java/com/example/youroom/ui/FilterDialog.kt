@@ -37,12 +37,8 @@ fun FilterDialog(state: YouRoomState, onDismiss: () -> Unit, onFilters: (SearchF
                         TagEditor(state, onFilters, onAddTag, onRemoveTag, onTagOrder)
                     }
                     HorizontalDivider(Modifier.padding(top = 12.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { onFilters(SearchFilters(selectedSlots = state.filters.selectedSlots, query = state.filters.query)) },
-                            modifier = Modifier.testTag("reset_filters")) { Text("重置") }
-                        TextButton(onClick = onDismiss, modifier = Modifier.testTag("close_filters")) { Text("关闭") }
-                    }
+                    DialogFooterActions(state.filters.badgeCount > 0, "reset_filters", "close_filters",
+                        { onFilters(SearchFilters(selectedSlots = state.filters.selectedSlots, query = state.filters.query)) }, onDismiss)
                 }
             }
         }
