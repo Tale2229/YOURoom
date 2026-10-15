@@ -2,6 +2,7 @@ package com.example.youroom
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -33,17 +34,22 @@ class SlotPickerUiTest {
     private var campus by mutableStateOf(Campus.XITUCHENG)
     private var slots by mutableStateOf(snapshot.slots)
     private var fontScale by mutableFloatStateOf(1f)
+    private var enabled by mutableStateOf(true)
+    private var appearanceDark by mutableStateOf(false)
 
     private fun render(darkTheme: Boolean = false) {
+        appearanceDark = darkTheme
         compose.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
-                YouRoomTheme(darkTheme = darkTheme, campus = campus) {
-                    Column(Modifier.fillMaxWidth().padding(6.dp)) {
-                        SlotPicker(campus, snapshot.queryDate, true, filters, slots,
-                            { filters = it; changes += it })
-                        Spacer(Modifier.fillMaxWidth().height(1.dp).testTag("below_slots"))
-                        Text(filters.selectedSlots.sorted().joinToString(), Modifier.testTag("committed_slots"))
+                YouRoomTheme(darkTheme = appearanceDark, campus = campus) {
+                    Surface {
+                        Column(Modifier.fillMaxWidth().padding(6.dp)) {
+                            SlotPicker(campus, snapshot.queryDate, true, filters, slots,
+                                { filters = it; changes += it }, enabled = enabled)
+                            Spacer(Modifier.fillMaxWidth().height(1.dp).testTag("below_slots"))
+                            Text(filters.selectedSlots.sorted().joinToString(), Modifier.testTag("committed_slots"))
+                        }
                     }
                 }
             }
@@ -173,15 +179,18 @@ class SlotPickerUiTest {
         assertTrue(changes.isEmpty())
     }
 
-    @Test fun compactHeaderSpacingKeepsTheOriginalTouchTargetAndSummaryHeight() {
+    @Test fun clearReplacesTheHeaderAndKeepsPeriodSizeAndSummaryHeight() {
         render()
-        val header = compose.onNodeWithTag("slot_header").fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithTag("slot_header").assertDoesNotExist()
+        compose.onNodeWithText("自习时段").assertDoesNotExist()
+        compose.onNodeWithText("清空").assertDoesNotExist()
+        val grid = compose.onNodeWithTag("slot_grid").fetchSemanticsNode().boundsInRoot
         val target = compose.onNodeWithTag("slot_1").fetchSemanticsNode().boundsInRoot
         val face = compose.onNodeWithTag("slot_face_1", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-        assertEquals(face.height / 9, target.top - header.bottom, 1f)
+        assertEquals(grid.top, target.top, 1f)
         assertTrue(target.height + 1f >= face.height * 48 / 36)
         val summary = compose.onNodeWithTag("slot_summary_space").fetchSemanticsNode().boundsInRoot
-        compose.onNodeWithText("清空").performClick()
+        compose.onNodeWithTag("clear_slots").performClick()
         assertEquals(summary, compose.onNodeWithTag("slot_summary_space").fetchSemanticsNode().boundsInRoot)
     }
 
@@ -268,7 +277,7 @@ class SlotPickerUiTest {
         val selected = compose.onNodeWithTag("slot_summary_space").fetchSemanticsNode().boundsInRoot
         val text = compose.onNodeWithTag("slot_summary").fetchSemanticsNode().boundsInRoot
         assertTrue(selected.height + 1f >= text.height)
-        compose.onNodeWithText("清空").performClick()
+        compose.onNodeWithTag("clear_slots").performClick()
         assertEquals(selected, compose.onNodeWithTag("slot_summary_space").fetchSemanticsNode().boundsInRoot)
     }
 
@@ -362,5 +371,113 @@ class SlotPickerUiTest {
         assertEquals(original.copy(query = ""), filters)
         compose.onNodeWithTag("clear_room_search").assertDoesNotExist()
         compose.onNodeWithTag("slot_6").assertIsSelected()
+    }
+
+    @Test fun trashIsASquareCorneredPeriodSizedRectangleUnderNineBetweenFourteenAndSearch() {
+        render()
+        val clear = compose.onNodeWithTag("clear_slots").assertContentDescriptionEquals("清空所选时段")
+        val hit = clear.fetchSemanticsNode().boundsInRoot
+        val face = compose.onNodeWithTag("clear_slots_face", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val ninth = compose.onNodeWithTag("slot_face_9", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val last = compose.onNodeWithTag("slot_face_14", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val search = compose.onNodeWithTag("room_search_frame", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertEquals(ninth.center.x, face.center.x, 1f)
+        assertEquals(last.top, face.top, 1f)
+        assertEquals(last.width, face.width, 1f)
+        assertEquals(last.height, face.height, 1f)
+        assertTrue(face.left > last.right)
+        assertTrue(face.right < search.left)
+        assertTrue(hit.height + 1f >= face.height * 48 / 36)
+        val pixels = compose.onNodeWithTag("clear_slots_face", useUnmergedTree = true).captureToImage().toPixelMap()
+        assertEquals(campusColorScheme(campus,false).surface,pixels[3,3])
+    }
+
+    @Test fun trashClearsOnlySelectedSlotsAndIsDisabledWhenEmptyOrPageInactive() {
+        filters = filters.copy(query = "201", buildings = setOf("2"), favoritesOnly = true, tags = setOf("人少"))
+        val original = filters
+        render()
+        compose.onNodeWithTag("clear_slots").assertIsEnabled().performTouchInput { click() }
+        assertEquals(listOf(original.copy(selectedSlots = emptySet())), changes)
+        assertEquals(original.copy(selectedSlots = emptySet()), filters)
+        compose.onNodeWithTag("clear_slots").assertIsNotEnabled().performTouchInput { click() }
+        assertEquals(1, changes.size)
+        compose.runOnIdle { filters = original; enabled = false }
+        compose.onNodeWithTag("clear_slots").assertIsNotEnabled().performTouchInput { click() }
+        assertEquals(original, filters)
+        assertEquals(1, changes.size)
+    }
+
+    private fun trashMask(): List<Boolean> {
+        val background = campusColorScheme(campus, false).surface
+        val pixels = compose.onNodeWithTag("clear_slots_icon", useUnmergedTree = true).captureToImage().toPixelMap()
+        return (0 until pixels.height).flatMap { y -> (0 until pixels.width).map { x ->
+            val pixel = pixels[x,y]
+            kotlin.math.abs(pixel.red - background.red) + kotlin.math.abs(pixel.green - background.green) +
+                kotlin.math.abs(pixel.blue - background.blue) > .4f
+        } }
+    }
+
+    @Test fun lidOpensAndClosesThroughIntermediateGeometryAndRapidReversalUsesLatestSelection() {
+        filters = filters.copy(selectedSlots = emptySet())
+        render()
+        val closed = trashMask()
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { filters = filters.copy(selectedSlots = setOf(1)) }
+        compose.mainClock.advanceTimeBy(96)
+        val opening = trashMask()
+        compose.mainClock.advanceTimeBy(240)
+        val open = trashMask()
+        assertNotEquals(closed, opening)
+        assertNotEquals(opening, open)
+        assertNotEquals(closed, open)
+        // The stationary lower body keeps its density, rather than moving with the lid.
+        val lower = closed.size * 13 / 27
+        assertEquals(closed.drop(lower).count { it }, open.drop(lower).count { it })
+        compose.runOnIdle { filters = filters.copy(selectedSlots = emptySet()) }
+        compose.mainClock.advanceTimeBy(96)
+        val closing = trashMask()
+        assertNotEquals(open, closing)
+        assertNotEquals(closed, closing)
+        compose.runOnIdle { filters = filters.copy(selectedSlots = setOf(2)) }
+        compose.mainClock.advanceTimeBy(48)
+        compose.runOnIdle { filters = filters.copy(selectedSlots = emptySet()) }
+        compose.mainClock.advanceTimeBy(300)
+        assertEquals(closed, trashMask())
+        compose.onNodeWithTag("clear_slots").assertIsNotEnabled()
+        assertTrue(changes.isEmpty())
+    }
+
+    @Test fun trashFollowsUncommittedDragPreviewAndCancellationWithoutLaunchingExtraSearches() {
+        filters = filters.copy(selectedSlots = emptySet())
+        render()
+        compose.onNodeWithTag("clear_slots").assertIsNotEnabled()
+        val first = point(1)
+        val third = point(3)
+        compose.onNodeWithTag("slot_grid").performTouchInput { down(first); moveTo(third) }
+        compose.onNodeWithTag("clear_slots").assertIsEnabled()
+        assertTrue(changes.isEmpty())
+        compose.onNodeWithTag("slot_grid").performTouchInput { cancel() }
+        compose.onNodeWithTag("clear_slots").assertIsNotEnabled()
+        assertTrue(changes.isEmpty())
+        compose.onNodeWithTag("slot_grid").performTouchInput { down(first); moveTo(third); up() }
+        assertEquals(1, changes.size)
+        val grid = compose.onNodeWithTag("slot_grid").fetchSemanticsNode().boundsInRoot
+        val clear = compose.onNodeWithTag("clear_slots").fetchSemanticsNode().boundsInRoot.center - grid.topLeft
+        compose.onNodeWithTag("slot_grid").performTouchInput { down(first); moveTo(clear) }
+        assertEquals(1, changes.size)
+        compose.onNodeWithTag("slot_grid").performTouchInput { up() }
+        assertEquals(2, changes.size)
+    }
+
+    @Test fun trashRetainsCampusSpecificColorsInLightAndDarkThemes() {
+        render()
+        for (dark in listOf(false,true)) for (target in Campus.entries) {
+            compose.runOnIdle { campus = target; appearanceDark = dark }
+            val pixels = compose.onNodeWithTag("clear_slots_face", useUnmergedTree = true).captureToImage().toPixelMap()
+            assertEquals(campusColorScheme(target,dark).surface,pixels[3,3])
+            val ink = compose.onNodeWithTag("clear_slots_icon", useUnmergedTree = true).captureToImage().toPixelMap()
+            assertEquals(campusColorScheme(target,dark).primary,ink[ink.width/2,ink.height*19/27])
+            compose.onNodeWithTag("clear_slots").assertIsEnabled()
+        }
     }
 }

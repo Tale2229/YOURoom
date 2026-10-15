@@ -92,11 +92,6 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
         if (!pointerHeld && inspectedNumber != null) { delay(2_000); inspectedNumber = null }
     }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(Modifier.fillMaxWidth().testTag("slot_header"), verticalAlignment = Alignment.CenterVertically) {
-            Text("自习时段", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            TextButton(onClick = { onFilters(filters.copy(selectedSlots = emptySet())) },
-                shape = MaterialTheme.shapes.small, enabled = enabled && filters.selectedSlots.isNotEmpty()) { Text("清空") }
-        }
         BoxWithConstraints(Modifier.fillMaxWidth().testTag("slot_grid").onGloballyPositioned { geometry.origin = it.positionInRoot() }) {
             val cellWidth = (maxWidth - 4.dp * (StudyGridLayout.columns - 1)) / StudyGridLayout.columns
             Column(Modifier.fillMaxWidth().pointerInput(context, available, enabled, inspectionGap) {
@@ -229,6 +224,11 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                                     }
                                 }
                                 StudyGridCellKind.SPACER -> Spacer(modifier.height(48.dp))
+                                StudyGridCellKind.CLEAR -> SlotClearAction(selection.isNotEmpty(), {
+                                    inspectedNumber = null
+                                    lastInspectedNumber = null
+                                    onFilters(filters.copy(selectedSlots = emptySet()))
+                                }, modifier, enabled)
                                 StudyGridCellKind.SEARCH -> CompactRoomSearch(filters.query,
                                     { onFilters(filters.copy(query = it)) }, modifier, enabled)
                                 StudyGridCellKind.FILTER -> CompactFilterAction(campus, filters.badgeCount,

@@ -11,7 +11,7 @@ class StudyGridLayoutTest {
         assertEquals((1..6).toList(), rows[0].map { it.number })
         assertEquals((7..12).toList(), rows[1].map { it.number })
         assertEquals(listOf(13, 14, null, null, null), rows[2].map { it.number })
-        assertEquals(listOf(StudyGridCellKind.SLOT, StudyGridCellKind.SLOT, StudyGridCellKind.SPACER,
+        assertEquals(listOf(StudyGridCellKind.SLOT, StudyGridCellKind.SLOT, StudyGridCellKind.CLEAR,
             StudyGridCellKind.SEARCH, StudyGridCellKind.FILTER), rows[2].map { it.kind })
         assertEquals(listOf(1, 1, 1, 2, 1), rows[2].map { it.span })
     }
@@ -24,8 +24,18 @@ class StudyGridLayoutTest {
             assertEquals(numbers, rows.flatten().mapNotNull { it.number })
             assertEquals(1, rows.flatten().count { it.kind == StudyGridCellKind.SEARCH })
             assertEquals(1, rows.flatten().count { it.kind == StudyGridCellKind.FILTER })
+            assertEquals(1, rows.flatten().count { it.kind == StudyGridCellKind.CLEAR })
+            assertEquals(2, rows.last().takeWhile { it.kind != StudyGridCellKind.CLEAR }.sumOf { it.span })
             assertEquals(3, rows.last().takeWhile { it.kind != StudyGridCellKind.SEARCH }.sumOf { it.span })
         }
         assertEquals(listOf(1, 6, 14), StudyGridLayout.rows(listOf(14, 6, 1, 6)).flatten().mapNotNull { it.number })
+    }
+
+    @Test fun threeTrailingPeriodsGetTheirOwnRowRatherThanReplacingTheThirdWithClear() {
+        val rows = StudyGridLayout.rows((1..15).toList())
+        assertEquals(4, rows.size)
+        assertEquals(listOf(13, 14, 15, null, null, null), rows[2].map { it.number })
+        assertEquals(StudyGridCellKind.CLEAR, rows.last()[2].kind)
+        assertEquals((1..15).toList(), rows.flatten().mapNotNull { it.number })
     }
 }

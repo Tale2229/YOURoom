@@ -1,11 +1,29 @@
 package com.example.youroom.domain
 
+/** Editor state: wheel values are a draft; only '+'-confirmed windows enter a request. */
+data class PlanningDraft(
+    val start: Int = 8 * 60,
+    val end: Int = 12 * 60,
+    val flexible: Boolean = true,
+    val origin: String? = null,
+    val savedWindows: List<StudyWindow> = emptyList(),
+    val expectedRooms: Set<String> = emptySet(),
+) {
+    val windows get() = savedWindows.sortedBy { it.start }
+}
+
+/** Calculation input, deliberately separate from the editable wheel draft. */
 data class PlanningGoal(
     val start: Int = 8 * 60,
     val end: Int = 12 * 60,
     val flexible: Boolean = true,
     val origin: String? = null,
-)
+    val savedWindows: List<StudyWindow> = emptyList(),
+    val expectedRooms: Set<String> = emptySet(),
+) {
+    val windows get() = (savedWindows + StudyWindow(start, end)).sortedBy { it.start }
+    val lossLimit get() = if (savedWindows.isEmpty()) PlanningPolicy.lossLimit else PlanningPolicy.multiLossLimit
+}
 
 data class StudyWindow(val start: Int, val end: Int) {
     val duration get() = end - start
@@ -22,6 +40,7 @@ sealed interface PlanningStep {
         val to: Classroom, val walkingMinutes: Int) : PlanningStep {
         val waitingMinutes get() = end - start - walkingMinutes
     }
+    data class Break(override val start: Int, override val end: Int) : PlanningStep
 }
 
 data class StudyPlan(
@@ -36,17 +55,21 @@ data class StudyPlan(
     val lostMinutes: Int,
     val deviation: Int,
     val score: Int,
+    val windows: List<StudyWindow> = listOf(window),
+    val freshnessPenalty: Int = 0,
+    val expectedMinutes: Int = 0,
 ) {
-    val signature get() = "${window.start}:${window.end}:" + steps.joinToString {
+    val signature get() = windows.joinToString { "${it.start}:${it.end}" } + ":" + steps.joinToString {
         when (it) {
             is PlanningStep.Study -> "${it.classroom.id}@${it.start}-${it.end}"
             is PlanningStep.Transfer -> "move@${it.start}-${it.end}"
+            is PlanningStep.Break -> "break@${it.start}-${it.end}"
         }
     }
 }
 
 data class PlanningOption(val label: String, val plan: StudyPlan)
-enum class PlanningProblem { INVALID_TIME, PAST_TIME }
+enum class PlanningProblem { INVALID_TIME, PAST_TIME, OVERLAP, TOO_MANY }
 data class PlanningResult(val options: List<PlanningOption> = emptyList(), val message: String? = null,
     val problem: PlanningProblem? = null)
 
@@ -58,7 +81,12 @@ object PlanningPolicy {
     const val teachingEnd = 20 * 60 + 55
     const val shiftLimit = 15
     const val lossLimit = 20
+    const val multiLossLimit = 30
+    const val periodLimit = 3
+    const val startGraceMinutes = 5
     const val changeLimit = 2
+    const val expectedStayMinimum = 30
+    const val expectedNeighborMinimum = 30
     const val lossPenalty = 3
     const val changePenalty = 20
     const val buildingPenalty = 12
@@ -67,7 +95,7 @@ object PlanningPolicy {
         approach: Int, favorites: Int) = loss * lossPenalty + deviation + changes * changePenalty +
         buildings * buildingPenalty + (walking + approach) * walkingPenalty - favorites
 
-    fun windows(goal: PlanningGoal): List<StudyWindow> {
+    fun windows(goal: PlanningGoal, lossLimit: Int = goal.lossLimit): List<StudyWindow> {
         if (!goal.flexible) return listOf(StudyWindow(goal.start, goal.end))
         return (-shiftLimit..shiftLimit step 5).flatMap { shift ->
             (0..lossLimit step 5).flatMap { trimStart ->
@@ -75,10 +103,10 @@ object PlanningPolicy {
                     StudyWindow(goal.start + shift + trimStart, goal.end + shift - trimEnd)
                 }
             }
-        }.distinct().filter { admissible(goal, it) }
+        }.distinct().filter { admissible(goal, it, lossLimit) }
     }
 
-    fun admissible(goal: PlanningGoal, window: StudyWindow): Boolean {
+    fun admissible(goal: PlanningGoal, window: StudyWindow, lossLimit: Int = goal.lossLimit): Boolean {
         val shortening = goal.end - goal.start - window.duration
         val startDelta = window.start - goal.start
         val endDelta = window.end - goal.end

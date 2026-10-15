@@ -117,4 +117,22 @@ class CompactFilterChipUiTest {
         compose.onNodeWithContentDescription("删除词条 窗").performTouchInput { click() }
         assertEquals(1, deletions); assertEquals(1, clicks)
     }
+
+    @Test fun deleteCrossCutsOnlyTheOverlappingBorderInBothCampusPalettes() {
+        render(deletable=true)
+        for (target in Campus.entries) for (dark in listOf(false,true)) {
+            compose.runOnIdle { campus=target;night=dark;selected=true }
+            val pixels=compose.onNodeWithTag("filter_chip_face_有插座",true).captureToImage().toPixelMap()
+            val density=compose.density.density
+            val gap=pixels[(pixels.width-11*density).toInt(),0]
+            val intact=pixels[pixels.width/2,0]
+            val palette=campusColorScheme(target,dark)
+            assertEquals(palette.primaryContainer.red,gap.red,.02f)
+            assertEquals(palette.primaryContainer.green,gap.green,.02f)
+            assertEquals(palette.primaryContainer.blue,gap.blue,.02f)
+            assertEquals(palette.primary.red,intact.red,.02f)
+            assertEquals(palette.primary.green,intact.green,.02f)
+            assertEquals(palette.primary.blue,intact.blue,.02f)
+        }
+    }
 }

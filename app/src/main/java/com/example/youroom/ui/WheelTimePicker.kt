@@ -30,8 +30,13 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import com.example.youroom.domain.planningTime
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -73,7 +78,9 @@ private fun LazyListLayoutInfo.centerPosition(fallback: Int): Float {
 
 @Composable
 internal fun WheelTimePicker(title: String, minuteOfDay: Int, tag: String,
-    modifier: Modifier = Modifier, onMoving: (Boolean) -> Unit = {}, onTime: (Int) -> Unit) {
+    modifier: Modifier = Modifier, onMoving: (Boolean) -> Unit = {},
+    titleHeight: Dp? = null, titleAction: (@Composable () -> Unit)? = null,
+    viewportRows: Float = 4.5f, onTime: (Int) -> Unit) {
     var settledHour by remember { mutableIntStateOf(minuteOfDay / 60) }
     var settledMinute by remember { mutableIntStateOf(minuteOfDay % 60) }
     var lastExternal by remember { mutableIntStateOf(minuteOfDay) }
@@ -96,13 +103,17 @@ internal fun WheelTimePicker(title: String, minuteOfDay: Int, tag: String,
         text = AnnotatedString(planningTime(minuteOfDay))
         stateDescription = "$title ${planningTime(minuteOfDay)}"
     }, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(if (titleHeight != null) Modifier.height(titleHeight) else Modifier,
+            verticalAlignment = Alignment.CenterVertically) {
+            Text(title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            titleAction?.invoke()
+        }
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             TimeWheel("小时", 24, minuteOfDay / 60, "${tag}_hour_wheel", Modifier.weight(1f), {
                 settledHour = it
                 currentOnTime(settledHour * 60 + settledMinute)
-            }, { hourMoving = it })
+            }, { hourMoving = it }, viewportRows)
             Text(":", Modifier.offset { IntOffset(0, -2) }.width(12.dp)
                 .testTag("${tag}_colon").clearAndSetSemantics {},
                 style = MaterialTheme.typography.headlineMedium.copy(
@@ -111,15 +122,32 @@ internal fun WheelTimePicker(title: String, minuteOfDay: Int, tag: String,
             TimeWheel("分钟", 60, minuteOfDay % 60, "${tag}_minute_wheel", Modifier.weight(1f), {
                 settledMinute = it
                 currentOnTime(settledHour * 60 + settledMinute)
-            }, { minuteMoving = it })
+            }, { minuteMoving = it }, viewportRows)
         }
     }
 }
 
 @Composable
 private fun TimeWheel(unit: String, count: Int, value: Int, tag: String, modifier: Modifier,
-    onValue: (Int) -> Unit, onMoving: (Boolean) -> Unit) {
-    val initial = remember { timeWheelInitialIndex(value, count) }
+    onValue: (Int) -> Unit, onMoving: (Boolean) -> Unit, viewportRows: Float) {
+    val labels = remember(count) { List(count) { "%02d".format(java.util.Locale.ROOT, it) } }
+    CylinderWheel(unit, labels, value, tag, modifier, cyclic = true, viewportRows = viewportRows,
+        onValue = onValue, onMoving = onMoving)
+}
+
+/** The same curved projection and inertia serve time and finite classroom selectors. */
+@Composable
+internal fun CylinderWheel(unit: String, labels: List<String>, value: Int, tag: String,
+    modifier: Modifier = Modifier, cyclic: Boolean = false, viewportRows: Float = 3.5f,
+    textStyle: TextStyle = MaterialTheme.typography.headlineMedium, labelLines: Int = 1,
+    fittingLabels: List<String> = labels,
+    onMoving: (Boolean) -> Unit = {}, onValue: (Int) -> Unit) {
+    require(labels.isNotEmpty())
+    val count = labels.size
+    val initial = remember(count, cyclic) { if (cyclic) timeWheelInitialIndex(value, count) else value }
+    fun indexValue(index: Int) = if (cyclic) timeWheelValue(index, count) else index.coerceIn(0, count - 1)
+    fun targetIndex(value: Int, around: Int) = if (cyclic) timeWheelNearestIndex(value, around, count) else value
+    val itemCount = if (cyclic) count * TimeWheelCycles else count
     val list = rememberLazyListState(initialFirstVisibleItemIndex = initial)
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
@@ -129,6 +157,7 @@ private fun TimeWheel(unit: String, count: Int, value: Int, tag: String, modifie
     val currentValue by rememberUpdatedState(value)
     val currentOnValue by rememberUpdatedState(onValue)
     val currentOnMoving by rememberUpdatedState(onMoving)
+    DisposableEffect(Unit) { onDispose { currentOnMoving(false) } }
     val position by remember { derivedStateOf { list.layoutInfo.centerPosition(initial) } }
     val centered by remember { derivedStateOf { position.roundToInt() } }
     val rowHeight = with(LocalDensity.current) {
@@ -143,8 +172,8 @@ private fun TimeWheel(unit: String, count: Int, value: Int, tag: String, modifie
     }
     val colors = MaterialTheme.colorScheme
     LaunchedEffect(value, rowPx) {
-        if (timeWheelValue(centered, count) != value) {
-            val target = timeWheelNearestIndex(value, centered, count)
+        if (indexValue(centered) != value) {
+            val target = targetIndex(value, centered)
             externalAnimation = true
             try {
                 // A low-stiffness, lightly damped spring accelerates, coasts and settles with a
@@ -178,29 +207,39 @@ private fun TimeWheel(unit: String, count: Int, value: Int, tag: String, modifie
         snapshotFlow { list.isScrollInProgress }.distinctUntilChanged().collect { moving ->
             currentOnMoving(moving)
             if (wasMoving && !moving && !externalAnimation && synchronizedValue == currentValue) {
-                val settled = timeWheelValue(list.layoutInfo.centerPosition(initial).roundToInt(), count)
+                val settled = indexValue(list.layoutInfo.centerPosition(initial).roundToInt())
                 if (settled != currentValue) currentOnValue(settled)
             }
             wasMoving = moving
         }
     }
     fun select(index: Int) {
-        scope.launch { list.animateScrollToItem(index.coerceIn(0, count * TimeWheelCycles - 1)) }
+        scope.launch { list.animateScrollToItem(index.coerceIn(0, itemCount - 1)) }
     }
-    Box(modifier.widthIn(min = 48.dp).height(rowHeight * 4.5f).clipToBounds()) {
+    BoxWithConstraints(modifier.widthIn(min = 48.dp).height(rowHeight * viewportRows).clipToBounds()) {
+        val measurer = rememberTextMeasurer()
+        val available = with(LocalDensity.current) { (maxWidth - 8.dp).toPx() }
+        val fittedStyle = remember(fittingLabels, textStyle, available, density) {
+            val widest = fittingLabels.maxOf { label -> label.lineSequence().maxOf {
+                measurer.measure(it, textStyle, maxLines = 1, softWrap = false).size.width
+            } }
+            val scale = min(1f, available / widest.coerceAtLeast(1))
+            textStyle.copy(fontSize = textStyle.fontSize*scale,
+                lineHeight = if (textStyle.lineHeight == TextUnit.Unspecified) textStyle.lineHeight else textStyle.lineHeight*scale)
+        }
         Box(Modifier.align(Alignment.Center).fillMaxWidth().height(rowHeight)
             .background(colors.primary.copy(alpha = .045f), MaterialTheme.shapes.small))
         // Invisible list owns touch/velocity and accessibility. Visible digits are separately
         // projected, so outer rows remain on the curved face throughout the gesture.
         LazyColumn(state = list, flingBehavior = fling,
-            contentPadding = PaddingValues(vertical = rowHeight * 1.75f),
+            contentPadding = PaddingValues(vertical = rowHeight * ((viewportRows - 1f) / 2f)),
             modifier = Modifier.fillMaxSize().testTag(tag).semantics {
                 contentDescription = unit
-                stateDescription = "%02d".format(java.util.Locale.ROOT, timeWheelValue(centered, count))
-                progressBarRangeInfo = ProgressBarRangeInfo(timeWheelValue(centered, count).toFloat(),
-                    0f..(count - 1).toFloat(), count - 2)
+                stateDescription = labels[indexValue(centered)]
+                progressBarRangeInfo = ProgressBarRangeInfo(indexValue(centered).toFloat(),
+                    0f..(count - 1).toFloat(), (count - 2).coerceAtLeast(0))
                 setProgress { requested ->
-                    select(timeWheelNearestIndex(requested.roundToInt().coerceIn(0, count - 1), centered, count)); true
+                    select(targetIndex(requested.roundToInt().coerceIn(0, count - 1), centered)); true
                 }
                 customActions = listOf(
                     CustomAccessibilityAction("上一$unit") { select(centered - 1); true },
@@ -214,13 +253,13 @@ private fun TimeWheel(unit: String, count: Int, value: Int, tag: String, modifie
                     select(centered + timeWheelTappedOffset((tap.y - size.height / 2f) / rowPx))
                 }
             }) {
-            items(count * TimeWheelCycles) { Spacer(Modifier.fillMaxWidth().height(rowHeight)) }
+            items(itemCount) { Spacer(Modifier.fillMaxWidth().height(rowHeight)) }
         }
         for (offset in -3..3) {
             val index = centered + offset
-            if (index !in 0 until count * TimeWheelCycles) continue
+            if (index !in 0 until itemCount) continue
             val distance = index - position
-            Text("%02d".format(java.util.Locale.ROOT, timeWheelValue(index, count)),
+            Text(labels[indexValue(index)],
                 Modifier.align(Alignment.Center).clearAndSetSemantics {}.graphicsLayer {
                     val projection = timeWheelProjection(index - position)
                     translationY = projection.y * rowPx
@@ -229,7 +268,9 @@ private fun TimeWheel(unit: String, count: Int, value: Int, tag: String, modifie
                     scaleY = projection.scale
                     alpha = projection.alpha
                     cameraDistance = rowPx * 12f
-                }, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Medium,
+                }, style = fittedStyle, maxLines = labelLines, softWrap = false, overflow = TextOverflow.Clip,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                fontWeight = FontWeight.Medium,
                 color = lerp(colors.onSurfaceVariant, colors.primary, (1f - abs(distance)).coerceIn(0f, 1f)))
         }
     }

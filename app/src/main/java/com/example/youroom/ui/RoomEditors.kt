@@ -17,7 +17,8 @@ enum class RoomEditor { ACTIONS, TAGS, NOTE }
 
 @Composable
 fun RoomTagsDialog(room: RoomMatch, state: YouRoomState, onDismiss: () -> Unit,
-    onChange: (RoomProfile) -> Unit, onAddTag: (String) -> Unit) {
+    onChange: (RoomProfile) -> Unit, onAddTag: (String) -> Unit,
+    onRemoveTag: (String) -> Unit, onTagOrder: (List<String>) -> Unit) {
     var draft by remember(room.classroom.id) { mutableStateOf(room.profile) }
     LaunchedEffect(room.profile) { draft = room.profile }
     fun update(profile: RoomProfile) { draft = profile; onChange(profile) }
@@ -37,7 +38,7 @@ fun RoomTagsDialog(room: RoomMatch, state: YouRoomState, onDismiss: () -> Unit,
                         TagEditor(state.copy(filters = draft.tagSelection()),
                             { update(draft.withTagSelection(it)) }, { name ->
                                 onAddTag(name); update(draft.withPersonalTag(name))
-                            }, {}, {}, showFavorite = false, manageCatalog = false)
+                            }, onRemoveTag, onTagOrder, showFavorite = false)
                     }
                     HorizontalDivider(Modifier.padding(top = 12.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

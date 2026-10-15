@@ -1,11 +1,8 @@
 package com.example.youroom.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,17 +26,11 @@ fun CompactFilterChip(label: String, selected: Boolean, onClick: () -> Unit,
             rotationZ = angle?.value ?: 0f
             alpha = if (faded) .3f else 1f
         }.height(40.dp), contentAlignment = Alignment.Center) {
-            Surface(Modifier.fillMaxWidth().height(28.dp).testTag("filter_chip_face_$label"), shape = MaterialTheme.shapes.small,
-                color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                contentColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)) {
+            CompactChipFrame(selected,"filter_chip_face_$label",Modifier.fillMaxWidth(),
+                onDelete = onDelete,deleteDescription = "删除词条 $label") {
                 Box(Modifier.height(28.dp).padding(horizontal = 8.dp).widthIn(max = 152.dp), contentAlignment = Alignment.Center) {
                     Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-            }
-            if (onDelete != null) IconButton(onClick = onDelete,
-                modifier = Modifier.align(Alignment.TopEnd).offset(x = 5.dp, y = (-1).dp).size(20.dp)) {
-                Icon(Icons.Outlined.Close, "删除词条 $label", Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
             }
         }
     }

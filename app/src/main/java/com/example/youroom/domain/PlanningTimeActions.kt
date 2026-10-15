@@ -5,6 +5,12 @@ import java.time.LocalTime
 
 /** Minute-precision shortcuts; never silently wrap into the next day. */
 internal object PlanningTimeActions {
+    fun startFromNow(draft: PlanningDraft, clock: Clock): PlanningDraft? =
+        startFromNow(PlanningGoal(draft.start,draft.end),clock)?.let { draft.copy(start = it.start) }
+
+    fun endAfterHours(draft: PlanningDraft, hours: Int): PlanningDraft? =
+        endAfterHours(PlanningGoal(draft.start,draft.end),hours)?.let { draft.copy(end = it.end) }
+
     fun startFromNow(goal: PlanningGoal, clock: Clock): PlanningGoal? {
         val now = LocalTime.now(clock.withZone(SchoolZone))
         val start = now.hour * 60 + now.minute + 1

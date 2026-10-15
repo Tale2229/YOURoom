@@ -1,7 +1,7 @@
 package com.example.youroom.ui
 
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -72,7 +72,7 @@ fun TagEditor(state: YouRoomState, onFilters: (SearchFilters) -> Unit, onAdd: (S
                             if (editing && movable) {
                                 var before = emptyList<String>()
                                 var lastTarget: String? = null
-                                detectDragGestures(onDragStart = { position ->
+                                detectDragGesturesAfterLongPress(onDragStart = { position ->
                                     before = order.toList(); lastTarget = null
                                     val bounds = geometry.bounds[tag]
                                     grab = Offset(position.x.coerceIn(0f, bounds?.width ?: 0f),

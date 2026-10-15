@@ -18,16 +18,16 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.youroom.ui.theme.YouRoomTheme
-import com.example.youroom.domain.PlanningGoal
+import com.example.youroom.domain.PlanningDraft
+import com.example.youroom.domain.PlanningSchedule
 
 @Composable
 fun YouRoomApp(model: YouRoomViewModel) {
     val state by model.state.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableIntStateOf(0) }
-    var goal by rememberSaveable(stateSaver = PlanningGoalSaver) { mutableStateOf(PlanningGoal()) }
+    var goal by rememberSaveable(stateSaver = PlanningGoalSaver) { mutableStateOf(PlanningDraft()) }
     var planRequested by rememberSaveable { mutableStateOf(false) }
     var planningCampus by rememberSaveable { mutableStateOf(state.campus.dataKey) }
-    var generationMinute by rememberSaveable { mutableStateOf<Int?>(null) }
     var planningDate by rememberSaveable { mutableStateOf(state.today.toString()) }
     var planningDemo by rememberSaveable { mutableStateOf(state.demo) }
     var roomEditor by rememberSaveable { mutableStateOf(RoomEditor.ACTIONS) }
@@ -35,7 +35,8 @@ fun YouRoomApp(model: YouRoomViewModel) {
     fun manageRoom(id: String?) { roomEditor = RoomEditor.ACTIONS; model.selectRoom(id) }
     LaunchedEffect(state.today, state.demo) {
         if (planningDate != state.today.toString() || planningDemo != state.demo) {
-            planRequested = false; generationMinute = null
+            planRequested = false
+            goal = goal.copy(savedWindows = emptyList(), expectedRooms = if (planningDemo != state.demo) emptySet() else goal.expectedRooms)
         }
         planningDate = state.today.toString(); planningDemo = state.demo
     }
@@ -73,11 +74,10 @@ fun YouRoomApp(model: YouRoomViewModel) {
                         "login" -> LoginScreen(state, model::login, { tab = 0; model.showDemo() },
                             { tab = 0; model.viewCache() })
                         else -> WorkspacePages(state, tab, model, goal, planRequested,
-                            { goal = it; planRequested = false }, {
-                                generationMinute = if (state.demo) null else java.time.LocalTime.now(com.example.youroom.domain.SchoolZone)
-                                    .let { (it.toSecondOfDay() + 59) / 60 }
-                                planRequested = true
-                            }, ::editRoom, ::manageRoom, generationMinute)
+                            {
+                                if (PlanningSchedule.confirmedGoal(goal) != PlanningSchedule.confirmedGoal(it)) planRequested = false
+                                goal = it
+                            }, { planRequested = true }, ::editRoom, ::manageRoom)
                     }
                 }
             }
@@ -86,7 +86,8 @@ fun YouRoomApp(model: YouRoomViewModel) {
         state.selectedRoom?.let { room ->
             val dismiss = { model.selectRoom(null) }
             when (roomEditor) {
-                RoomEditor.TAGS -> RoomTagsDialog(room, state, dismiss, model::saveProfile, model::addCustomTag)
+                RoomEditor.TAGS -> RoomTagsDialog(room, state, dismiss, model::saveProfile, model::addCustomTag,
+                    model::removePersonalTag, model::reorderPersonalTags)
                 RoomEditor.NOTE -> RoomNoteDialog(room, dismiss, model::saveProfile)
                 RoomEditor.ACTIONS -> RoomActionsDialog(room, dismiss,
                     { model.toggleFavorite(room.classroom) }, { roomEditor = RoomEditor.TAGS },
@@ -98,8 +99,8 @@ fun YouRoomApp(model: YouRoomViewModel) {
 
 @Composable
 private fun WorkspacePages(state: YouRoomState, tab: Int, model: YouRoomViewModel,
-    goal: PlanningGoal, requested: Boolean, onGoal: (PlanningGoal) -> Unit, onGenerate: () -> Unit,
-    editRoom: (String, RoomEditor) -> Unit, manageRoom: (String?) -> Unit, notBeforeMinute: Int?) {
+    goal: PlanningDraft, requested: Boolean, onGoal: (PlanningDraft) -> Unit, onGenerate: () -> Unit,
+    editRoom: (String, RoomEditor) -> Unit, manageRoom: (String?) -> Unit) {
     val header = rememberCampusHeaderMotion(state.campus)
     val headerMoving by remember(header) { derivedStateOf { header.moving } }
     val savedPages = rememberSaveableStateHolder()
@@ -127,7 +128,7 @@ private fun WorkspacePages(state: YouRoomState, tab: Int, model: YouRoomViewMode
                             model::removePersonalTag, model::reorderPersonalTags, model::toggleExcluded,
                             showHeader = false, sharedHeaderMoving = headerMoving, interactive = active)
                         1 -> StudyPlanningScreen(state, goal, requested, onGoal, onGenerate, model::setCampus,
-                            model::refresh, manageRoom, notBeforeMinute, showHeader = false,
+                            model::refresh, manageRoom, showHeader = false,
                             sharedHeaderMoving = headerMoving, interactive = active)
                         else -> PreferencesScreen(state, manageRoom, model::clearProfile, model::logout,
                             model::setCampus, showHeader = false, sharedHeaderMoving = headerMoving, interactive = active)

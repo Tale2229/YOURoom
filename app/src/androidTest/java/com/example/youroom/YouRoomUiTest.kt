@@ -1,6 +1,8 @@
 package com.example.youroom
 
 import android.accessibilityservice.AccessibilityService
+import androidx.compose.ui.graphics.asAndroidBitmap
+import java.io.File
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -125,7 +127,9 @@ class YouRoomUiTest {
         compose.onNodeWithTag("slot_1").assertIsSelected()
         compose.onNodeWithTag("slot_2").assertIsSelected()
         compose.onNodeWithTag("tab_planner").performClick()
-        compose.onNodeWithTag("planner_end").assertTextContains("09:35")
+        compose.onNodeWithTag("planner_saved_period_0").assertTextContains("08:00–09:35")
+        compose.onNodeWithTag("planner_start").assertTextContains("09:35")
+        compose.onNodeWithTag("planner_end").assertTextContains("10:35")
     }
 
     @Test fun plannerSwitchesCampusesWithoutKeepingWestRoomsOrTheRemovedRulesHeading() {
@@ -157,27 +161,30 @@ class YouRoomUiTest {
         compose.onNodeWithTag("planner_time_cancel").assertDoesNotExist()
     }
 
-    @Test fun invalidPlanningTimesNeverLeavePreviousResultsVisible() {
+    @Test fun anInvalidUnconfirmedDraftDoesNotInvalidateTheConfirmedPlan() {
         enterDemo()
         compose.onNodeWithTag("tab_planner").performClick()
         generatePlanner()
         compose.onNodeWithTag("planner_start_hour_wheel").performScrollTo()
             .performSemanticsAction(SemanticsActions.SetProgress) { it(18f) }
-        compose.onNodeWithTag("planner_results").assertDoesNotExist()
         generatePlanner()
+        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_window"))
+        compose.onNodeWithTag("planner_window").assertTextEquals("08:00—12:00")
+        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_add_period"))
+        compose.onNodeWithTag("planner_add_period").performClick()
         compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_message"))
         compose.onNodeWithTag("planner_message").assertTextContains("结束时间必须晚于开始时间", substring = true)
     }
 
     @Test fun slotGridSupportsDisjointSelectionAndClear() {
         enterDemo()
-        compose.onNodeWithText("清空").performScrollTo().performClick()
+        compose.onNodeWithTag("clear_slots").performScrollTo().performClick()
         compose.onNodeWithTag("slot_1").performScrollTo().performClick()
         compose.onNodeWithTag("slot_3").performClick()
         compose.onNodeWithTag("slot_1").assertIsSelected()
         compose.onNodeWithTag("slot_2").assertIsNotSelected()
         compose.onNodeWithTag("slot_3").assertIsSelected()
-        compose.onNodeWithText("清空").performClick()
+        compose.onNodeWithTag("clear_slots").performClick()
         compose.onNodeWithText("请选择自习时段").assertDoesNotExist()
         compose.onNodeWithTag("slot_summary").assertDoesNotExist()
         compose.onNodeWithTag("room_list").performScrollToNode(hasText("2-201"))
@@ -187,17 +194,17 @@ class YouRoomUiTest {
     @Test fun changingSelectionNeverShiftsTheClassroomsHeading() {
         enterDemo()
         val top = compose.onNodeWithText("可选教室").fetchSemanticsNode().boundsInRoot.top
-        compose.onNodeWithText("清空").performClick()
+        compose.onNodeWithTag("clear_slots").performClick()
         assertEquals(top, compose.onNodeWithText("可选教室").fetchSemanticsNode().boundsInRoot.top, 1f)
         for (number in 1..14 step 2) compose.onNodeWithTag("slot_$number").performClick()
         assertEquals(top, compose.onNodeWithText("可选教室").fetchSemanticsNode().boundsInRoot.top, 1f)
-        compose.onNodeWithText("清空").performClick()
+        compose.onNodeWithTag("clear_slots").performClick()
         assertEquals(top, compose.onNodeWithText("可选教室").fetchSemanticsNode().boundsInRoot.top, 1f)
     }
 
     @Test fun gridDragCanAddAndRemoveWithoutTogglingTheWholePage() {
         enterDemo()
-        compose.onNodeWithText("清空").performScrollTo().performClick()
+        compose.onNodeWithTag("clear_slots").performScrollTo().performClick()
         val grid = compose.onNodeWithTag("slot_grid").fetchSemanticsNode().boundsInRoot
         val first = compose.onNodeWithTag("slot_1").fetchSemanticsNode().boundsInRoot.center - grid.topLeft
         val third = compose.onNodeWithTag("slot_3").fetchSemanticsNode().boundsInRoot.center - grid.topLeft
@@ -221,7 +228,7 @@ class YouRoomUiTest {
 
     @Test fun cancelingAPaintGestureRestoresTheSelection() {
         enterDemo()
-        compose.onNodeWithText("清空").performScrollTo().performClick()
+        compose.onNodeWithTag("clear_slots").performScrollTo().performClick()
         val grid = compose.onNodeWithTag("slot_grid").fetchSemanticsNode().boundsInRoot
         val first = compose.onNodeWithTag("slot_1").fetchSemanticsNode().boundsInRoot.center - grid.topLeft
         val third = compose.onNodeWithTag("slot_3").fetchSemanticsNode().boundsInRoot.center - grid.topLeft
@@ -244,6 +251,10 @@ class YouRoomUiTest {
     }
 
     private fun generatePlanner() {
+        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_add_period"))
+        if (compose.onAllNodesWithTag("planner_saved_period_0").fetchSemanticsNodes().isEmpty()) {
+            compose.onNodeWithTag("planner_add_period").performClick()
+        }
         compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_generate"))
         compose.onNodeWithTag("planner_generate").performClick()
         awaitPlanner()
@@ -384,7 +395,7 @@ class YouRoomUiTest {
 
     @Test fun emptyTimeSelectionStillAllowsExtraFiltersAndReset() {
         enterDemo()
-        compose.onNodeWithText("清空").performScrollTo().performClick()
+        compose.onNodeWithTag("clear_slots").performScrollTo().performClick()
         compose.onNodeWithTag("extra_filters").performScrollTo().performClick()
         compose.onNodeWithTag("filter_favorite").performClick()
         compose.onNodeWithTag("close_filters").performClick()
@@ -397,7 +408,7 @@ class YouRoomUiTest {
 
     @Test fun selectedTimeIsSharedEvenAfterEditingTheOtherCampus() {
         enterDemo()
-        compose.onNodeWithText("清空").performScrollTo().performClick()
+        compose.onNodeWithTag("clear_slots").performScrollTo().performClick()
         compose.onNodeWithTag("slot_1").performClick()
         compose.onNodeWithTag("slot_6").performClick()
         compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeLeft() }
@@ -598,7 +609,7 @@ class YouRoomUiTest {
         revealRoom("01:2-201")
         compose.onNodeWithContentDescription("修改标签 2-201").performClick()
         compose.onNodeWithTag("edit_tags").performClick()
-        compose.onNodeWithContentDescription("删除词条 有插座").assertDoesNotExist()
+        compose.onNodeWithContentDescription("删除词条 有插座").assertExists()
         compose.onNodeWithTag("custom_tag_name").performTextInput("靠窗")
         compose.onNodeWithTag("add_tag").performClick()
         compose.onNodeWithTag("filter_tag_靠窗").assertIsSelected()
@@ -617,6 +628,54 @@ class YouRoomUiTest {
         compose.onNodeWithTag("extra_filters").performClick()
         compose.onNodeWithTag("filter_tag_靠窗").assertIsNotSelected()
         compose.onNodeWithTag("filter_outlets").assertIsNotSelected()
+    }
+
+    @Test fun roomTagEditingRestoresDeleteConfirmationAndTheSharedCatalog() {
+        enterDemo();revealRoom("01:2-201")
+        compose.onNodeWithContentDescription("修改标签 2-201").performClick()
+        compose.onNodeWithTag("filter_outlets").performClick().assertIsSelected()
+        compose.onNodeWithTag("edit_tags").performClick()
+        compose.onNodeWithContentDescription("删除词条 有插座").assertIsDisplayed().performClick()
+        compose.onNodeWithText("取消").performClick()
+        compose.onNodeWithTag("filter_outlets").assertIsSelected()
+        compose.onNodeWithContentDescription("删除词条 有插座").performClick()
+        compose.onNodeWithTag("confirm_delete_tag").performClick()
+        compose.onNodeWithTag("filter_outlets").assertDoesNotExist()
+        compose.onNodeWithTag("custom_tag_name").performTextInput("有插座")
+        compose.onNodeWithTag("add_tag").performClick()
+        compose.onNodeWithTag("filter_outlets").assertIsSelected()
+        compose.onNodeWithTag("close_room_tags").performClick()
+        compose.onNodeWithTag("extra_filters").performScrollTo().performClick()
+        compose.onNodeWithTag("filter_outlets").assertIsNotSelected()
+        compose.onNodeWithTag("filter_favorite").assertExists()
+    }
+
+    @Test fun roomTagsReorderOnlyAfterLongPressAndTheOrderIsSharedWithFilters() {
+        enterDemo();revealRoom("01:2-201")
+        compose.onNodeWithContentDescription("修改标签 2-201").performClick()
+        compose.onNodeWithTag("edit_tags").performClick()
+        val source=compose.onNodeWithTag("filter_outlets").fetchSemanticsNode().boundsInRoot
+        val target=compose.onNodeWithTag("filter_tag_人少").fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithTag("filter_outlets").performTouchInput {
+            down(center);moveTo(target.center-source.topLeft,delayMillis=100);up()
+        }
+        val unchanged=compose.onNodeWithTag("filter_outlets").fetchSemanticsNode().boundsInRoot
+        assertEquals(source.left,unchanged.left,1f)
+        assertEquals(source.top,unchanged.top,1f)
+        compose.onNodeWithTag("filter_outlets").performTouchInput {
+            down(center);advanceEventTime(650);moveTo(target.center-source.topLeft,delayMillis=200);up()
+        }
+        val after=compose.onNodeWithTag("filter_outlets").fetchSemanticsNode().boundsInRoot
+        val people=compose.onNodeWithTag("filter_tag_人少").fetchSemanticsNode().boundsInRoot
+        assertTrue(after.top>people.top||(after.top==people.top&&after.left>people.left))
+        val image=compose.onNodeWithTag("room_tag_dialog").captureToImage().asAndroidBitmap()
+        File(InstrumentationRegistry.getInstrumentation().targetContext.externalCacheDir,"room-tags-1.12.1.png")
+            .outputStream().use { image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it) }
+        compose.onNodeWithTag("close_room_tags").performClick()
+        compose.onNodeWithTag("extra_filters").performScrollTo().performClick()
+        val restored=compose.onNodeWithTag("filter_outlets").fetchSemanticsNode().boundsInRoot
+        val restoredPeople=compose.onNodeWithTag("filter_tag_人少").fetchSemanticsNode().boundsInRoot
+        assertTrue(restored.top>restoredPeople.top||(restored.top==restoredPeople.top&&restored.left>restoredPeople.left))
     }
 
     @Test fun roomStripHoldInspectsTimeWithoutChangingFiltersOrCampus() {
@@ -642,7 +701,7 @@ class YouRoomUiTest {
 
     @Test fun excludedFavoritesStayVisibleWithoutPeriodsAndReturnWhenPeriodsAreCleared() {
         enterDemo()
-        compose.onNodeWithText("清空").performScrollTo().performClick()
+        compose.onNodeWithTag("clear_slots").performScrollTo().performClick()
         revealRoom("01:2-240")
         compose.onNodeWithContentDescription("收藏 2-240").performClick()
         revealRoom("01:2-240")
@@ -660,7 +719,7 @@ class YouRoomUiTest {
         compose.onNodeWithTag("room_list").performScrollToNode(hasTestTag("slot_1"))
         compose.onNodeWithTag("slot_1").performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("2-240").fetchSemanticsNodes().isEmpty() }
-        compose.onNodeWithText("清空").performClick()
+        compose.onNodeWithTag("clear_slots").performClick()
         compose.onNodeWithTag("room_list").performScrollToNode(hasTestTag("room_row_01:2-240"))
         compose.onNodeWithTag("room_excluded_01:2-240", useUnmergedTree = true).assertIsDisplayed()
         revealRoom("01:2-240")
@@ -678,7 +737,7 @@ class YouRoomUiTest {
 
     @Test fun excludingAndRestoringABrowsedRoomBothCloseTheActionsInBothCampuses() {
         enterDemo()
-        compose.onNodeWithText("清空").performScrollTo().performClick()
+        compose.onNodeWithTag("clear_slots").performScrollTo().performClick()
         for ((id, name) in listOf("01:2-201" to "2-201", "04:演示楼-A101" to "演示楼-A101")) {
             if (id.startsWith("04:")) compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeLeft() }
             revealRoom(id)
@@ -877,7 +936,7 @@ class YouRoomUiTest {
 
     @Test fun reversingBeforeTheBodySwapKeepsWestContentAndSharedSlots() {
         enterDemo()
-        compose.onNodeWithText("清空").performClick()
+        compose.onNodeWithTag("clear_slots").performClick()
         compose.onNodeWithTag("slot_6").performClick()
         val toShahe = compose.onNodeWithTag("campus_swipe_region").fetchSemanticsNode()
             .config[SemanticsActions.CustomActions].single()
@@ -899,7 +958,7 @@ class YouRoomUiTest {
 
     @Test fun reversingDuringIncomingFadeFinishesWithTheLatestCampusAndSelection() {
         enterDemo()
-        compose.onNodeWithText("清空").performClick()
+        compose.onNodeWithTag("clear_slots").performClick()
         compose.onNodeWithTag("slot_6").performClick()
         val toShahe = compose.onNodeWithTag("campus_swipe_region").fetchSemanticsNode()
             .config[SemanticsActions.CustomActions].single()
@@ -943,6 +1002,7 @@ class YouRoomUiTest {
         val target = compose.onNodeWithTag("filter_tag_人少").fetchSemanticsNode().boundsInRoot
         compose.onNodeWithTag("filter_outlets").performTouchInput {
             down(center)
+            advanceEventTime(650)
             moveTo(target.center - source.topLeft, delayMillis = 200)
             up()
         }
