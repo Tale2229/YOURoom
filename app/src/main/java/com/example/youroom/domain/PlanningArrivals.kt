@@ -32,7 +32,7 @@ internal class PlanningMinutes {
  */
 internal class PlanningArrivalCuts(private val data: StudyPlanner.Prepared,
     private val spans: List<StudyPlanner.Span>, private val finals: List<StudyPlanner.Span>,
-    private val windowEnd: Int) {
+    private val windowEnd: Int, private val minimumVisitMinutes: Int = 0) {
     private class Cuts(val times: IntArray, val gaps: IntArray)
     private val cache = arrayOfNulls<Cuts>(spans.size)
 
@@ -49,6 +49,10 @@ internal class PlanningArrivalCuts(private val data: StudyPlanner.Prepared,
             val walk = data.travel[target.room][final.room]
             times += windowEnd-walk-2
             times += final.start-walk-1
+            if(minimumVisitMinutes>0) {
+                times += final.start-walk-minimumVisitMinutes
+                times += windowEnd-walk-minimumVisitMinutes*2
+            }
             if (data.hasExpected) {
                 times += final.start-walk-PlanningPolicy.expectedStayMinimum
                 times += windowEnd-walk-PlanningPolicy.expectedNeighborMinimum*2

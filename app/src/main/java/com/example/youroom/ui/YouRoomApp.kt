@@ -118,8 +118,8 @@ private fun WorkspacePages(state: YouRoomState, tab: Int, model: YouRoomViewMode
                             showHeader = false, sharedHeaderMoving = headerMoving, interactive = active)
                         1 -> StudyPlanningScreen(state, goal, plans, onGoal, onGenerate, model::setCampus,
                             model::refresh, manageRoom, { campus,id,index -> model.planning.select(campus,id,index) },showHeader = false,
-                            sharedHeaderMoving = headerMoving, interactive = active)
-                        else -> PreferencesScreen(state, manageRoom, model::clearProfile, model::logout,
+                            sharedHeaderMoving = headerMoving, interactive = active, onCancel = model::cancelPlanning)
+                        else -> SettingsScreen(state, manageRoom, model::clearProfile, model::logout,
                             model::setCampus, showHeader = false, sharedHeaderMoving = headerMoving, interactive = active)
                     }
                 }

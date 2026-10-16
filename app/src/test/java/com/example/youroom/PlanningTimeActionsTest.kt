@@ -26,7 +26,7 @@ class PlanningTimeActionsTest {
 
     @Test fun durationShortcutsAreRelativeToTheStartAndKeepOtherChoices() {
         val goal = PlanningGoal(630, 600, false, "4")
-        for (hours in listOf(1, 2, 4)) assertEquals(goal.copy(end = 630 + hours * 60),
+        for (hours in 1..4) assertEquals(goal.copy(end = 630 + hours * 60),
             PlanningTimeActions.endAfterHours(goal, hours))
     }
 
@@ -36,11 +36,20 @@ class PlanningTimeActionsTest {
         assertEquals(1439, PlanningTimeActions.endAfterHours(PlanningGoal(1379, 1200), 1)?.end)
         assertNull(PlanningTimeActions.endAfterHours(PlanningGoal(1380, 1200), 1))
         assertNull(PlanningTimeActions.endAfterHours(PlanningGoal(1260, 1200), 4))
+        assertEquals(1439,PlanningTimeActions.endAfterHours(PlanningGoal(1259,1300),3)?.end)
+        assertNull(PlanningTimeActions.endAfterHours(PlanningGoal(1260,1300),3))
     }
 
     @Test fun invalidStartsAndUnsupportedDurationsCannotCreateInvalidGoals() {
         assertNull(PlanningTimeActions.endAfterHours(PlanningGoal(-1, 720), 1))
         assertNull(PlanningTimeActions.endAfterHours(PlanningGoal(1440, 720), 1))
-        assertThrows(IllegalArgumentException::class.java) { PlanningTimeActions.endAfterHours(PlanningGoal(), 3) }
+        for(hours in listOf(0,5)) assertThrows(IllegalArgumentException::class.java) {
+            PlanningTimeActions.endAfterHours(PlanningGoal(), hours)
+        }
+    }
+
+    @Test fun threeHourCorrectionKeepsConfirmedPeriodsExpectedRoomsAndLooseMode() {
+        val draft=PlanningDraft(600,629,false,savedWindows=listOf(StudyWindow(480,540)),expectedRooms=setOf("01:3-305"))
+        assertEquals(draft.copy(end=780),PlanningTimeActions.endAfterHours(draft,3))
     }
 }

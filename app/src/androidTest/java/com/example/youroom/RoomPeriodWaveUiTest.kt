@@ -55,13 +55,29 @@ class RoomPeriodWaveUiTest {
     }
     private fun closePulse(elapsed: Long = 160) {
         compose.runOnIdle { expanded = false; wave.play() }
-        compose.mainClock.advanceTimeBy(elapsed)
+        compose.mainClock.advanceTimeBy(PeriodWave.startDelayMillis+elapsed)
     }
     private fun flat() = compose.runOnIdle {
         assertTrue((0..13).all { wave.amplitude(it, 14) == 0f })
     }
     private fun moving() = compose.runOnIdle {
         assertTrue((0..13).any { wave.amplitude(it, 14) > 0f })
+    }
+
+    @Test fun closingFirstWaitsThenPlaysTheSlowerFinitePulseWithoutRestartingItsDelay() {
+        render()
+        compose.runOnIdle { wave.play() }
+        compose.mainClock.advanceTimeBy(PeriodWave.startDelayMillis-48)
+        flat()
+        compose.runOnIdle { assertTrue(wave.isRunning);wave.play() }
+        compose.mainClock.advanceTimeBy(160)
+        moving()
+        compose.mainClock.advanceTimeBy(450)
+        compose.runOnIdle { assertTrue(wave.isRunning) }
+        compose.mainClock.advanceTimeBy(200)
+        flat()
+        compose.runOnIdle { assertFalse(wave.isRunning) }
+        compose.mainClock.autoAdvance=true
     }
 
     private fun waitForLeftPeak() {
@@ -73,6 +89,14 @@ class RoomPeriodWaveUiTest {
             compose.mainClock.advanceTimeBy(16)
         }
         fail("Wave never reached the requested physical edge")
+    }
+
+    private fun waitForRightPeak() {
+        for (frame in 0..40) {
+            if (compose.runOnIdle { wave.amplitude(13,14) > .9f }) return
+            compose.mainClock.advanceTimeBy(16)
+        }
+        fail("Wave never reached the physical right edge")
     }
 
     @Test fun openingNeverStartsAPulseAndAnExplicitClosingRequestPlaysOnlyOnce() {
@@ -171,7 +195,7 @@ class RoomPeriodWaveUiTest {
             val before = strip.fetchSemanticsNode().boundsInRoot
             val bars = slots.map { compose.onNodeWithTag("room_period_${id}_${it.number}", useUnmergedTree = true)
                 .fetchSemanticsNode().boundsInRoot }
-            closePulse(64); moving()
+            closePulse(0); waitForRightPeak(); moving()
             assertEquals(before, strip.fetchSemanticsNode().boundsInRoot)
             slots.forEachIndexed { i, slot ->
                 assertEquals(bars[i], compose.onNodeWithTag("room_period_${id}_${slot.number}", useUnmergedTree = true)

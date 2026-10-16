@@ -25,6 +25,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputChange
@@ -198,6 +199,8 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                                     val background by animateColorAsState(
                                         if (isSelected) colors.primary else colors.surfaceContainer,
                                         tween(140), label = "slot_background")
+                                    val stitch by animateColorAsState(if (isSelected) colors.onPrimary else colors.outline,
+                                        tween(140), label = "slot_stitch")
                                     Box(modifier.height(48.dp).testTag("slot_${slot.number}")
                                         .onGloballyPositioned {
                                             val rect = it.boundsInRoot()
@@ -217,7 +220,10 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                                             },
                                             shape = RectangleShape, color = background,
                                             contentColor = if (isSelected) colors.onPrimary else colors.onSurfaceVariant) {
-                                            Box(contentAlignment = Alignment.Center) {
+                                            Box(Modifier.fillMaxSize().drawWithContent {
+                                                drawContent()
+                                                drawSlotStitches(stitch.copy(alpha = .65f))
+                                            }, contentAlignment = Alignment.Center) {
                                                 Text("${slot.number}", style = MaterialTheme.typography.labelLarge)
                                             }
                                         }
@@ -296,14 +302,18 @@ private fun CompactRoomSearch(query: String, onQuery: (String) -> Unit, modifier
 
 @Composable
 private fun CompactFilterAction(campus: Campus, count: Int, onClick: () -> Unit, modifier: Modifier, enabled: Boolean) {
+    val colors = MaterialTheme.colorScheme
     Box(modifier.height(48.dp)) {
         Surface(onClick = onClick, enabled = enabled, color = Color.Transparent,
             modifier = Modifier.fillMaxSize().testTag("extra_filters").semantics {
                 contentDescription = "筛选教室，已选 $count 个词条"
             }) {
             Box(contentAlignment = Alignment.Center) {
-                Box(Modifier.fillMaxWidth().height(36.dp).background(MaterialTheme.colorScheme.surfaceContainer,
-                    MaterialTheme.shapes.small), contentAlignment = Alignment.Center) {
+                Box(Modifier.fillMaxWidth().height(36.dp).background(colors.surfaceContainer,
+                    RectangleShape).drawWithContent {
+                    drawContent()
+                    drawSlotStitches(colors.outline.copy(alpha = .65f))
+                }.testTag("extra_filters_face"), contentAlignment = Alignment.Center) {
                     Icon(Icons.Outlined.Tune, "筛选教室", Modifier.size(20.dp))
                 }
             }

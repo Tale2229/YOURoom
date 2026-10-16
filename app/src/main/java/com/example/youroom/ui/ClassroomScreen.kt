@@ -29,7 +29,9 @@ fun ClassroomScreen(state: YouRoomState, onFilters: (SearchFilters) -> Unit,
     val shaheList = androidx.compose.foundation.lazy.rememberLazyListState()
     val viewportDates = remember { mutableMapOf<Pair<Campus, Boolean>, java.time.LocalDate>() }
     RoomSearchFocusBoundary(Modifier.fillMaxSize()) {
-    Box(Modifier.fillMaxSize().imePadding()) {
+    // A modal editor owns the IME. Resizing the list behind it can dispose its
+    // open row and lose the rail's anchored position while typing a note.
+    Box(Modifier.fillMaxSize().then(if(state.selectedRoomId==null) Modifier.imePadding() else Modifier)) {
         CampusFrame(state, onCampus, showHeader, sharedHeaderMoving, interactive,
             keepBothCampuses = true, bodyTag = "campus_body") { page, active, moving, ready ->
             val list = if (page.campus == Campus.XITUCHENG) westList else shaheList

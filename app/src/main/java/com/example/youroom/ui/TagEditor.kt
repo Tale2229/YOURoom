@@ -29,8 +29,8 @@ private class TagGeometry {
 @Composable
 fun TagEditor(state: YouRoomState, onFilters: (SearchFilters) -> Unit, onAdd: (String) -> Unit,
     onRemove: (String) -> Unit, onOrder: (List<String>) -> Unit,
-    showFavorite: Boolean = true, manageCatalog: Boolean = true) {
-    var editing by remember { mutableStateOf(false) }
+    showFavorite: Boolean = true, manageCatalog: Boolean = true,
+    editing: Boolean = false) {
     var name by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var removal by remember { mutableStateOf<String?>(null) }
@@ -41,7 +41,13 @@ fun TagEditor(state: YouRoomState, onFilters: (SearchFilters) -> Unit, onAdd: (S
     var grab by remember { mutableStateOf(Offset.Zero) }
     val geometry = remember { TagGeometry() }
     val latestOrderCallback by rememberUpdatedState(onOrder)
-    LaunchedEffect(visibleOrder, dragged) { if (dragged == null) order = visibleOrder }
+    val latestVisibleOrder by rememberUpdatedState(visibleOrder)
+    LaunchedEffect(visibleOrder, dragged) {
+        if (dragged == null || dragged !in visibleOrder) {
+            dragged = null
+            order = visibleOrder
+        }
+    }
     val angle = if (editing && manageCatalog) rememberInfiniteTransition(label = "tag_editing").animateFloat(-1.3f, 1.3f,
         infiniteRepeatable(tween(110, easing = LinearEasing), RepeatMode.Reverse), label = "tag_wiggle") else null
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -79,9 +85,20 @@ fun TagEditor(state: YouRoomState, onFilters: (SearchFilters) -> Unit, onAdd: (S
                                         position.y.coerceIn(0f, bounds?.height ?: 0f))
                                     pointer = bounds?.topLeft?.plus(position) ?: Offset.Zero
                                     dragged = tag
-                                }, onDragCancel = { order = before; dragged = null }, onDragEnd = {
-                                    if (order != before) latestOrderCallback(order)
-                                    dragged = null
+                                }, onDragCancel = {
+                                    // Disposing a deleted chip also cancels its pointer coroutine,
+                                    // even when it never started a drag. Only the drag owner may
+                                    // restore its snapshot, and never restore deleted catalog items.
+                                    if (dragged == tag) {
+                                        order = before.filter { it in latestVisibleOrder } +
+                                            latestVisibleOrder.filter { it !in before }
+                                        dragged = null
+                                    }
+                                }, onDragEnd = {
+                                    if (dragged == tag) {
+                                        if (order != before) latestOrderCallback(order)
+                                        dragged = null
+                                    }
                                 }) { change, _ ->
                                     change.consume()
                                     pointer = (geometry.bounds[tag]?.topLeft ?: Offset.Zero) + change.position
@@ -96,10 +113,6 @@ fun TagEditor(state: YouRoomState, onFilters: (SearchFilters) -> Unit, onAdd: (S
                         onDelete = if (editing && movable) ({ removal = tag }) else null,
                         angle = if (movable && dragged != tag) angle else null, faded = dragged == tag)
                 } }
-                CompactFilterChip("＋", editing, { editing = !editing },
-                    Modifier.testTag("edit_tags").semantics { contentDescription = if (manageCatalog) {
-                        if (editing) "结束词条编辑" else "添加和整理词条"
-                    } else if (editing) "结束添加词条" else "添加词条" })
             }
             dragged?.let { tag ->
                 CompactFilterChip(tag, state.filters.hasTerm(tag), {},

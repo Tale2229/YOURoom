@@ -42,12 +42,6 @@ class PlanningAlternativesUiTest {
                 else if (campus==Campus.SHAHE && id==shaheExecution.id) shaheExecution=shaheExecution.copy(selectedOption=index) })
     } }
     private fun open() {
-        if (compose.onAllNodesWithTag("planner_editor").fetchSemanticsNodes().isNotEmpty()) {
-            val action=compose.onNodeWithTag("planner_results_area").fetchSemanticsNode()
-                .config[androidx.compose.ui.semantics.SemanticsActions.CustomActions].first().action
-            compose.runOnIdle { action() }
-            compose.waitForIdle()
-        }
         compose.onNodeWithTag("planner_alternatives").performClick(); compose.waitForIdle()
     }
     private fun shot(name: String) {
@@ -73,7 +67,7 @@ class PlanningAlternativesUiTest {
         assertEquals(0,generates)
         compose.onNodeWithTag("planner_alternatives").assertTextContains("换教室最少 · 方案 1/5",substring=true)
         compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_step_0"))
-        compose.onNodeWithTag("planner_step_0").assertTextContains(options[1].plan.steps.filterIsInstance<PlanningStep.Study>().first().classroom.name)
+        compose.onNodeWithTag("planner_step_0").assert(hasAnyDescendant(hasText(options[1].plan.steps.filterIsInstance<PlanningStep.Study>().first().classroom.name)))
         open()
         compose.onNodeWithTag("planner_direction_CHANGES").assertIsSelected()
         compose.onNodeWithTag("planner_alternative_CHANGES_0").assertIsSelected()

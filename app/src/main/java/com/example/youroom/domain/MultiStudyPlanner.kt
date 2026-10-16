@@ -21,7 +21,7 @@ internal object MultiStudyPlanner {
         val totalChanges: Int = 0)
     private data class Key(val span: Int, val arrival: Int, val localChanges: Int, val loss: Int, val original: Boolean,
         val preferenceTail: ExpectedRoomPreference.Tail = ExpectedRoomPreference.Tail(), val expectedUsed: Boolean = false,
-        val totalChanges: Int = 0)
+        val totalChanges: Int = 0, val visitMinutes: Int = 0)
     private data class Label(val key: Key, val route: Route)
     private val balanced = compareBy<Route> { it.score }.thenBy { it.changes }.thenBy { it.buildings }
         .thenBy { it.loss }.thenBy { it.deviation }.thenByDescending { it.favorites }
@@ -165,7 +165,8 @@ internal object MultiStudyPlanner {
         val spans = data.spans.filter { it.start < window.end && it.end > window.start }
         val finals = spans.filter { it.end >= window.end }
         val arrivals = PlanningMinutes()
-        val finalCuts = PlanningArrivalCuts(data,spans,finals,window.end)
+        val finalCuts = PlanningArrivalCuts(data,spans,finals,window.end,
+            if(portfolio) PlanningQuality.minimumVisitMinutes else 0)
         val best = mutableMapOf<Key, Label>()
         val bestQuiet = mutableMapOf<Key, Label>()
         val bestExpected = mutableMapOf<Key, Label>()
@@ -248,7 +249,9 @@ internal object MultiStudyPlanner {
                 extraBest.none { it[label.key] === label }) continue
             val current = spans[label.key.span]
             val route = label.route
-            if (current.end >= window.end) {
+            val finalVisitUseful=!portfolio || label.key.localChanges==0 ||
+                label.key.visitMinutes+window.end-label.key.arrival>=PlanningQuality.minimumVisitMinutes
+            if (current.end >= window.end && finalVisitUseful) {
                 val favorites = route.favorites + if (data.favorite[current.room]) window.end-label.key.arrival else 0
                 finish(route.copy(end = window.end, favorites = favorites, windows = route.windows+window,
                     steps = route.steps+PlanningStep.Study(label.key.arrival,window.end,data.rooms[current.room],data.favorite[current.room]),
@@ -268,8 +271,15 @@ internal object MultiStudyPlanner {
                     (!changing && target.start <= current.end)) continue
                 val walking = data.travel[current.room][target.room]
                 val budget = min(lossLimit,data.maximumLoss ?: lossLimit)-route.loss
-                val first = max(target.start,label.key.arrival+1+walking)
-                val last = min(min(target.end-1,window.end-1),current.end+budget)
+                // Quality is a search constraint, not just a result filter. Keep
+                // the thirty-minute boundary and the current same-room visit's
+                // accumulated study (never its waiting time) in the DP state.
+                val minimumStay=if(portfolio && changing)
+                    (PlanningQuality.minimumVisitMinutes-label.key.visitMinutes).coerceAtLeast(1) else 1
+                if(current.end-label.key.arrival<minimumStay) continue
+                val first = max(target.start,label.key.arrival+minimumStay+walking)
+                val latest=window.end-if(portfolio && changing) PlanningQuality.minimumVisitMinutes else 1
+                val last = min(min(target.end-1,latest),current.end+budget)
                 if (first > last) continue
                 arrivals.clear()
                 arrivals.add(first); arrivals.add(last)
@@ -299,7 +309,9 @@ internal object MultiStudyPlanner {
                             departure-label.key.arrival, changingToNext = changing) else route.preference,
                         preferenceTie = route.preferenceTie+data.expectedRanks[current.room])
                     enqueue(Label(Key(index,arrival,changes,loss,route.original,next.preference.tail,next.preference.minutes > 0,
-                        if (portfolio && data.hasExpected) next.changes else 0),next))
+                        if (portfolio && data.hasExpected) next.changes else 0,
+                        if(portfolio && !changing) min(PlanningQuality.minimumVisitMinutes,
+                            label.key.visitMinutes+departure-label.key.arrival) else 0),next))
                 }
             }
         }

@@ -18,7 +18,7 @@ internal object PlanningTimeActions {
     }
 
     fun endAfterHours(goal: PlanningGoal, hours: Int): PlanningGoal? {
-        require(hours in setOf(1, 2, 4))
+        require(hours in 1..4)
         val end = goal.start + hours * 60
         return if (goal.start in 0..1439 && end in 1..1439) goal.copy(end = end) else null
     }

@@ -81,8 +81,8 @@ internal fun ExpectedRoomDialog(state: YouRoomState, selected: Set<String>,
                 Column(Modifier.padding(horizontal = 12.dp, vertical = 12.dp)
                     .verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text("期望教室", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                        Text(state.campus.label, style = MaterialTheme.typography.titleSmall)
+                        Text("期望教室", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                        Text(state.campus.label, style = MaterialTheme.typography.bodySmall)
                     }
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {

@@ -24,8 +24,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.youroom.domain.*
 
-/** A top-aligned comparison panel. No bottom sheet or competing vertical list; all
- * vertical movement belongs to the detail list and the editor's nested-scroll gate. */
+/** A top-aligned comparison panel. The detail list scrolls beneath fixed input
+ * controls; no bottom sheet or competing vertical list. */
 @Composable
 internal fun PlanningWorkspace(execution: PlanningExecution?, campus: Campus, interactive: Boolean,
     onOption: (Long,Int) -> Unit, content: @Composable () -> Unit) {

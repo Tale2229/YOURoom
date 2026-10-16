@@ -215,7 +215,7 @@ class ExpectedRoomUiTest {
             }
         }
         compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_step_0"))
-        compose.onNodeWithTag("planner_step_0").assertTextContains("2-240")
+        compose.onNodeWithTag("planner_step_0").assert(hasAnyDescendant(hasText("2-240")))
     }
 
     @Test fun favoritesAreTheFirstCategoryAndKeepBuildingIdentity() {

@@ -53,7 +53,7 @@ internal fun CampusHeaderPager(state: YouRoomState, motion: CampusHeaderMotion, 
 }
 
 /** Shared title-led, stationary fade replacement. Room lists stay warm independently;
- * planner/preferences reuse a single body so switching campus never duplicates time wheels.
+ * planner/settings reuse a single body so switching campus never duplicates time wheels.
  */
 @Composable
 internal fun CampusFrame(state: YouRoomState, onCampus: (Campus) -> Unit, showHeader: Boolean = true,

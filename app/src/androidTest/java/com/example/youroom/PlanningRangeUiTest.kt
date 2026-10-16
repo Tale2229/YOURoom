@@ -132,15 +132,23 @@ class PlanningRangeUiTest {
         shot("planner-range-open")
     }
 
-    @Test fun completelyOutsideWindowsKeepLabelsButDrawNoFakeLessonBracket() {
+    @Test fun completelyOutsideWindowsHaveDashedEdgeLeadersButNoFakeLessonBracket() {
         windows = listOf(StudyWindow(410, 450), StudyWindow(1270, 1320))
         render()
         state(0, "全部位于课前"); state(1, "全部位于课后")
         label(0).assertTextEquals("06:50–07:30"); label(1).assertTextEquals("21:10–22:00")
         val pixels = lines.captureToImage().toPixelMap()
-        val captionBottom = windows.indices.maxOf { label(it).fetchSemanticsNode().boundsInRoot.bottom }
-        val from = (captionBottom-lines.fetchSemanticsNode().boundsInRoot.top+px(2f)).roundToInt()
-        assertFalse((from until pixels.height-1).any { y -> (0 until pixels.width).any { x -> ink(pixels, x.toFloat(), y.toFloat()) } })
+        val canvas=lines.fetchSemanticsNode().boundsInRoot
+        for (number in listOf(1,14)) {
+            val edge=bar(number).fetchSemanticsNode().boundsInRoot
+            val x=(if (number==1) edge.left else edge.right)-canvas.left
+            assertTrue("edge leader $number",(pixels.height-px(8f).toInt() until pixels.height-1)
+                .any { y -> ink(pixels,x,y.toFloat()) })
+        }
+        // No invented solid horizontal bracket across the intervening lessons.
+        assertFalse(ink(pixels,pixels.width/2f,pixels.height-px(10f)))
+        assertNoOutsideInk(pixels)
+        shot("planner-range-outside-1.15.5")
     }
 
     @Test fun rightToLeftMirrorsTheRangesWithoutChangingTheirTimesOrOpenness() {

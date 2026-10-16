@@ -163,4 +163,62 @@ class PlanningSessionTest {
         session.generate(state,draft);runCurrent()
         assertEquals(2,calls)
     }
+
+    @Test fun cancelStopsTheWorkerButPreservesTheFrozenSelectionAndAllowsExplicitRetry() = runTest {
+        val gate=CompletableDeferred<Unit>()
+        var cancellations=0
+        val session=PlanningSession(backgroundScope,dispatcher) { input ->
+            try { gate.await();result(input) } finally { cancellations++ }
+        }
+        val selected=draft.copy(savedWindows=listOf(StudyWindow(480,600),StudyWindow(780,840)),expectedRooms=setOf("01:3-305"))
+        session.generate(state,selected);runCurrent()
+        val input=session.executions.value.getValue(state.campus).input
+        assertTrue(session.cancel(state.campus));runCurrent()
+        val cancelled=session.executions.value.getValue(state.campus)
+        assertTrue(cancelled.cancelled);assertFalse(cancelled.pending);assertNull(cancelled.result)
+        assertSame(input,cancelled.input)
+        assertEquals(selected.windows,cancelled.input.goal.windows)
+        assertEquals(selected.expectedRooms,cancelled.input.goal.expectedRooms)
+        assertEquals(1,cancellations);assertFalse(session.cancel(state.campus))
+        gate.complete(Unit)
+        assertTrue(session.generate(state,selected));runCurrent()
+        assertFalse(session.executions.value.getValue(state.campus).cancelled)
+        assertNotNull(session.executions.value.getValue(state.campus).result)
+    }
+
+    @Test fun cancelledLateResultCannotResurrectOrOverwriteTheFollowingRequest() = runTest {
+        val gates=listOf(CompletableDeferred<Unit>(),CompletableDeferred<Unit>())
+        var calls=0
+        val session=PlanningSession(backgroundScope,dispatcher) { input ->
+            val index=calls++
+            withContext(NonCancellable) { gates[index].await() }
+            result(input,index.toString())
+        }
+        session.generate(state,draft);runCurrent();session.cancel(state.campus)
+        val stopped=session.executions.value.getValue(state.campus)
+        assertTrue(stopped.cancelled)
+        session.generate(state,draft);runCurrent()
+        gates[1].complete(Unit);runCurrent()
+        val latest=session.executions.value.getValue(state.campus)
+        gates[0].complete(Unit);runCurrent()
+        assertSame(latest,session.executions.value.getValue(state.campus))
+        assertEquals("1",latest.result!!.message)
+    }
+
+    @Test fun cancellationIsCampusLocalAndDoesNotDeleteAnAlreadyFinishedPlan() = runTest {
+        val gate=CompletableDeferred<Unit>()
+        val session=PlanningSession(backgroundScope,dispatcher) { input ->
+            if (input.campus==Campus.XITUCHENG) gate.await()
+            result(input)
+        }
+        session.generate(state,draft)
+        val shahe=state.copy(campus=Campus.SHAHE,snapshot=DemoData.snapshot(Campus.SHAHE))
+        session.generate(shahe,draft);runCurrent()
+        val finished=session.executions.value.getValue(Campus.SHAHE)
+        assertFalse(session.cancel(Campus.SHAHE))
+        assertTrue(session.executions.value.getValue(Campus.XITUCHENG).pending)
+        assertTrue(session.cancel(Campus.XITUCHENG));runCurrent()
+        assertSame(finished,session.executions.value.getValue(Campus.SHAHE))
+        assertNotNull(finished.result)
+    }
 }

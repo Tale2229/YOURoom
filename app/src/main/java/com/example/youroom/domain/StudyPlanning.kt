@@ -69,7 +69,7 @@ data class StudyPlan(
 }
 
 data class PlanningOption(val label: String, val plan: StudyPlan)
-enum class PlanningProblem { INVALID_TIME, PAST_TIME, OVERLAP, TOO_MANY }
+enum class PlanningProblem { INVALID_TIME, TOO_SHORT, PAST_TIME, OVERLAP, TOO_MANY }
 enum class PlanningDirection(val title: String, val shortTitle: String) {
     BALANCED("综合推荐", "综合"), CHANGES("换教室最少", "少换教室"),
     BUILDINGS("跨教学楼最少", "少跨楼"), FAVORITES("收藏教室覆盖最多", "多收藏"),
@@ -92,6 +92,7 @@ object PlanningPolicy {
     const val lossLimit = 20
     const val multiLossLimit = 30
     const val periodLimit = 3
+    const val minimumPeriodMinutes = 30
     const val startGraceMinutes = 5
     const val changeLimit = 2
     const val expectedStayMinimum = 30

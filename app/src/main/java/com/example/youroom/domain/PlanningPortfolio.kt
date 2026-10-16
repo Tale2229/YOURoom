@@ -1,7 +1,7 @@
 package com.example.youroom.domain
 
-/** Final presentation selection, not the search's dominance rule. Champions are never
- * removed for diversity; the remaining options are useful alternatives, not exact k-best. */
+/** Final presentation selection, not the search's dominance rule. Quality precedes
+ * objective ranking: even a direction's champion must be useful, never padding to five. */
 internal object PlanningPortfolio {
     const val limit = 5
     val buildingOrder = compareBy<StudyPlan> { it.buildingChanges }.then(StudyPlanner.quietOrder)
@@ -32,6 +32,9 @@ internal object PlanningPortfolio {
         private val buckets = mutableMapOf<Pair<Int,Int>,MutableMap<PlanningDirection,MutableMap<String,StudyPlan>>>()
         private val recommendations = mutableMapOf<Pair<Int,Int>,MutableMap<String,StudyPlan>>()
         fun add(plan: StudyPlan) {
+            // Do this before the bounded buckets: five fragmented "winners" must
+            // not displace useful alternatives before the final quality pass.
+            if(!PlanningQuality.usefulVisits(plan)) return
             val bucket = buckets.getOrPut(plan.lostMinutes to plan.changes) { mutableMapOf() }
             val key = routeKey(plan)
             for (direction in PlanningDirection.entries) {
@@ -55,22 +58,24 @@ internal object PlanningPortfolio {
     }
 
     fun result(plans: List<StudyPlan>, requestedExpected: Boolean, baselinePlan: StudyPlan? = null): PlanningResult {
-        if (plans.isEmpty()) return PlanningResult(message = "难以满足要求，可缩短时段")
-        val baseline = baselinePlan ?: plans.minWith(StudyPlanner.order)
+        val useful=(plans+listOfNotNull(baselinePlan)).filter(PlanningQuality::usefulVisits).distinctBy { it.signature }
+        if (useful.isEmpty()) return PlanningResult(message = "难以满足要求，可缩短时段")
+        val baseline = useful.minWith(StudyPlanner.order)
+        val eligible=useful.filter { PlanningQuality.admits(it,baseline) }
         // Expected rooms remain a soft preference: never lose usable time or add a move
         // relative to the unmodified comprehensive champion. Fragment guards are scored in DP.
-        val expected = plans.filter { it.expectedMinutes > 0 && it.studyMinutes >= baseline.studyMinutes && it.changes <= baseline.changes }
+        val expected = eligible.filter { it.expectedMinutes > 0 && it.studyMinutes >= baseline.studyMinutes && it.changes <= baseline.changes }
         val recommended = expected.minWithOrNull(compareByDescending<StudyPlan> { it.studyMinutes }
             .thenBy { it.changes }.thenBy { it.buildingChanges }.thenBy { it.walkingMinutes+it.approachMinutes }
             .thenByDescending { it.expectedMinutes }.then(StudyPlanner.order)) ?: baseline
         val pool = mutableListOf<PlanningOption>()
         val indices = mutableMapOf<String,Int>()
         val groups = PlanningDirection.entries.map { direction ->
-            val source = if (direction == PlanningDirection.EXPECTED) expected else plans
+            val source = if (direction == PlanningDirection.EXPECTED) expected else eligible
             val ranked = source.sortedWith(order(direction))
             val first = if (direction == PlanningDirection.BALANCED) recommended else ranked.firstOrNull()
             val candidates = if (first == null) emptyList() else (listOf(first)+ranked)
-                .distinctBy(::routeKey).filter { it === first || quality(it,first,direction) }.take(limit)
+                .distinctBy(::routeKey).filter { quality(it,first,direction) }.take(limit)
             PlanningGroup(direction,candidates.map { plan -> indices.getOrPut(plan.signature) {
                 pool.add(PlanningOption("${direction.title} ${candidates.indexOf(plan)+1}",plan)); pool.lastIndex
             } }, if (candidates.isNotEmpty()) null else if (!requestedExpected) "尚未选择期望教室" else "没有满足条件的期望教室方案")
@@ -79,9 +84,10 @@ internal object PlanningPortfolio {
     }
 
     private fun quality(plan: StudyPlan, champion: StudyPlan, direction: PlanningDirection): Boolean {
-        if (plan.studyMinutes < champion.studyMinutes-15) return false
+        if (plan.studyMinutes < champion.studyMinutes-PlanningQuality.maximumCoverageLoss) return false
         return when (direction) {
-            PlanningDirection.BALANCED -> plan.score <= champion.score+30 && plan.changes <= champion.changes+1
+            PlanningDirection.BALANCED -> plan.score.toLong() <= champion.score.toLong()+PlanningQuality.maximumScoreRegret &&
+                plan.changes <= champion.changes+1
             PlanningDirection.CHANGES -> plan.changes <= champion.changes+1
             PlanningDirection.BUILDINGS -> plan.buildingChanges <= champion.buildingChanges+1
             PlanningDirection.FAVORITES -> plan.favoriteMinutes >= champion.favoriteMinutes-30

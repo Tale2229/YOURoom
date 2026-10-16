@@ -18,6 +18,8 @@ object RoomActionFlip {
     // angular velocity and spring force, without spinning indefinitely.
     fun strength(speedDpPerSecond: Float): Float =
         (if (speedDpPerSecond.isFinite()) speedDpPerSecond else 0f).coerceIn(0f, 2600f) / 2600f
-    fun initialVelocity(speedDpPerSecond: Float): Float = 300f + 900f * strength(speedDpPerSecond)
-    fun stiffness(speedDpPerSecond: Float): Float = 75f + 120f * strength(speedDpPerSecond)
+    fun initialVelocity(speedDpPerSecond: Float): Float = 150f + 450f * strength(speedDpPerSecond)
+    // Halving angular velocity alone would let the old spring immediately speed
+    // it up again. A quarter stiffness gives the whole same trajectory at 1/2 speed.
+    fun stiffness(speedDpPerSecond: Float): Float = (75f + 120f * strength(speedDpPerSecond)) * .25f
 }

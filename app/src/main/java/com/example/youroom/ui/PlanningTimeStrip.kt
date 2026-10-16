@@ -140,9 +140,9 @@ private fun PlanningRangeStrip(windows: List<StudyWindow>, slots: List<LessonSlo
             }
         }.map { it.measure(labelConstraints) }
         val arrangement=arrangePlanningRanges(anchors,labels.map { PlanningRangeLabel(it.width,it.height) },
-            width.toFloat(),gutter,8.dp.toPx(),4.dp.toPx(),5.dp.toPx())
-        val extraRoutes=arrangement.labels.maxOfOrNull { it.lane } ?: 0
-        val annotationHeight=(arrangement.labelBottom+12.dp.toPx()+extraRoutes*3.dp.toPx()).roundToInt()
+            width.toFloat(),gutter,8.dp.toPx(),4.dp.toPx(),5.dp.toPx(),
+            windows.indices.sortedWith(compareBy({ windows[it].start },{ windows[it].end },{ it })))
+        val annotationHeight=arrangement.annotationHeight
         val bracketY=annotationHeight-2.dp.toPx()
         val capEnd=bracketY+6.dp.toPx()
         val lines=subcompose("lines") {
@@ -151,19 +151,21 @@ private fun PlanningRangeStrip(windows: List<StudyWindow>, slots: List<LessonSlo
                 fun point(value: Float, y: Float)=Offset(x(value),if (below) size.height-y else y)
                 val dash=PathEffect.dashPathEffect(floatArrayOf(1.5.dp.toPx(),2.5.dp.toPx()))
                 anchors.forEachIndexed { index,anchor ->
-                    // No boundary tick, outside extension, arrow or invented lesson
-                    // for a wholly out-of-scale interval. Its exact label remains.
-                    if (!anchor.known || anchor.outside) return@forEachIndexed
+                    if (!anchor.known) return@forEachIndexed
                     val label=arrangement.labels[index]
                     // Separate elbows vertically too, so close ranges do not share
                     // one misleading horizontal leader when their labels stagger.
-                    val corridor=arrangement.labelBottom+4.dp.toPx()+label.lane*3.dp.toPx()
+                    val corridor=arrangement.labelBottom+4.dp.toPx()+label.routeTrack*3.dp.toPx()
                     fun leader(from: Offset,to: Offset) {
                         if (from!=to) drawLine(color.copy(alpha=.65f),from,to,.75.dp.toPx(),pathEffect=dash)
                     }
-                    leader(point(label.center,label.bottom+2.dp.toPx()),point(label.center,corridor))
-                    leader(point(label.center,corridor),point(anchor.center,corridor))
-                    leader(point(anchor.center,corridor),point(anchor.center,bracketY))
+                    // Wholly outside teaching hours: attach to the corresponding
+                    // bar edge, without a fake bracket or an extra outside cap.
+                    arrangement.leaders[index].points(label.bottom+2.dp.toPx(),corridor,
+                        if (anchor.outside) size.height else bracketY).zipWithNext().forEach { (a,b) ->
+                        leader(point(a.x,a.y),point(b.x,b.y))
+                    }
+                    if (anchor.outside) return@forEachIndexed
                     // Above: caps point down. Below: the whole annotation mirrors,
                     // so caps point up, toward the target bars. Text stays upright.
                     drawLine(color.copy(alpha=.85f),point(anchor.start,bracketY),point(anchor.end,bracketY),.85.dp.toPx())

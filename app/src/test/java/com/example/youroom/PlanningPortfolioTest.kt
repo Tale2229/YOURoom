@@ -28,6 +28,7 @@ class PlanningPortfolioTest {
         val availability = ClassroomStudyAvailability(data.slots)
         result.options.forEach { option ->
             val plan=option.plan
+            assertTrue(PlanningQuality.admits(plan,result.options.map { it.plan }.minWith(StudyPlanner.order)))
             assertTrue(plan.lostMinutes in 0..goal.lossLimit)
             assertEquals(goal.windows.sumOf { it.duration }-plan.studyMinutes,plan.lostMinutes)
             assertEquals(ExpectedRoomPreference.minutes(plan.steps,plan.windows,if (expected) setOf("01:3-305","01:3-405") else emptySet()),plan.expectedMinutes)
@@ -42,7 +43,8 @@ class PlanningPortfolioTest {
     @Test fun realThreePeriodsKeepTheRecommendationAndFiveIndependentDirections() {
         val result=run(PlanningGoal(1200,1320,true,savedWindows=listOf(StudyWindow(660,720),StudyWindow(840,1020))))
         assertEquals(-284,result.options.first().plan.score)
-        assertEquals(0,result.options[result.groups.single { it.direction==PlanningDirection.CHANGES }.optionIndices.first()].plan.changes)
+        assertEquals(result.options.minOf { it.plan.changes },
+            result.options[result.groups.single { it.direction==PlanningDirection.CHANGES }.optionIndices.first()].plan.changes)
         assertTrue(result.groups.last().optionIndices.isEmpty())
     }
     @Test fun desiredRoomsKeepTheCoverageAndMoveGuards() {
@@ -54,9 +56,9 @@ class PlanningPortfolioTest {
             assertTrue(result.options[index].plan.expectedMinutes>0)
         }
     }
-    @Test fun singlePeriodStillUsesTwentyMinutesAndCanOfferFiveDifferentRooms() {
+    @Test fun singlePeriodKeepsFourQualityRoomsWithoutPaddingAnyDirection() {
         val result=run(PlanningGoal(1260,1320,false))
-        assertEquals(5,result.groups.single { it.direction==PlanningDirection.CHANGES }.optionIndices.size)
+        assertEquals(4,result.groups.single { it.direction==PlanningDirection.CHANGES }.optionIndices.size)
         assertEquals(4,result.groups.first().optionIndices.size) // Four favored rooms; do not pad with poor alternatives.
         assertTrue(result.options.all { it.plan.changes==0 && it.plan.studyMinutes==60 })
     }

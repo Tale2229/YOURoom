@@ -49,6 +49,32 @@ class PlanningScheduleTest {
         assertEquals(listOf(StudyWindow(480,720)),PlanningSchedule.confirmedGoal(draft)!!.windows)
     }
 
+    @Test fun newConfirmationsRequireThirtyMinutesAndRejectingNeverChangesSavedPeriodsOrPreferences() {
+        val original=PlanningDraft(780,809,savedWindows=listOf(StudyWindow(480,720)),
+            expectedRooms=setOf("01:3-305"))
+        for (duration in listOf(1,5,20,29)) {
+            val draft=original.copy(end=original.start+duration)
+            val rejected=PlanningSchedule.add(draft)
+            assertNull(rejected.goal)
+            assertEquals(PlanningProblem.TOO_SHORT,rejected.error!!.problem)
+            assertEquals("自习时段不能少于30分钟",rejected.error.message)
+            assertEquals(original.savedWindows,draft.savedWindows)
+            assertEquals(original.expectedRooms,draft.expectedRooms)
+        }
+        for (duration in listOf(30,31,60)) {
+            val added=PlanningSchedule.add(original.copy(end=original.start+duration)).goal!!
+            assertEquals(original.savedWindows+StudyWindow(780,780+duration),added.savedWindows)
+        }
+    }
+
+    @Test fun theNewConfirmationMinimumDoesNotPurgeOlderSavedPeriodsOrRevalidateOnGeneration() {
+        val older=PlanningDraft(800,810,savedWindows=listOf(StudyWindow(600,615)))
+        assertEquals(older,PlanningSchedule.restore(older))
+        assertEquals(older.savedWindows,PlanningSchedule.confirmedGoal(older)!!.windows)
+        assertEquals(PlanningProblem.INVALID_TIME,PlanningSchedule.add(older.copy(end=800)).error!!.problem)
+        assertEquals(PlanningProblem.TOO_SHORT,PlanningSchedule.add(PlanningDraft(1410,1439)).error!!.problem)
+    }
+
     @Test fun exactlyFiveLateMinutesAreAllowedButTheNextMinuteIsNot() {
         for (now in 480..485) assertNotNull(PlanningSchedule.add(PlanningDraft(),now).goal)
         assertEquals(PlanningProblem.PAST_TIME,PlanningSchedule.add(PlanningDraft(),486).error!!.problem)

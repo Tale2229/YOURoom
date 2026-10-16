@@ -49,13 +49,13 @@ class RoomActionMotionUiTest {
             assertTrue(values.zipWithNext().all { (left,right) -> left<right })
             assertTrue(flip.angles[3].value>slow.angles[3].value)
         }
-        compose.mainClock.advanceTimeBy(2000)
+        compose.mainClock.advanceTimeBy(4000)
         compose.runOnIdle { flip.angles.forEach { assertEquals(360f,it.value,.1f) } }
         compose.mainClock.autoAdvance=true
     }
     @Test fun closingCannotFlipAgainAndReopeningCanRearmTheCoveredButtons() {
         renderFlip()
-        compose.runOnIdle { offset=-184f };compose.mainClock.advanceTimeBy(2000)
+        compose.runOnIdle { offset=-184f };compose.mainClock.advanceTimeBy(4000)
         compose.runOnIdle { offset=0f };compose.mainClock.advanceTimeBy(200)
         compose.runOnIdle { assertTrue(flip.angles.all { it.value==360f }) }
         compose.runOnIdle { offset=-60f };compose.mainClock.advanceTimeBy(100)

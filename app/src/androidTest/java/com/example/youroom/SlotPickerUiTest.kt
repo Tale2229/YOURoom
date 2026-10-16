@@ -7,6 +7,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
@@ -25,6 +26,8 @@ import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 import java.time.LocalTime
+import java.io.File
+import androidx.test.platform.app.InstrumentationRegistry
 
 class SlotPickerUiTest {
     @get:Rule val compose = createComposeRule()
@@ -66,11 +69,76 @@ class SlotPickerUiTest {
         for (target in Campus.entries) {
             compose.runOnIdle { campus = target }
             val pixels = compose.onNodeWithTag("slot_face_1", useUnmergedTree = true).captureToImage().toPixelMap()
-            assertEquals(campusColorScheme(target, false).surfaceContainer, pixels[3, 3])
+            assertEquals(campusColorScheme(target, false).surfaceContainer, pixels[1, 1])
             if (target == Campus.XITUCHENG) {
-                assertEquals(androidx.compose.ui.graphics.Color(0xFFF4F0E7), pixels[3, 3])
+                assertEquals(androidx.compose.ui.graphics.Color(0xFFF4F0E7), pixels[1, 1])
                 val selected = compose.onNodeWithTag("slot_face_6", useUnmergedTree = true).captureToImage().toPixelMap()
-                assertEquals(campusColorScheme(target, false).primary, selected[3, 3])
+                assertEquals(campusColorScheme(target, false).primary, selected[1, 1])
+            }
+        }
+    }
+
+    @Test fun eachNumberedFaceHasInsetDashedStitchesThatInvertWhenSelectedInBothThemes() {
+        render()
+        for (dark in listOf(false,true)) for (target in Campus.entries) {
+            compose.runOnIdle { campus=target;appearanceDark=dark }
+            val colors=campusColorScheme(target,dark)
+            for (number in 1..14) {
+                val pixels=compose.onNodeWithTag("slot_face_$number",true).captureToImage().toPixelMap()
+                val fill=if(number==6) colors.primary else colors.surfaceContainer
+                assertEquals(fill,pixels[1,1]) // The stitch is inset, not the outside border.
+                val y=with(compose.density) { 4.dp.roundToPx() }
+                val inset=with(compose.density) { 6.dp.roundToPx() }
+                val line=(inset until pixels.width-inset).map { x ->
+                    val p=pixels[x,y]
+                    kotlin.math.abs(p.red-fill.red)+kotlin.math.abs(p.green-fill.green)+kotlin.math.abs(p.blue-fill.blue)>.12f
+                }
+                assertTrue("period $number keeps an open middle",line.count { !it } > line.count { it })
+                val x=with(compose.density) { 8.dp.roundToPx() }
+                val topInk=(0 until pixels.height/4).filter { row ->
+                    val p=pixels[x,row]
+                    kotlin.math.abs(p.red-fill.red)+kotlin.math.abs(p.green-fill.green)+kotlin.math.abs(p.blue-fill.blue)>.12f
+                }
+                val stroke=with(compose.density) { 2.dp.toPx() }
+                assertEquals("outer blank margin remains 3dp",with(compose.density) { 3.dp.toPx() },topInk.first().toFloat(),1f)
+                assertEquals("stitch width is 2dp",stroke,topInk.size.toFloat(),1f)
+                val ink=(inset until pixels.width-inset).first { x ->
+                    val p=pixels[x,y]
+                    kotlin.math.abs(p.red-fill.red)+kotlin.math.abs(p.green-fill.green)+kotlin.math.abs(p.blue-fill.blue)>.12f
+                }
+                val p=pixels[ink,y]
+                val expected=if(number==6) colors.onPrimary else colors.outline
+                fun luminance(c: androidx.compose.ui.graphics.Color)=c.red+c.green+c.blue
+                assertEquals(luminance(expected)>luminance(fill),luminance(p)>luminance(fill))
+                val old=(if(number==6) colors.onPrimary else colors.primary).copy(alpha=.85f).compositeOver(fill)
+                fun contrast(c: androidx.compose.ui.graphics.Color)=kotlin.math.abs(c.red-fill.red)+
+                    kotlin.math.abs(c.green-fill.green)+kotlin.math.abs(c.blue-fill.blue)
+                assertTrue("softer stitch contrast than the former dark thread",contrast(p)<contrast(old))
+                fun isInk(x: Int,y: Int): Boolean {
+                    val p=pixels[x,y]
+                    return kotlin.math.abs(p.red-fill.red)+kotlin.math.abs(p.green-fill.green)+kotlin.math.abs(p.blue-fill.blue)>.12f
+                }
+                for (xx in 0 until pixels.width)
+                    assertEquals("horizontal stitches are symmetric",isInk(xx,y),isInk(pixels.width-1-xx,y))
+                for (yy in 0 until pixels.height)
+                    assertEquals("vertical stitches are symmetric",isInk(y,yy),isInk(y,pixels.height-1-yy))
+                for (right in listOf(false,true)) for (bottom in listOf(false,true)) {
+                    val cornerX=if(right) pixels.width-1-y else y
+                    val cornerY=if(bottom) pixels.height-1-y else y
+                    val dx=if(right) -1 else 1;val dy=if(bottom) -1 else 1
+                    val horizontal=(0 until pixels.width/3).first { !isInk(cornerX+dx*it,cornerY) }
+                    val vertical=(0 until pixels.height/3).first { !isInk(cornerX,cornerY+dy*it) }
+                    assertEquals("each L has equal complete arms",horizontal.toFloat(),vertical.toFloat(),1f)
+                    assertEquals(with(compose.density) { 6.dp.toPx() },horizontal.toFloat(),1f)
+                }
+            }
+            if(!dark) {
+                val instrumentation=InstrumentationRegistry.getInstrumentation()
+                instrumentation.waitForIdleSync();android.os.SystemClock.sleep(150)
+                File(instrumentation.targetContext.getExternalFilesDir(null),"slot-stitch-${target.dataKey}-1.16.png")
+                    .outputStream().use {
+                        instrumentation.uiAutomation.takeScreenshot().compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)
+                    }
             }
         }
     }

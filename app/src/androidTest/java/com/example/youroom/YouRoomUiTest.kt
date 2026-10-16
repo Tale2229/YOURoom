@@ -83,7 +83,8 @@ class YouRoomUiTest {
         compose.onNodeWithText("可选教室").performScrollTo().assertIsDisplayed()
         revealRoom("01:2-201")
         compose.onNodeWithContentDescription("收藏 2-201").performScrollTo().performClick()
-        compose.onNodeWithTag("tab_preferences").performClick()
+        compose.onNodeWithTag("tab_settings").performClick()
+        compose.onNodeWithTag("settings_room_marks").performClick()
         compose.onNodeWithText("2-201").assertIsDisplayed()
         compose.onNodeWithText("已收藏").assertIsDisplayed()
     }
@@ -94,7 +95,7 @@ class YouRoomUiTest {
         compose.onNodeWithContentDescription("收藏 2-201").performScrollTo().performClick()
         val rooms = compose.onNodeWithTag("tab_rooms").fetchSemanticsNode().boundsInRoot
         val planner = compose.onNodeWithTag("tab_planner").fetchSemanticsNode().boundsInRoot
-        val preferences = compose.onNodeWithTag("tab_preferences").fetchSemanticsNode().boundsInRoot
+        val preferences = compose.onNodeWithTag("tab_settings").fetchSemanticsNode().boundsInRoot
         assertTrue(rooms.right <= planner.left && planner.right <= preferences.left)
         compose.onNodeWithTag("tab_planner").performClick()
         compose.onNodeWithTag("planner_screen").assertExists()
@@ -105,13 +106,13 @@ class YouRoomUiTest {
         assertEquals(240, capturedModel.planning.executions.value.getValue(Campus.XITUCHENG).result!!.options.first().plan.favoriteMinutes)
         compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_step_0"))
         compose.onNodeWithTag("planner_step_0").performClick()
-        compose.onNodeWithTag("room_actions_dialog").assertExists()
+        compose.onNodeWithTag("room_actions_dialog").assertDoesNotExist()
         compose.onNodeWithTag("room_detail").assertDoesNotExist()
-        compose.onNodeWithTag("close_room_actions").performClick()
         compose.onNodeWithTag("tab_rooms").performClick()
         compose.onNodeWithTag("slot_1").assertIsSelected()
         compose.onNodeWithTag("slot_2").assertIsSelected()
-        compose.onNodeWithTag("tab_preferences").performClick()
+        compose.onNodeWithTag("tab_settings").performClick()
+        compose.onNodeWithTag("settings_room_marks").performClick()
         compose.onNodeWithText("2-201").assertExists()
     }
 
@@ -145,7 +146,7 @@ class YouRoomUiTest {
         compose.onNodeWithTag("planner_generate").performClick()
         awaitPlanner()
         compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_step_0"))
-        compose.onNodeWithTag("planner_step_0").assertTextContains("演示楼-A101")
+        compose.onNodeWithTag("planner_step_0").assert(hasAnyDescendant(hasText("演示楼-A101")))
         compose.onNodeWithText("2-201").assertDoesNotExist()
         compose.onNodeWithText("规则").assertDoesNotExist()
         compose.onNodeWithText("规划规则").assertDoesNotExist()
@@ -170,7 +171,7 @@ class YouRoomUiTest {
         assertPlanWindow("08:00—12:00")
         assertEquals(0, capturedModel.planning.executions.value.getValue(Campus.XITUCHENG).result!!.options.first().plan.favoriteMinutes)
         org.junit.Assert.assertSame(first, capturedModel.planning.executions.value[Campus.XITUCHENG])
-        compose.onNodeWithTag("tab_preferences").performClick()
+        compose.onNodeWithTag("tab_settings").performClick()
         compose.onNodeWithTag("tab_planner").performClick()
         org.junit.Assert.assertSame(first, capturedModel.planning.executions.value[Campus.XITUCHENG])
         generatePlanner()
@@ -562,7 +563,7 @@ class YouRoomUiTest {
         compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeRight() }
         compose.onNodeWithTag("room_search").assertIsNotFocused().assertTextEquals("201")
         compose.onNodeWithTag("room_search").performTouchInput { click() }
-        compose.onNodeWithTag("tab_preferences").performTouchInput { click() }
+        compose.onNodeWithTag("tab_settings").performTouchInput { click() }
         compose.onNodeWithTag("tab_rooms").performTouchInput { click() }
         compose.onNodeWithTag("room_search").assertIsNotFocused().assertTextEquals("201")
     }
@@ -661,7 +662,7 @@ class YouRoomUiTest {
     @Test fun customTermCanBeCreatedMarkedAndUsedToFilter() {
         enterDemo()
         compose.onNodeWithTag("extra_filters").performScrollTo().performClick()
-        compose.onNodeWithTag("edit_tags").performScrollTo().performClick()
+        compose.onNodeWithTag("edit_tags").performClick()
         compose.onNodeWithTag("custom_tag_name").performScrollTo().performTextInput("靠窗")
         compose.onNodeWithTag("add_tag").performScrollTo().performClick()
         compose.onNodeWithTag("filter_tag_靠窗").performScrollTo().assertExists()
@@ -756,6 +757,54 @@ class YouRoomUiTest {
         val restored=compose.onNodeWithTag("filter_outlets").fetchSemanticsNode().boundsInRoot
         val restoredPeople=compose.onNodeWithTag("filter_tag_人少").fetchSemanticsNode().boundsInRoot
         assertTrue(restored.top>restoredPeople.top||(restored.top==restoredPeople.top&&restored.left>restoredPeople.left))
+    }
+
+    @Test fun deletingOneRoomTagKeepsTheOtherChipsAndSelectionsVisibleInTheSameDialog() {
+        enterDemo();revealRoom("01:2-201")
+        compose.onNodeWithContentDescription("修改标签 2-201").performClick()
+        compose.onNodeWithTag("filter_tag_人少").performClick().assertIsSelected()
+        compose.onNodeWithTag("filter_tag_桌椅舒适").performClick().assertIsSelected()
+        compose.onNodeWithTag("edit_tags").performClick()
+        compose.onNodeWithContentDescription("删除词条 有插座").performTouchInput { click() }
+        compose.onNodeWithTag("confirm_delete_tag").performTouchInput { click() }
+        compose.onNodeWithTag("filter_outlets").assertDoesNotExist()
+        compose.onNodeWithTag("filter_tag_人少").assertIsDisplayed().assertIsSelected()
+        compose.onNodeWithTag("filter_tag_桌椅舒适").assertIsDisplayed().assertIsSelected()
+        File(InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null),"room-tags-after-delete-1.15.3.png")
+            .outputStream().use {
+                compose.onNodeWithTag("room_tag_dialog").captureToImage().asAndroidBitmap()
+                    .compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)
+            }
+        compose.onNodeWithContentDescription("删除词条 桌椅舒适").performTouchInput { click() }
+        compose.onNodeWithTag("confirm_delete_tag").performTouchInput { click() }
+        compose.onNodeWithTag("filter_tag_人少").assertIsDisplayed().assertIsSelected()
+        compose.onNodeWithTag("filter_tag_桌椅舒适").assertDoesNotExist()
+        compose.onNodeWithTag("close_room_tags").performClick()
+        revealRoom("01:2-201")
+        compose.onNodeWithContentDescription("修改标签 2-201").performClick()
+        compose.onNodeWithTag("filter_tag_人少").assertIsDisplayed().assertIsSelected()
+        compose.onNodeWithTag("filter_outlets").assertDoesNotExist()
+    }
+
+    @Test fun cancelingAnActiveRoomTagDragRestoresOrderWithoutHidingOtherTags() {
+        enterDemo();revealRoom("01:2-201")
+        compose.onNodeWithContentDescription("修改标签 2-201").performClick()
+        compose.onNodeWithTag("filter_outlets").performClick()
+        compose.onNodeWithTag("edit_tags").performClick()
+        val source=compose.onNodeWithTag("filter_outlets").fetchSemanticsNode().boundsInRoot
+        val target=compose.onNodeWithTag("filter_tag_人少").fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithTag("filter_outlets").performTouchInput {
+            down(center);advanceEventTime(650);moveTo(target.center-source.topLeft,delayMillis=200);cancel()
+        }
+        val restored=compose.onNodeWithTag("filter_outlets").assertIsDisplayed().assertIsSelected()
+            .fetchSemanticsNode().boundsInRoot
+        assertEquals(source.left,restored.left,1f);assertEquals(source.top,restored.top,1f)
+        compose.onNodeWithTag("filter_tag_桌椅舒适").assertIsDisplayed()
+        compose.onNodeWithTag("filter_tag_人少").assertIsDisplayed()
+        compose.onNodeWithContentDescription("删除词条 桌椅舒适").performClick()
+        compose.onNodeWithTag("confirm_delete_tag").performClick()
+        compose.onNodeWithTag("filter_outlets").assertIsDisplayed().assertIsSelected()
+        compose.onNodeWithTag("filter_tag_人少").assertIsDisplayed()
     }
 
     @Test fun roomStripHoldInspectsTimeWithoutChangingFiltersOrCampus() {
@@ -884,7 +933,8 @@ class YouRoomUiTest {
         revealRoom("01:2-201")
         compose.onNodeWithContentDescription("排除 2-201").performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("2-201").fetchSemanticsNodes().isEmpty() }
-        compose.onNodeWithTag("tab_preferences").performClick()
+        compose.onNodeWithTag("tab_settings").performClick()
+        compose.onNodeWithTag("settings_room_marks").performClick()
         compose.onNodeWithTag("room_excluded_01:2-201", useUnmergedTree = true).assertIsDisplayed()
         compose.onNodeWithText("2-201").performClick()
         compose.onNodeWithTag("room_actions_dialog").assertIsDisplayed()
@@ -946,7 +996,7 @@ class YouRoomUiTest {
         enterDemo()
         val header = compose.onNodeWithTag("campus_header").fetchSemanticsNode().boundsInRoot
         val divider = compose.onNodeWithTag("campus_divider").fetchSemanticsNode().boundsInRoot
-        for ((tag, page) in listOf("tab_planner" to 1, "tab_preferences" to 2, "tab_rooms" to 0)) {
+        for ((tag, page) in listOf("tab_planner" to 1, "tab_settings" to 2, "tab_rooms" to 0)) {
             compose.mainClock.autoAdvance = false
             compose.onNodeWithTag(tag).performClick()
             compose.mainClock.advanceTimeBy(144)
@@ -964,15 +1014,15 @@ class YouRoomUiTest {
         }
     }
 
-    @Test fun preferencesHeaderIsFixedWhileScrollingAndCanSwitchCampuses() {
+    @Test fun settingsHeaderIsFixedWhileScrollingAndCanSwitchCampuses() {
         enterDemo()
-        compose.onNodeWithTag("tab_preferences").performClick()
+        compose.onNodeWithTag("tab_settings").performClick()
         val header = compose.onNodeWithTag("campus_header").fetchSemanticsNode().boundsInRoot
-        compose.onNodeWithTag("preferences_list").performScrollToNode(hasText("关于数据"))
+        compose.onNodeWithTag("settings_list").performScrollToNode(hasText("关于数据"))
         assertEquals(header, compose.onNodeWithTag("campus_header").fetchSemanticsNode().boundsInRoot)
         compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeLeft() }
         compose.onNodeWithTag("campus_label").assertTextEquals("沙河")
-        compose.onNodeWithTag("preferences_campus_body_content_04").assertExists()
+        compose.onNodeWithTag("settings_campus_body_content_04").assertExists()
         compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeRight() }
         compose.onNodeWithTag("campus_label").assertTextEquals("西土城")
     }
@@ -1003,14 +1053,14 @@ class YouRoomUiTest {
         compose.mainClock.autoAdvance = false
         compose.onNodeWithTag("tab_planner").performClick()
         compose.mainClock.advanceTimeBy(96)
-        compose.onNodeWithTag("tab_preferences").performClick()
+        compose.onNodeWithTag("tab_settings").performClick()
         compose.mainClock.advanceTimeBy(96)
         compose.onNodeWithTag("tab_rooms").performClick()
         compose.mainClock.advanceTimeBy(1600)
         compose.mainClock.autoAdvance = true
         compose.onAllNodesWithTag("campus_header").assertCountEquals(1)
         compose.onNodeWithTag("planner_screen").assertDoesNotExist()
-        compose.onNodeWithTag("preferences_list").assertDoesNotExist()
+        compose.onNodeWithTag("settings_list").assertDoesNotExist()
         compose.onNodeWithTag("slot_1").assertIsEnabled()
     }
 
@@ -1071,6 +1121,9 @@ class YouRoomUiTest {
         compose.onNodeWithContentDescription("删除词条 有插座").performClick()
         compose.onNodeWithTag("confirm_delete_tag").performClick()
         compose.onNodeWithTag("filter_outlets").assertDoesNotExist()
+        compose.onNodeWithTag("filter_favorite").assertIsDisplayed()
+        compose.onNodeWithTag("filter_tag_桌椅舒适").assertIsDisplayed()
+        compose.onNodeWithTag("filter_tag_人少").assertIsDisplayed()
         compose.onNodeWithTag("filter_badge").assertDoesNotExist()
     }
 

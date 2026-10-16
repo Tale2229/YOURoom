@@ -15,11 +15,40 @@ internal object PlanningDisplay {
         return merged
     }
 
-    /** Preserve first-visit order; revisiting a room adds intervals, not another row. */
-    fun rooms(plan: StudyPlan): List<PlanningRoomUse> = plan.steps.filterIsInstance<PlanningStep.Study>()
-        .groupBy { it.classroom.id }.values.map { visits ->
-            PlanningRoomUse(visits.first().classroom,visits.any { it.favorite },merge(visits.map { StudyWindow(it.start,it.end) }))
+    /** Preserve first-visit order and display walking minutes as part of adjacent
+     * room use. Real waiting / user breaks remain gaps; no score or step is edited. */
+    fun rooms(plan: StudyPlan, snapshot: ClassroomSnapshot? = null): List<PlanningRoomUse> {
+        val ranges = plan.steps.map { if (it is PlanningStep.Study) StudyWindow(it.start,it.end) else null }.toMutableList()
+        val availability = snapshot?.let { ClassroomStudyAvailability(it.slots) }
+        val intervals = mutableMapOf<String,List<StudyWindow>>()
+        fun span(study: PlanningStep.Study): StudyWindow? {
+            val window = plan.windows.firstOrNull { study.start >= it.start && study.end <= it.end } ?: return null
+            if (snapshot == null || availability == null) return window
+            val available = intervals.getOrPut(study.classroom.id) {
+                availability.intervalsFor(snapshot.index.freeSlotsByRoom[study.classroom.id].orEmpty())
+            }.firstOrNull { it.start <= study.start && it.end >= study.end } ?: return null
+            return StudyWindow(maxOf(window.start,available.start), minOf(window.end,available.end))
         }
+        plan.steps.forEachIndexed { index, step ->
+            if (step !is PlanningStep.Transfer) return@forEachIndexed
+            val before = plan.steps.getOrNull(index-1) as? PlanningStep.Study ?: return@forEachIndexed
+            val after = plan.steps.getOrNull(index+1) as? PlanningStep.Study ?: return@forEachIndexed
+            if (before.end != step.start || after.start != step.end || before.classroom.id != step.from.id ||
+                after.classroom.id != step.to.id) return@forEachIndexed
+            val walking = step.walkingMinutes.coerceIn(0,(step.end-step.start).coerceAtLeast(0))
+            // Prefer filling the incoming room backwards. If it only becomes free
+            // at arrival, keep the minutes with the outgoing room instead.
+            val incoming = minOf(walking, (after.start-maxOf(step.start,span(after)?.start ?: after.start)).coerceAtLeast(0))
+            val outgoing = minOf(walking-incoming,(minOf(step.end,span(before)?.end ?: before.end)-before.end).coerceAtLeast(0))
+            ranges[index+1] = ranges[index+1]!!.copy(start=after.start-incoming)
+            ranges[index-1] = ranges[index-1]!!.copy(end=before.end+outgoing)
+        }
+        return plan.steps.withIndex().filter { it.value is PlanningStep.Study }
+            .groupBy { (it.value as PlanningStep.Study).classroom.id }.values.map { visits ->
+                val studies = visits.map { it.value as PlanningStep.Study }
+                PlanningRoomUse(studies.first().classroom,studies.any { it.favorite },merge(visits.map { ranges[it.index]!! }))
+            }
+    }
 
     fun portions(slot: LessonSlot, windows: List<StudyWindow>): List<SlotPortion> {
         val start=slot.start.toSecondOfDay()/60f

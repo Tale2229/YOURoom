@@ -47,7 +47,7 @@ class StudyPlanningUiTest {
             StudyPlanningScreen(state,goal,executions,::edit,{
                 generationClicks++;requested=true;holder.generate(state,goal)
             },{},{},{},{ campus,id,index -> holder.select(campus,id,index) },
-                clock=clock,showHeader=false)
+                clock=clock,showHeader=false,onCancel={ holder.cancel(state.campus) })
         } }
     }
     private fun waitForResult(tag: String) {
@@ -96,7 +96,7 @@ class StudyPlanningUiTest {
         for ((label,tag) in listOf("开始时间" to "planner_start_hour_wheel","结束时间" to "planner_end_hour_wheel")) {
             val caption=compose.onNodeWithText(label).fetchSemanticsNode().boundsInRoot
             val wheel=compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
-            assertEquals(with(compose.density) { (8*.9f).dp.toPx() },wheel.top-caption.bottom,1f)
+            assertEquals(with(compose.density) { (8*.85f).dp.toPx() },wheel.top-caption.bottom,1f)
         }
         add();compose.waitForIdle()
         val strip=compose.onNodeWithTag("planner_target_bar",true).fetchSemanticsNode().boundsInRoot
@@ -281,7 +281,7 @@ class StudyPlanningUiTest {
         compose.runOnIdle { state=state.copy(profiles=mapOf(room.id to room.emptyProfile().copy(favorite=true,excluded=true,tags=setOf("新标记"))),
             snapshot=demo.copy(fetchedAt=demo.fetchedAt.plusSeconds(60))) }
         waitForResult("planner_step_0")
-        compose.onNodeWithTag("planner_step_0").assertTextContains(room.name)
+        compose.onNodeWithTag("planner_step_0").assert(hasAnyDescendant(hasText(room.name)))
         assertSame(old,session.executions.value.getValue(state.campus))
         assertEquals(1,generationClicks)
         generate()
@@ -321,7 +321,7 @@ class StudyPlanningUiTest {
         assertTrue(goal.savedWindows.isEmpty())
         val text=compose.onNodeWithTag("planner_message").fetchSemanticsNode().boundsInRoot
         val button=compose.onNodeWithTag("planner_from_now").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-        assertTrue(button.left>=text.right)
+        assertTrue(button.left>=text.right || button.top>=text.bottom)
         assertFilledButton("planner_from_now")
         compose.onNodeWithTag("planner_from_now").performClick()
         compose.waitForIdle()
@@ -341,7 +341,7 @@ class StudyPlanningUiTest {
             add();message()
             val text=compose.onNodeWithTag("planner_message").fetchSemanticsNode().boundsInRoot
             val actions=compose.onNodeWithTag("planner_duration_buttons").fetchSemanticsNode().boundsInRoot
-            assertTrue(actions.left>=text.right)
+            assertTrue(actions.left>=text.right || actions.top>=text.bottom)
             listOf(1,2,4).forEach { assertFilledButton("planner_duration_"+it+"h") }
             compose.onNodeWithTag("planner_duration_"+hours+"h").performClick()
             assertEquals(600+hours*60,goal.end)
@@ -441,7 +441,7 @@ class StudyPlanningUiTest {
         render();waitForResult("planner_step_0")
         assertPlanMetric(45) { it.favoriteMinutes }
         waitForResult("planner_step_0")
-        compose.onNodeWithTag("planner_step_0").assertTextContains(favorite.name)
+        compose.onNodeWithTag("planner_step_0").assert(hasAnyDescendant(hasText(favorite.name)))
     }
 
     @Test fun confirmationsAndTheUnconfirmedDraftSurviveRestorationSeparately() {

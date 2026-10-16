@@ -5,6 +5,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardReturn
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -17,11 +18,17 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 internal fun DialogFooterActions(hasSelection: Boolean, resetTag: String, closeTag: String,
-    onReset: () -> Unit, onClose: () -> Unit) {
+    onReset: () -> Unit, onClose: () -> Unit, middleTag: String? = null,
+    middleDescription: String = "添加词条", middleSelected: Boolean = false,
+    onMiddle: (() -> Unit)? = null) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically) {
         FooterIcon("重置", resetTag, onReset) {
             AnimatedTrashIcon(hasSelection, Modifier.size(24.dp).testTag("${resetTag}_icon"))
+        }
+        if (middleTag != null && onMiddle != null) FooterIcon(middleDescription, middleTag, onMiddle,
+            Modifier.semantics { selected=middleSelected;stateDescription=if(middleSelected) "编辑中" else "未编辑" }) {
+            Icon(Icons.Outlined.Add, null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary)
         }
         FooterIcon("关闭", closeTag, onClose) {
             Icon(Icons.AutoMirrored.Outlined.KeyboardReturn, null, Modifier.size(24.dp),
@@ -31,8 +38,8 @@ internal fun DialogFooterActions(hasSelection: Boolean, resetTag: String, closeT
 }
 
 @Composable
-private fun FooterIcon(label: String, tag: String, onClick: () -> Unit, icon: @Composable () -> Unit) {
-    Box(Modifier.size(48.dp).testTag(tag)
+private fun FooterIcon(label: String, tag: String, onClick: () -> Unit, modifier: Modifier=Modifier, icon: @Composable () -> Unit) {
+    Box(modifier.size(48.dp).testTag(tag)
         .clickable(role = Role.Button, interactionSource = remember { MutableInteractionSource() },
             indication = null, onClick = onClick)
         .semantics { contentDescription = label }, contentAlignment = Alignment.Center) { icon() }

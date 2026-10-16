@@ -374,7 +374,7 @@ class SwipeRoomRowUiTest {
         }
     }
 
-    @Test fun favoriteAndExclusionCloseImmediatelyButWaitForTheWaveBeforeChangingTheRoom() {
+    @Test fun favoriteAndExclusionWaitForTheFaceToCloseWithoutStartingAWave() {
         renderRow()
         compose.mainClock.autoAdvance = false
         for (favorite in listOf(true, false)) {
@@ -385,11 +385,14 @@ class SwipeRoomRowUiTest {
             val old = profile
             compose.onNodeWithTag("room_action_${room.id}_${if (favorite) 0 else 3}").performClick()
             compose.runOnIdle { assertEquals(old, profile); assertFalse(expanded) }
+            val period = compose.onNodeWithTag("room_period_${room.id}_6", useUnmergedTree = true)
+            assertTrue(period.fetchSemanticsNode().config.contains(SemanticsActions.OnLongClick))
+            compose.mainClock.advanceTimeBy(64)
+            assertTrue(period.fetchSemanticsNode().config.contains(SemanticsActions.OnLongClick))
             compose.mainClock.advanceTimeBy(180)
             compose.onNodeWithTag("room_actions_${room.id}").assertDoesNotExist()
             compose.mainClock.advanceTimeBy(700)
             compose.runOnIdle { if (favorite) assertTrue(profile.favorite) else assertTrue(profile.excluded) }
-            val period = compose.onNodeWithTag("room_period_${room.id}_6", useUnmergedTree = true)
             assertTrue(period.fetchSemanticsNode().config.contains(SemanticsActions.OnLongClick))
         }
         compose.mainClock.autoAdvance = true
@@ -403,7 +406,7 @@ class SwipeRoomRowUiTest {
         compose.onNodeWithTag("room_swipe_${room.id}").performTouchInput { swipeRight(durationMillis=96) }
         compose.mainClock.advanceTimeBy(64)
         assertFalse(period.fetchSemanticsNode().config.contains(SemanticsActions.OnLongClick))
-        compose.mainClock.advanceTimeBy(600)
+        compose.mainClock.advanceTimeBy(PeriodWave.startDelayMillis+PeriodWave.durationMillis+64)
         compose.onNodeWithTag("room_actions_${room.id}").assertDoesNotExist()
         assertTrue(period.fetchSemanticsNode().config.contains(SemanticsActions.OnLongClick))
         compose.mainClock.autoAdvance = true

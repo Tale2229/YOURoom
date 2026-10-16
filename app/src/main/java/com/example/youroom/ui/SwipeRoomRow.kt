@@ -40,6 +40,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.flow.first
 import kotlin.math.abs
 import kotlin.math.sign
 import kotlin.math.roundToInt
@@ -221,13 +222,18 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
     }) {
         if (revealed && active) Box(Modifier.matchParentSize().background(colors.surfaceContainer)) {
             val actionsReady = expanded && !dragging && settledOpen && interactionEnabled && !pendingAction
-            fun afterWave(action: () -> Unit) {
+            fun closeThenApply(action: () -> Unit) {
                 if (pendingAction) return
-                wave.play(); latestExpanded(false)
+                latestExpanded(false)
                 pendingAction = true
                 onActionPending(true)
                 actionScope.launch(start = CoroutineStart.UNDISPATCHED) {
-                    try { wave.awaitStopped() }
+                    try {
+                        snapshotFlow { !swipe.offset.isNaN() && abs(swipe.offset) < .5f && !dragging }.first { it }
+                        // Do not start a wave for favorite/exclusion. If a previous
+                        // manual swipe already started one, still let its tail finish.
+                        wave.awaitStopped()
+                    }
                     finally {
                         // Disposal cannot keep drawing a tail, but must not drop
                         // an accepted favorite/exclusion click when the row leaves.
@@ -235,9 +241,9 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
                     }
                 }
             }
-            RoomActionRail(profile, { afterWave(onFavorite) },
+            RoomActionRail(profile, { closeThenApply(onFavorite) },
                 onTags, onNote,
-                { afterWave(onExcluded) },
+                { closeThenApply(onExcluded) },
                 Modifier.align(AbsoluteAlignment.CenterRight).width(RoomActionRailWidth).testTag("room_actions_${profile.roomId}")
                     .then(if (actionsReady) Modifier else Modifier.clearAndSetSemantics {}), enabled = actionsReady, flip = flip)
         }

@@ -47,8 +47,7 @@ class CompactPlanningUiTest {
     }
     private fun label(index: Int)=compose.onNodeWithTag("planner_target_range_$index",true)
     private fun closeEditor() {
-        val action=compose.onNodeWithTag("planner_results_area").fetchSemanticsNode().config[SemanticsActions.CustomActions].first()
-        compose.runOnIdle { action.action() };compose.waitForIdle()
+        compose.onNodeWithTag("planner_editor").assertExists()
     }
     private fun shot(name: String) {
         compose.waitForIdle()
@@ -63,13 +62,26 @@ class CompactPlanningUiTest {
         render()
         val tags=listOf("planner_add_period","planner_expected","planner_adjust","planner_generate")
         val buttons=tags.map { compose.onNodeWithTag(it).assertIsDisplayed().fetchSemanticsNode().boundsInRoot }
-        val side=with(compose.density) { 48.dp.toPx() }
+        val side=with(compose.density) { 40.dp.toPx() }
         buttons.forEach { assertEquals(side,it.width,1f);assertEquals(side,it.height,1f);assertEquals(buttons[0].left,it.left,1f) }
         buttons.zipWithNext().forEach { (first,second) -> assertTrue(first.bottom<=second.top) }
         val wheels=compose.onNodeWithTag("planner_wheels").fetchSemanticsNode().boundsInRoot
         assertTrue(wheels.right<buttons[0].left)
-        assertEquals(wheels.top,buttons[0].top,1f)
-        assertTrue(buttons.last().bottom-wheels.bottom in 0f..with(compose.density) { 20.dp.toPx() })
+        val firstFace=compose.onNodeWithTag("planner_add_period_face",true).fetchSemanticsNode().boundsInRoot
+        assertEquals(with(compose.density) { 4.dp.toPx() },firstFace.top-wheels.top,1f)
+        assertEquals(with(compose.density) { 16.dp.toPx() },firstFace.left-wheels.right,1f)
+        compose.onNodeWithTag("planner_generate_face",true).assertWidthIsEqualTo(36.dp).assertHeightIsEqualTo(36.dp)
+        val wheelPixels=compose.onNodeWithTag("planner_wheels").captureToImage().toPixelMap()
+        val background=com.example.youroom.ui.theme.campusColorScheme(Campus.XITUCHENG,false).background
+        val inkBottom=(wheelPixels.height-1 downTo (wheelPixels.height*.75f).toInt()).first { y ->
+            (0 until wheelPixels.width).any { x ->
+                val p=wheelPixels[x,y]
+                kotlin.math.abs(p.red-background.red)+kotlin.math.abs(p.green-background.green)+kotlin.math.abs(p.blue-background.blue)>.05f
+            }
+        }
+        val face=compose.onNodeWithTag("planner_generate_face",true).fetchSemanticsNode().boundsInRoot
+        android.util.Log.i("PlannerLayout","faceBottom=${face.bottom}, wheelBottom=${wheels.bottom}, digitBottom=${wheels.top+inkBottom+1}, viewportGap=${face.bottom-wheels.bottom}")
+        assertEquals("visible button ends below the full wheel viewport in physical pixels",5f,face.bottom-wheels.bottom,1f)
         compose.onNodeWithTag("planner_generate").assertContentDescriptionEquals("生成规划")
         compose.onNodeWithTag("planner_adjust").assertIsOn().performClick().assertIsOff()
         compose.onNodeWithTag("planner_expected_badge").assertTextEquals("2")
@@ -100,7 +112,7 @@ class CompactPlanningUiTest {
         label(0).performClick();compose.onNodeWithTag("planner_remove_period_0").performClick()
         assertTrue(goal.savedWindows.isEmpty())
         compose.onNodeWithTag("planner_step_0").assertExists()
-        compose.onNodeWithTag("planner_expand_handle").performClick()
+        compose.onNodeWithTag("planner_expand_handle").assertDoesNotExist()
         compose.onNodeWithTag("planner_generate").assertIsNotEnabled()
         compose.onNodeWithTag("planner_add_period").performScrollTo().performClick()
         assertEquals(listOf(StudyWindow(840,1020)),goal.savedWindows)
@@ -151,7 +163,7 @@ class CompactPlanningUiTest {
         assertFalse("no downward cap",ink(14f))
     }
 
-    @Test fun targetOpenEndsRemainOpenAndEntirelyOutsidePeriodsStayTextOnly() {
+    @Test fun targetOpenEndsRemainOpenAndEntirelyOutsidePeriodsKeepTheirExactTimes() {
         goal=goal.copy(savedWindows=listOf(StudyWindow(440,540),StudyWindow(1190,1320)))
         render()
         label(0).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription,"起点开放"))
@@ -182,5 +194,23 @@ class CompactPlanningUiTest {
         }
         compose.runOnIdle { fontScale=1f;night=false }
         shot("planner-compact-shahe")
+    }
+
+    @Test fun aWhollyLateTargetHasAnEdgeLeaderBelowTheStripAlongsideTwoDaytimeTargets() {
+        goal=goal.copy(savedWindows=listOf(StudyWindow(540,841),StudyWindow(961,1081),StudyWindow(1261,1381)))
+        render();closeEditor()
+        label(2).assertTextEquals("21:01–23:01")
+        val lines=compose.onNodeWithTag("planner_target_range_lines",true)
+        val canvas=lines.fetchSemanticsNode().boundsInRoot
+        val last=compose.onNodeWithTag("planner_target_period_14",true).fetchSemanticsNode().boundsInRoot
+        val pixels=lines.captureToImage().toPixelMap()
+        val edge=(last.right-canvas.left).roundToInt()
+        assertTrue("late target retains its edge leader",(0..with(compose.density) { 8.dp.roundToPx() }).any { y ->
+            (-1..1).any { dx ->
+                val p=pixels[(edge+dx).coerceIn(0,pixels.width-1),y.coerceAtMost(pixels.height-1)]
+                p.alpha>.5f && p.red<.7f
+            }
+        })
+        shot("planner-target-late-1.14.2")
     }
 }

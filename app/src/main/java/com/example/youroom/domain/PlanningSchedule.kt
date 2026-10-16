@@ -8,6 +8,8 @@ internal object PlanningSchedule {
         val current = StudyWindow(draft.start,draft.end)
         if (!valid(current))
             return PlanningResult(message = "结束时间必须晚于开始时间，暂不支持跨日规划。", problem = PlanningProblem.INVALID_TIME)
+        if (current.duration < PlanningPolicy.minimumPeriodMinutes)
+            return PlanningResult(message = "自习时段不能少于30分钟", problem = PlanningProblem.TOO_SHORT)
         if (draft.savedWindows.any { current.start < it.end && it.start < current.end })
             return PlanningResult(message = "时段不能重叠，请调整当前时间。", problem = PlanningProblem.OVERLAP)
         if (notBefore != null && current.start < notBefore - PlanningPolicy.startGraceMinutes)

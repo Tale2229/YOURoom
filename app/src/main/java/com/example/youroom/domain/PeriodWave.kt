@@ -5,7 +5,8 @@ import kotlin.math.sin
 
 /** One right-to-left pulse. Indices are physical left-to-right, not lesson numbers. */
 object PeriodWave {
-    const val durationMillis = 450
+    const val startDelayMillis = 250L
+    const val durationMillis = 600 // Previous 450ms pulse at 0.75x speed.
     const val maximumExtensionDp = 3f
 
     fun amplitude(progress: Float, visualIndex: Int, count: Int): Float {

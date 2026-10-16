@@ -84,6 +84,8 @@ class YouRoomViewModel(
     val state: StateFlow<YouRoomState> = mutableState.asStateFlow()
     val planning = PlanningSession(viewModelScope,planningDispatcher)
 
+    fun cancelPlanning() { planning.cancel(state.value.campus) }
+
     fun generatePlanning(draft: PlanningDraft) {
         updateToday()
         planning.generate(state.value,draft)

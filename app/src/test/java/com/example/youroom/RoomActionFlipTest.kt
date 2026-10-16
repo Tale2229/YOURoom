@@ -36,9 +36,16 @@ class RoomActionFlipTest {
     }
     @Test fun invalidOrExtremeVelocitiesRemainFiniteAndBounded() {
         for (speed in listOf(Float.NaN,Float.POSITIVE_INFINITY,-300f,0f,100_000f)) {
-            assertTrue(RoomActionFlip.initialVelocity(speed) in 300f..1200f)
-            assertTrue(RoomActionFlip.stiffness(speed) in 75f..195f)
+            assertTrue(RoomActionFlip.initialVelocity(speed) in 150f..600f)
+            assertTrue(RoomActionFlip.stiffness(speed) in 18.75f..48.75f)
         }
         assertTrue(RoomActionFlip.crossings(Float.NaN,184f).isEmpty())
+    }
+    @Test fun allSpeedsIncludingTheMinimumAndTheSlopeAreExactlyHalfThePreviousMotion() {
+        for (speed in listOf(0f,100f,600f,1500f,2600f,100_000f)) {
+            val strength=RoomActionFlip.strength(speed)
+            assertEquals((300f+900f*strength)/2,RoomActionFlip.initialVelocity(speed),.0001f)
+            assertEquals((75f+120f*strength)/4,RoomActionFlip.stiffness(speed),.0001f)
+        }
     }
 }

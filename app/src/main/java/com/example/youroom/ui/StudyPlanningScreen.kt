@@ -1,7 +1,5 @@
 package com.example.youroom.ui
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -15,25 +13,16 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.animation.core.animate
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.semantics.CustomAccessibilityAction
-import androidx.compose.ui.semantics.customActions
-import androidx.compose.ui.semantics.stateDescription
 import com.example.youroom.domain.*
 import java.time.Clock
 import kotlinx.coroutines.launch
@@ -58,7 +47,7 @@ fun StudyPlanningScreen(state: YouRoomState, goal: PlanningDraft, plans: Map<Cam
     onRefresh: () -> Unit, onRoom: (String?) -> Unit,
     onOption: (Campus,Long,Int) -> Unit = { _,_,_ -> },
     clock: Clock = Clock.system(SchoolZone), showHeader: Boolean = true,
-    sharedHeaderMoving: Boolean = false, interactive: Boolean = true) {
+    sharedHeaderMoving: Boolean = false, interactive: Boolean = true, onCancel: () -> Unit = {}) {
     val westList = rememberLazyListState()
     val shaheList = rememberLazyListState()
     var heldGoal by remember { mutableStateOf(goal) }
@@ -68,7 +57,7 @@ fun StudyPlanningScreen(state: YouRoomState, goal: PlanningDraft, plans: Map<Cam
         SideEffect { if (ready) heldGoal = goal }
         StudyPlanningContent(page, displayedGoal, plans[page.campus],
             { if (active) onGoal(it) }, { if (active) onGenerate() },
-            { if (active) onRefresh() }, { if (active) onRoom(it) },
+            { if (active) onRefresh() }, { if (active) onCancel() },
             { id,index -> if (active) onOption(page.campus,id,index) },clock,
             if (page.campus == Campus.XITUCHENG) westList else shaheList, active)
     }
@@ -78,13 +67,28 @@ fun StudyPlanningScreen(state: YouRoomState, goal: PlanningDraft, plans: Map<Cam
 @Composable
 private fun StudyPlanningContent(state: YouRoomState, goal: PlanningDraft, execution: PlanningExecution?,
     onGoal: (PlanningDraft) -> Unit, onGenerate: () -> Unit, onRefresh: () -> Unit,
-    onRoom: (String?) -> Unit, onOption: (Long,Int) -> Unit,clock: Clock, listState: LazyListState,
+    onCancel: () -> Unit, onOption: (Long,Int) -> Unit,clock: Clock, listState: LazyListState,
     interactive: Boolean) {
     var startMoving by remember { mutableStateOf(false) }
     var endMoving by remember { mutableStateOf(false) }
     var wheelGoal by remember(goal) { mutableStateOf(goal) }
     var expectedDialog by remember(state.campus) { mutableStateOf(false) }
     var additionError by remember(goal, state.campus) { mutableStateOf<PlanningResult?>(null) }
+    var addAccepted by remember(state.campus) { mutableStateOf(false) }
+    var expectedAccepted by remember(state.campus) { mutableStateOf(false) }
+    var addRejection by remember(state.campus) { mutableIntStateOf(0) }
+    LaunchedEffect(addAccepted) {
+        if (addAccepted) {
+            animate(0f,1f,animationSpec=tween(64)) { _,_ -> }
+            addAccepted=false
+        }
+    }
+    LaunchedEffect(expectedAccepted) {
+        if (expectedAccepted) {
+            animate(0f,1f,animationSpec=tween(64)) { _,_ -> }
+            expectedAccepted=false
+        }
+    }
     val snapshot = state.campusSnapshot
     val planningToday = if (state.demo) state.today else java.time.LocalDate.now(clock.withZone(SchoolZone))
     val stale = snapshot?.isCurrentOn(planningToday) == false
@@ -93,14 +97,13 @@ private fun StudyPlanningContent(state: YouRoomState, goal: PlanningDraft, execu
     val pending = execution?.pending == true
     val choice = execution?.selectedOption ?: 0
     val expectedCount = goal.expectedRooms.count { it.startsWith("${state.campus.dataKey}:") }
-    var westClosed by rememberSaveable(state.demo) { mutableStateOf(false) }
-    var shaheClosed by rememberSaveable(state.demo) { mutableStateOf(false) }
-    val collapsed=if (state.campus==Campus.XITUCHENG) westClosed else shaheClosed
-    fun closePanel(value: Boolean) { if (state.campus==Campus.XITUCHENG) westClosed=value else shaheClosed=value }
     val editorScroll=rememberScrollState()
     val scope=rememberCoroutineScope()
     val displaySlots=remember(snapshot) { snapshot?.slots.orEmpty().sortedBy { it.start } }
-    LaunchedEffect(collapsed) { if (collapsed) { startMoving=false; endMoving=false } }
+    val displayedPlan=result?.options?.takeIf { it.isNotEmpty() }?.let { it[choice.coerceIn(it.indices)].plan }
+    val displayedUses=remember(displayedPlan,execution?.input?.snapshot) {
+        displayedPlan?.let { PlanningDisplay.rooms(it,execution?.input?.snapshot) }.orEmpty()
+    }
 
     if (expectedDialog) ExpectedRoomDialog(state, goal.expectedRooms,
         { onGoal(goal.copy(expectedRooms = it)) }, { expectedDialog = false })
@@ -110,9 +113,7 @@ private fun StudyPlanningContent(state: YouRoomState, goal: PlanningDraft, execu
     // On short screens the input area can scroll independently instead of starving it.
     val editorMaximum=minOf(maxHeight*.6f,maxHeight-104.dp).coerceAtLeast(0.dp)
     Column(Modifier.fillMaxSize().testTag("planner_screen")) {
-        AnimatedVisibility(!collapsed,enter=expandVertically(tween(220),expandFrom=Alignment.Top)+fadeIn(tween(140)),
-            exit=shrinkVertically(tween(220),shrinkTowards=Alignment.Top)+fadeOut(tween(120)),label="planning input panel") {
-            Column(Modifier.fillMaxWidth().heightIn(max=editorMaximum).verticalScroll(editorScroll).testTag("planner_editor")) {
+        Column(Modifier.fillMaxWidth().heightIn(max=editorMaximum).verticalScroll(editorScroll).testTag("planner_editor")) {
             if (state.demo) StatusNotice("演示规划 · 空闲安排为虚构，标记不写入真实数据。")
             if (stale) StatusNotice("缓存已跨日，请刷新今日数据后规划。", isError = true)
                 Column(Modifier.padding(horizontal = 24.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -126,36 +127,33 @@ private fun StudyPlanningContent(state: YouRoomState, goal: PlanningDraft, execu
                         onStart = { wheelGoal = wheelGoal.copy(start = it); onGoal(wheelGoal) },
                         onEnd = { wheelGoal = wheelGoal.copy(end = it); onGoal(wheelGoal) },
                         onAdd = {
-                            val now = if (state.demo) null else java.time.LocalTime.now(clock.withZone(SchoolZone))
-                                .let { (it.toSecondOfDay()+59)/60 }
-                            val addition = PlanningSchedule.add(goal,now)
-                            if (addition.goal != null) onGoal(addition.goal)
-                            else additionError = addition.error
-                        }, onExpected = { expectedDialog = true },
+                            if (!addAccepted) {
+                                val now = if (state.demo) null else java.time.LocalTime.now(clock.withZone(SchoolZone))
+                                    .let { (it.toSecondOfDay()+59)/60 }
+                                val addition = PlanningSchedule.add(goal,now)
+                                if (addition.goal != null) {
+                                    addAccepted=true; addRejection=0; additionError=null
+                                    onGoal(addition.goal)
+                                } else {
+                                    additionError=addition.error; addRejection++
+                                    scope.launch { listState.animateScrollToItem(0) }
+                                }
+                            }
+                        }, onExpected = { if (!expectedAccepted) { expectedAccepted=true;expectedDialog=true } },
                         onFlexible = { onGoal(goal.copy(flexible = !goal.flexible)) },
-                        onGenerate = { additionError = null; onGenerate() })
+                        onGenerate = { additionError = null; onGenerate() },
+                        cancelEnabled = interactive, onCancel = onCancel,
+                        addAccepted = addAccepted, addRejection = addRejection, expectedAccepted = expectedAccepted)
                     if (snapshot == null || stale) TextButton(onClick = onRefresh,
                         enabled = !state.refreshing && !state.demo, shape = MaterialTheme.shapes.small) { Text("获取今日数据") }
                 }
             }
-        }
-        if (!collapsed) HorizontalDivider(Modifier.padding(horizontal=24.dp).testTag("planner_input_divider"))
-        Column(Modifier.weight(1f).fillMaxWidth().testTag("planner_results_area")
-            .semantics {
-                stateDescription=if (collapsed) "规划输入已收起" else "规划输入已展开"
-                customActions=listOf(CustomAccessibilityAction(if (collapsed) "展开规划输入" else "收起规划输入") {
-                    if (interactive) { closePanel(!collapsed); true } else false
-                })
-            }.planningPanelGestures(collapsed,interactive,{ !listState.canScrollBackward },::closePanel)) {
-            if (collapsed) Box(Modifier.fillMaxWidth().height(28.dp).testTag("planner_expand_handle")
-                .clickable(enabled=interactive,role=Role.Button,interactionSource=remember { MutableInteractionSource() },
-                    indication=null,onClickLabel="展开规划输入") { closePanel(false) },contentAlignment=Alignment.Center) {
-                Box(Modifier.width(28.dp).height(2.dp).background(MaterialTheme.colorScheme.outlineVariant))
-            }
+        HorizontalDivider(Modifier.padding(horizontal=24.dp).testTag("planner_input_divider"))
+        Column(Modifier.weight(1f).fillMaxWidth().testTag("planner_results_area")) {
             PlanningTargetStrip(displaySlots,goal.savedWindows,clock, actions = PlanningRangeActions(
                 enabled = interactive && !pending && !startMoving && !endMoving,
                 onEdit = { index ->
-                    onGoal(PlanningSchedule.remove(goal,index)); closePanel(false)
+                    onGoal(PlanningSchedule.remove(goal,index))
                     scope.launch { editorScroll.animateScrollTo(0) }
                 }, onDelete = { index -> onGoal(PlanningSchedule.remove(goal,index)) }))
             PlanningWorkspace(execution,state.campus,interactive,{ id,index ->
@@ -173,19 +171,19 @@ private fun StudyPlanningContent(state: YouRoomState, goal: PlanningDraft, execu
                     Text("比较时间与完整路线…", style = MaterialTheme.typography.bodySmall)
                 }
             }
-            (additionError ?: result?.takeIf { it.message != null })?.let { feedback -> item {
-                PlanningFeedback(feedback,goal,clock,onGoal)
-            } }
+            item(key="planning_feedback") {
+                key(state.campus) {
+                    PlanningFeedbackHost(additionError ?: result?.takeIf { it.message != null },goal,clock,onGoal)
+                }
+            }
             if (result?.options?.isNotEmpty() == true) {
-                val plan = result.options[choice.coerceIn(result.options.indices)].plan
-                val uses=PlanningDisplay.rooms(plan)
                 val frozen=execution!!.input.snapshot
                 val frozenSlots=frozen.slots.sortedBy { it.start }
-                itemsIndexed(uses,key={ _,use -> use.classroom.id }) { index, use ->
+                itemsIndexed(displayedUses,key={ _,use -> use.classroom.id }) { index, use ->
                     Crossfade(use,animationSpec=tween(160),label="plan room use") { shown ->
                         PlanningRoomRow(shown,frozenSlots,frozen.index.freeSlotsByRoom[shown.classroom.id].orEmpty(),
                             shown.classroom.id in execution.input.goal.expectedRooms,interactive,
-                            execution.id,Modifier.testTag("planner_step_$index"),onRoom)
+                            execution.id,Modifier.testTag("planner_step_$index"))
                     }
                 }
             }
@@ -197,38 +195,10 @@ private fun StudyPlanningContent(state: YouRoomState, goal: PlanningDraft, execu
 }
 
 @Composable
-private fun PlanningFeedback(feedback: PlanningResult, goal: PlanningDraft, clock: Clock,
-    onGoal: (PlanningDraft) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(24.dp), verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(feedback.message.orEmpty(), Modifier.weight(1f).testTag("planner_message"), style = MaterialTheme.typography.bodyMedium)
-        when (feedback.problem) {
-            PlanningProblem.PAST_TIME -> FilledTonalButton(onClick = {
-                PlanningTimeActions.startFromNow(goal, clock)?.let(onGoal)
-            }, enabled = PlanningTimeActions.startFromNow(goal, clock) != null,
-                modifier = Modifier.heightIn(min = 48.dp).testTag("planner_from_now"),
-                shape = MaterialTheme.shapes.small,
-                contentPadding = PaddingValues(horizontal = 8.dp)) { Text("从现在起") }
-            PlanningProblem.INVALID_TIME -> Row(Modifier.testTag("planner_duration_buttons"),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                listOf(1, 2, 4).forEach { hours ->
-                    FilledTonalButton(onClick = { PlanningTimeActions.endAfterHours(goal, hours)?.let(onGoal) },
-                        enabled = PlanningTimeActions.endAfterHours(goal, hours) != null,
-                        modifier = Modifier.width(48.dp).heightIn(min = 48.dp).testTag("planner_duration_${hours}h"),
-                        shape = MaterialTheme.shapes.small,
-                        contentPadding = PaddingValues(horizontal = 4.dp)) { Text("${hours}h") }
-                }
-            }
-            else -> Unit
-        }
-    }
-}
-
-@Composable
 private fun PlanningRoomRow(use: PlanningRoomUse, slots: List<LessonSlot>, free: Set<Int>, expected: Boolean,
-    enabled: Boolean, generation: Long, modifier: Modifier, onRoom: (String?) -> Unit) {
-    Column(modifier.fillMaxWidth().clickable(enabled=enabled,interactionSource=remember { MutableInteractionSource() },
-        indication=null) { onRoom(use.classroom.id) }.padding(top=12.dp,bottom=6.dp)) {
+    enabled: Boolean, generation: Long, modifier: Modifier) {
+    // Group traversal without inheriting the first period's accessibility click.
+    Column(modifier.fillMaxWidth().semantics { isTraversalGroup=true }.padding(top=12.dp,bottom=6.dp)) {
         Row(Modifier.fillMaxWidth().padding(horizontal=24.dp),verticalAlignment=Alignment.CenterVertically,
             horizontalArrangement=Arrangement.spacedBy(8.dp)) {
             Text(use.classroom.name,Modifier.weight(1f),style=MaterialTheme.typography.titleLarge)

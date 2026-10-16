@@ -109,8 +109,12 @@ class PlannerOptimizationTest {
         validate(data,new,profiles,goal)
         if (goal.expectedRooms.isEmpty()) {
             val portfolio=StudyPlanner.portfolio(data,Campus.XITUCHENG,day,profiles,goal)
-            assertEquals("$label portfolio recommendation",old.options.firstOrNull()?.plan?.let(::metrics)?.take(9),
-                portfolio.options.firstOrNull()?.plan?.let(::metrics)?.take(9))
+            val reference=old.options.firstOrNull()?.plan
+            if(reference==null || PlanningQuality.usefulVisits(reference)) {
+                assertEquals("$label portfolio recommendation",reference?.let(::metrics)?.take(9),
+                    portfolio.options.firstOrNull()?.plan?.let(::metrics)?.take(9))
+            }
+            assertTrue("$label quality floor",portfolio.options.all { PlanningQuality.usefulVisits(it.plan) })
             validate(data,portfolio,profiles,goal)
         }
     }

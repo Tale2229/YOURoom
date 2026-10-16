@@ -49,7 +49,9 @@ class PeriodWaveTest {
     }
 
     @Test fun motionDurationAndExtensionAreSmallAndFixed() {
-        assertEquals(450, PeriodWave.durationMillis)
+        assertEquals(600, PeriodWave.durationMillis)
+        assertEquals(250L, PeriodWave.startDelayMillis)
+        assertEquals(.75f,450f/PeriodWave.durationMillis,.0001f)
         assertEquals(3f, PeriodWave.maximumExtensionDp, 0f)
     }
 

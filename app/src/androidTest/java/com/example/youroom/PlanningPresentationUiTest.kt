@@ -40,11 +40,7 @@ class PlanningPresentationUiTest {
             {draft=it},{generations++},{},{},{},clock=clock)
     } }
     private fun closeEditor() {
-        compose.onNodeWithTag("planner_results_area").performTouchInput {
-            swipe(Offset(width*.85f,height*.88f),Offset(width*.85f,height*.06f),300)
-        }
-        compose.waitForIdle()
-        compose.onNodeWithTag("planner_editor").assertDoesNotExist()
+        compose.onNodeWithTag("planner_editor").assertExists()
     }
     private fun pull(distanceDp: Float) {
         val distance=with(compose.density) { distanceDp.dp.toPx() }
@@ -55,40 +51,42 @@ class PlanningPresentationUiTest {
         compose.waitForIdle()
     }
 
-    @Test fun lowerUpSwipeClosesAllInputsWithoutChangingTheDraftOrGenerating() {
+    @Test fun lowerSwipesKeepAllInputsFixedWithoutChangingTheDraftOrGenerating() {
         render();val original=draft
         val header=compose.onNodeWithTag("campus_header").fetchSemanticsNode().boundsInRoot
-        closeEditor()
-        listOf("planner_start","planner_end","planner_saved_periods","planner_expected","planner_adjust","planner_generate")
-            .forEach { compose.onNodeWithTag(it).assertDoesNotExist() }
-        compose.onNodeWithTag("planner_expand_handle").assertIsDisplayed()
+        val editor=compose.onNodeWithTag("planner_editor").fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithTag("planner_results_area").performTouchInput { swipeUp() }
+        listOf("planner_start","planner_end","planner_expected","planner_adjust","planner_generate")
+            .forEach { compose.onNodeWithTag(it).assertExists() }
+        compose.onNodeWithTag("planner_expand_handle").assertDoesNotExist()
         assertEquals(header,compose.onNodeWithTag("campus_header").fetchSemanticsNode().boundsInRoot)
+        assertEquals(editor,compose.onNodeWithTag("planner_editor").fetchSemanticsNode().boundsInRoot)
         assertEquals(original,draft);assertEquals(0,generations)
-        pull(28f);compose.onNodeWithTag("planner_editor").assertDoesNotExist()
         pull(100f);compose.onNodeWithTag("planner_editor").assertExists()
         assertEquals(original,draft);assertEquals(0,generations)
     }
 
-    @Test fun detailScrollingOnlyReopensTheEditorAfterReturningToTheTopAndPullingFurther() {
+    @Test fun detailScrollingAndPullingAtTheTopNeverMoveOrHideTheEditor() {
         shownPlan=plan.copy(steps=data.classrooms.mapIndexed { index,room ->
             PlanningStep.Study(480+index*10,490+index*10,room,false)
         },windows=listOf(StudyWindow(480,600)))
-        render();closeEditor()
+        render();val editor=compose.onNodeWithTag("planner_editor").fetchSemanticsNode().boundsInRoot
         compose.onNodeWithTag("planner_list").performScrollToIndex(7)
         pull(36f)
-        compose.onNodeWithTag("planner_editor").assertDoesNotExist()
+        assertEquals(editor,compose.onNodeWithTag("planner_editor").fetchSemanticsNode().boundsInRoot)
         compose.onNodeWithTag("planner_list").performScrollToIndex(0)
-        pull(28f);compose.onNodeWithTag("planner_editor").assertDoesNotExist()
+        pull(28f);compose.onNodeWithTag("planner_editor").assertExists()
         pull(100f);compose.onNodeWithTag("planner_editor").assertExists()
     }
 
-    @Test fun theHandleAndAccessibilityActionCanReopenWithoutAPreciseDrag() {
+    @Test fun routeRowsHaveNoEditorClickOrLegacyCollapseAccessibilityAction() {
         render();closeEditor()
-        compose.onNodeWithTag("planner_expand_handle").performClick()
-        compose.waitForIdle();compose.onNodeWithTag("planner_editor").assertExists()
-        val action=compose.onNodeWithTag("planner_results_area").fetchSemanticsNode().config[SemanticsActions.CustomActions].first().action
-        compose.runOnIdle { assertTrue(action()) }
-        compose.waitForIdle();compose.onNodeWithTag("planner_editor").assertDoesNotExist()
+        compose.onNodeWithTag("planner_expand_handle").assertDoesNotExist()
+        assertFalse(compose.onNodeWithTag("planner_results_area").fetchSemanticsNode().config.contains(SemanticsActions.CustomActions))
+        val row=compose.onNodeWithTag("planner_step_0")
+        assertFalse(row.fetchSemanticsNode().config.contains(SemanticsActions.OnClick))
+        row.performTouchInput { click() }
+        compose.onNodeWithTag("room_actions_dialog").assertDoesNotExist()
     }
 
     @Test fun manipulatingTheTimeWheelDoesNotCollapseThePanelOrConfirmAPeriod() {
@@ -101,25 +99,24 @@ class PlanningPresentationUiTest {
     }
 
     @Test fun targetBarsStartLightAndOnlyConfirmedMinutePortionsBecomeDark() {
-        showResult=false;draft=PlanningDraft(495,510,false)
+        showResult=false;draft=PlanningDraft(495,525,false)
         render()
         val tag="planner_target_period_1"
         compose.onNodeWithTag(tag,true).assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription,"未选中"))
         compose.onNodeWithTag("planner_add_period").performScrollTo().performClick()
         compose.waitForIdle()
-        assertEquals(listOf(StudyWindow(495,510)),draft.savedWindows)
+        assertEquals(listOf(StudyWindow(495,525)),draft.savedWindows)
         val pixels=compose.onNodeWithTag(tag,true).captureToImage().toPixelMap()
         val colors=campusColorScheme(Campus.XITUCHENG,false)
         assertEquals(colors.outlineVariant,pixels[(pixels.width*.1f).toInt(),pixels.height/2])
         assertEquals(colors.primary,pixels[pixels.width/2,pixels.height/2])
-        assertEquals(colors.outlineVariant,pixels[(pixels.width*.9f).toInt(),pixels.height/2])
+        assertEquals(colors.primary,pixels[(pixels.width*.9f).toInt(),pixels.height/2])
         compose.onNodeWithTag("planner_target_strip").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription,"当前时间 11:00"))
     }
 
     @Test fun repeatedRoomsShareFourteenStaticAvailabilityBarsAndAllTheirTimeRanges() {
         render();closeEditor()
         compose.onAllNodesWithTag("planner_room_strip_${a.id}",true).assertCountEquals(1)
-        compose.onAllNodesWithTag("planner_room_strip_${b.id}",true).assertCountEquals(1)
         compose.onNodeWithTag("planner_range_${a.id}_0",true).assertTextEquals("08:00–08:45")
         compose.onNodeWithTag("planner_range_${a.id}_1",true).assertTextEquals("13:00–13:45")
         data.slots.forEach { compose.onNodeWithTag("room_period_${a.id}_${it.number}",true).assertExists() }
@@ -130,6 +127,8 @@ class PlanningPresentationUiTest {
         val selection=compose.onNodeWithTag("planner_alternatives").fetchSemanticsNode().boundsInRoot
         val room=compose.onNodeWithTag("planner_step_0").fetchSemanticsNode().boundsInRoot
         assertTrue(selection.bottom<=room.top)
+        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_step_1"))
+        compose.onAllNodesWithTag("planner_room_strip_${b.id}",true).assertCountEquals(1)
     }
 
     @Test fun longPressOnAPlannedRoomStripInspectsThePeriodWithoutOpeningTheRoomOrPanel() {
@@ -139,7 +138,7 @@ class PlanningPresentationUiTest {
         }
         compose.waitUntil(4_000) { compose.onAllNodesWithTag("room_time_${a.id}_tooltip",true).fetchSemanticsNodes().isNotEmpty() }
         compose.onAllNodes(hasTestTag("room_time_${a.id}_tooltip"),true).assertCountEquals(1)
-        compose.onNodeWithTag("planner_editor").assertDoesNotExist()
+        compose.onNodeWithTag("planner_editor").assertExists()
         compose.onNodeWithTag("room_period_strip_${a.id}",true).performTouchInput { up() }
         compose.waitForIdle()
     }

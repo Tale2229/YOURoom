@@ -12,8 +12,8 @@ data class PlanningInput(val snapshot: ClassroomSnapshot, val campus: Campus, va
     val profiles: Map<String,RoomProfile>, val goal: PlanningGoal)
 
 data class PlanningExecution(val id: Long, val input: PlanningInput, val result: PlanningResult? = null,
-    val selectedOption: Int = 0) {
-    val pending get() = result == null
+    val selectedOption: Int = 0, val cancelled: Boolean = false) {
+    val pending get() = result == null && !cancelled
 }
 
 /** Activity/ViewModel lifetime, independent of page composition and live school/profile flows. */
@@ -45,10 +45,23 @@ class PlanningSession(private val scope: CoroutineScope,
             catch (_: Exception) { PlanningResult(message = "规划未完成，请重新生成。") }
             withContext(Dispatchers.Main.immediate) {
                 mutableExecutions.update { current ->
-                    if (current[input.campus]?.id == id) current + (input.campus to PlanningExecution(id,input,result)) else current
+                    if (current[input.campus]?.let { it.id == id && it.pending } == true)
+                        current + (input.campus to PlanningExecution(id,input,result)) else current
                 }
             }
         }
+        return true
+    }
+
+    /** Stop only this campus's current worker. Draft selections belong to the UI,
+     * and neither they nor completed results in another campus are touched. */
+    fun cancel(campus: Campus): Boolean {
+        val execution = mutableExecutions.value[campus]?.takeIf { it.pending } ?: return false
+        mutableExecutions.update { current ->
+            if (current[campus]?.let { it.id == execution.id && it.pending } == true)
+                current + (campus to execution.copy(cancelled = true)) else current
+        }
+        jobs.remove(campus)?.cancel()
         return true
     }
 

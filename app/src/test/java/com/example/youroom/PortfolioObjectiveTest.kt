@@ -19,7 +19,8 @@ class PortfolioObjectiveTest {
     private val spans=listOf(StudyPlanner.Span(0,600,640),StudyPlanner.Span(1,620,660),
         StudyPlanner.Span(2,665,690),StudyPlanner.Span(3,630,690))
 
-    private fun exhaustive(favorites: BooleanArray): List<StudyPlan> {
+    private fun exhaustive(favorites: BooleanArray,spans: List<StudyPlanner.Span> = this.spans,
+        window: StudyWindow = this.window): List<StudyPlan> {
         val plans=mutableListOf<StudyPlan>()
         fun visit(index: Int,arrival: Int,loss: Int,changes: Int,walk: Int,buildings: Int,favored: Int,steps: List<PlanningStep>) {
             val span=spans[index]
@@ -49,10 +50,21 @@ class PortfolioObjectiveTest {
         return plans
     }
 
-    @Test fun eachChampionMatchesExhaustiveSearchRatherThanOneWeightedWinner() {
+    // Independent quality oracle for this single-window fixture. These visits all
+    // change rooms, so no consecutive same-room pieces need to be accumulated.
+    private fun eligible(plans: List<StudyPlan>): List<StudyPlan> {
+        val useful=plans.filter { plan ->
+            val studies=plan.steps.filterIsInstance<PlanningStep.Study>()
+            studies.size==1 || studies.all { it.end-it.start>=30 }
+        }
+        val base=useful.minWithOrNull(StudyPlanner.order) ?: return emptyList()
+        return useful.filter { it.score<=base.score+30 && it.studyMinutes>=base.studyMinutes-15 }
+    }
+
+    @Test fun eachChampionMatchesExhaustiveSearchWithinTheCommonQualityPool() {
         for (mask in 0..15) {
             val favorites=BooleanArray(4) { mask and (1 shl it)!=0 }
-            val all=exhaustive(favorites)
+            val all=eligible(exhaustive(favorites))
             val actual=MultiStudyPlanner.plan(StudyPlanner.Prepared(rooms,favorites,locations,travel,spans),emptyList(),campus,
                 PlanningGoal(600,690,false),null,{},portfolio=true)
             for (direction in PlanningDirection.entries.filter { it!=PlanningDirection.EXPECTED }) {
@@ -67,8 +79,12 @@ class PortfolioObjectiveTest {
     }
 
     @Test fun crossBuildingAndFewestChangesCanHaveDifferentChampions() {
-        val result=MultiStudyPlanner.plan(StudyPlanner.Prepared(rooms,BooleanArray(4),locations,travel,spans),emptyList(),campus,
-            PlanningGoal(600,690,false),null,{},portfolio=true)
+        // Give each of the three same-building visits at least thirty minutes;
+        // the old 90-minute fixture could only achieve this direction with fragments.
+        val usefulSpans=listOf(StudyPlanner.Span(0,600,645),StudyPlanner.Span(1,640,685),
+            StudyPlanner.Span(2,680,720),StudyPlanner.Span(3,630,720))
+        val result=MultiStudyPlanner.plan(StudyPlanner.Prepared(rooms,BooleanArray(4),locations,travel,usefulSpans),emptyList(),campus,
+            PlanningGoal(600,720,false),null,{},portfolio=true)
         fun first(direction: PlanningDirection)=result.options[result.groups.single { it.direction==direction }.optionIndices.first()].plan
         assertEquals(1,first(PlanningDirection.CHANGES).changes)
         assertEquals(1,first(PlanningDirection.CHANGES).buildingChanges)
@@ -76,10 +92,28 @@ class PortfolioObjectiveTest {
         assertEquals(0,first(PlanningDirection.BUILDINGS).buildingChanges)
     }
 
+    @Test fun twoMoveThirtyMinuteBoundariesAlsoMatchTheMinuteByMinuteQualityOracle() {
+        val wide=StudyWindow(600,720)
+        val usefulSpans=listOf(StudyPlanner.Span(0,600,645),StudyPlanner.Span(1,640,685),
+            StudyPlanner.Span(2,680,720),StudyPlanner.Span(3,630,720))
+        for(mask in 0..15) {
+            val favorites=BooleanArray(4) { mask and (1 shl it)!=0 }
+            val expected=eligible(exhaustive(favorites,usefulSpans,wide))
+            val result=MultiStudyPlanner.plan(StudyPlanner.Prepared(rooms,favorites,locations,travel,usefulSpans),emptyList(),campus,
+                PlanningGoal(wide.start,wide.end,false),null,{},portfolio=true)
+            for(direction in PlanningDirection.entries.filter { it!=PlanningDirection.EXPECTED }) {
+                val best=result.options[result.groups.single { it.direction==direction }.optionIndices.first()].plan
+                val oracle=expected.minWith(PlanningPortfolio.order(direction))
+                fun metrics(p: StudyPlan)=listOf(p.score,p.studyMinutes,p.favoriteMinutes,p.changes,p.buildingChanges,p.walkingMinutes)
+                assertEquals("two moves mask=$mask direction=$direction",metrics(oracle),metrics(best))
+            }
+        }
+    }
+
     @Test fun expectedCoverageChampionMatchesExhaustiveSearchWithBaselineAndFragmentGuards() {
         for (mask in listOf(0,4,8,10)) {
             val favorites=BooleanArray(4) { mask and (1 shl it)!=0 }
-            val all=exhaustive(favorites)
+            val all=eligible(exhaustive(favorites))
             val baseline=all.minWith(StudyPlanner.order)
             for (desired in rooms.indices) {
                 val ids=setOf(rooms[desired].id)

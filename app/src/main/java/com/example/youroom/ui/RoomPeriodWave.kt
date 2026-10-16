@@ -30,6 +30,7 @@ internal class RoomPeriodWave {
             if (request != 0) {
                 try {
                     progress.snapTo(0f)
+                    awaitRoomMotionDelay(PeriodWave.startDelayMillis)
                     progress.animateTo(1f, tween(PeriodWave.durationMillis, easing = LinearEasing))
                 } finally { running = false }
             }

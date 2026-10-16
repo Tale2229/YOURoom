@@ -1,7 +1,7 @@
 package com.example.youroom.ui
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.selection.selectable
@@ -10,9 +10,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -25,7 +28,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.text.style.TextOverflow
 
 @Composable
 fun AppMark(modifier: Modifier = Modifier) {
@@ -56,16 +58,21 @@ fun WorkspaceNavigation(tab: Int, onTab: (Int) -> Unit) {
         Column(Modifier.navigationBarsPadding()) {
             HorizontalDivider()
             Row(Modifier.fillMaxWidth().selectableGroup()) {
-                listOf("找教室" to "tab_rooms", "自习规划" to "tab_planner", "个人偏好" to "tab_preferences").forEachIndexed { index, (label, tag) ->
+                listOf(Triple("找教室","tab_rooms",NavigationIcons.building),
+                    Triple("自习规划","tab_planner",NavigationIcons.route),
+                    Triple("设置","tab_settings",Icons.Outlined.Settings)).forEachIndexed { index, (label, tag, icon) ->
                     val selected = index == tab
-                    Column(Modifier.weight(1f).testTag(tag)
-                        .selectable(selected, role = Role.Tab, onClick = { onTab(index) })
-                        .padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-                        val width by animateDpAsState(if (selected) 24.dp else 0.dp, tween(160), label = "navigation_line")
-                        Box(Modifier.width(width).height(2.dp).background(MaterialTheme.colorScheme.primary))
+                    val colors=MaterialTheme.colorScheme
+                    val background by animateColorAsState(if(selected) colors.primary else colors.surface,tween(140),label="navigation face")
+                    val foreground by animateColorAsState(if(selected) colors.surface else colors.primary,tween(140),label="navigation icon")
+                    Box(Modifier.weight(1f).height(56.dp).testTag(tag)
+                        .selectable(selected, role = Role.Tab, interactionSource=remember { MutableInteractionSource() },
+                            indication=null,onClick = { onTab(index) }).semantics { contentDescription=label },
+                        contentAlignment=Alignment.Center) {
+                        Surface(Modifier.size(width=48.dp,height=40.dp).testTag("${tag}_face"),
+                            shape=MaterialTheme.shapes.small,color=background,contentColor=foreground) {
+                            Box(contentAlignment=Alignment.Center) { Icon(icon,null,Modifier.size(25.dp)) }
+                        }
                     }
                 }
             }
