@@ -3,8 +3,8 @@ package com.example.youroom.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.background
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.automirrored.outlined.KeyboardReturn
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.Icons
@@ -13,9 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -57,7 +55,8 @@ fun RoomTagsDialog(room: RoomMatch, state: YouRoomState, onDismiss: () -> Unit,
                     DialogFooterActions(draft.allTags.isNotEmpty() || draft.outlets, "reset_room_tags", "close_room_tags",
                         { update(draft.withoutPersonalTags()) }, onDismiss,
                         middleTag = "edit_tags", middleDescription = if (editingTags) "结束词条编辑" else "添加词条",
-                        middleSelected = editingTags, onMiddle = { editingTags = !editingTags })
+                        middleSelected = editingTags, onMiddle = { editingTags = !editingTags },
+                        resetIconOffsetY = (-1).dp)
                 }
             }
         }
@@ -65,12 +64,13 @@ fun RoomTagsDialog(room: RoomMatch, state: YouRoomState, onDismiss: () -> Unit,
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun RoomNoteDialog(room: RoomMatch, onDismiss: () -> Unit, onChange: (RoomProfile) -> Unit) {
     // Old notes remain stored until explicitly edited; just limit the editor's draft.
     var draft by remember(room.classroom.id) { mutableStateOf(room.profile.copy(note = RoomNotes.limit(room.profile.note))) }
     LaunchedEffect(room.profile) { draft = room.profile.copy(note = RoomNotes.limit(room.profile.note)) }
     fun update(value: String) { draft = draft.copy(note = RoomNotes.limit(value)); onChange(draft) }
-    val outline=MaterialTheme.colorScheme.outline
+    val interaction=remember { MutableInteractionSource() }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.imePadding().widthIn(max = 480.dp).fillMaxWidth().padding(horizontal = 20.dp)
             .testTag("room_note_dialog"), shape = MaterialTheme.shapes.small,
@@ -79,28 +79,26 @@ fun RoomNoteDialog(room: RoomMatch, onDismiss: () -> Unit, onChange: (RoomProfil
                 verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text("${room.classroom.name} · 备注", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(14.dp))
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Box(Modifier.weight(1f).testTag("room_note_frame").drawBehind {
-                        // Paint under the floating label, never through its glyphs.
-                        drawRoundRect(outline,cornerRadius=CornerRadius(4.dp.toPx()),style=Stroke(1.dp.toPx()))
-                    }) {
-                        BasicTextField(draft.note,::update,Modifier.fillMaxWidth().testTag("room_note")
-                            .semantics { contentDescription="个人备注" }.padding(start=12.dp,end=12.dp,top=16.dp,bottom=24.dp),
+                Box(Modifier.fillMaxWidth().testTag("room_note_frame")) {
+                        BasicTextField(draft.note,::update,Modifier.fillMaxWidth().heightIn(min=64.dp).testTag("room_note")
+                            .semantics { contentDescription="个人备注" },interactionSource=interaction,
                             minLines=1,maxLines=4,textStyle=MaterialTheme.typography.bodyLarge.copy(color=MaterialTheme.colorScheme.onSurface),
-                            cursorBrush=SolidColor(MaterialTheme.colorScheme.primary))
-                        Text("个人备注",Modifier.align(Alignment.TopStart).offset(x=8.dp,y=(-8).dp)
-                            .background(MaterialTheme.colorScheme.background).padding(horizontal=4.dp).testTag("room_note_label"),
-                            style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            cursorBrush=SolidColor(MaterialTheme.colorScheme.primary),decorationBox={ inner ->
+                                OutlinedTextFieldDefaults.DecorationBox(draft.note,inner,true,false,VisualTransformation.None,interaction,
+                                    label={ Text("个人备注",Modifier.testTag("room_note_label")) },
+                                    trailingIcon={
+                                        IconButton(onClick={update("")},modifier=Modifier.size(48.dp).testTag("clear_room_note")) {
+                                            AnimatedTrashIcon(draft.note.isNotEmpty(),Modifier.size(24.dp)
+                                                .semantics { contentDescription="清空备注" })
+                                        }
+                                    },contentPadding=PaddingValues(start=12.dp,top=16.dp,end=12.dp,bottom=24.dp),
+                                    container={ OutlinedTextFieldDefaults.Container(true,false,interaction,
+                                        colors=OutlinedTextFieldDefaults.colors(),shape=MaterialTheme.shapes.small) })
+                            })
                         Text("${RoomNotes.length(draft.note)}/${RoomNotes.maximumLength}",
                             Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 4.dp)
                                 .testTag("room_note_count"), style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    IconButton(onClick = { update("") }, modifier = Modifier.size(48.dp)
-                        .testTag("clear_room_note")) {
-                        AnimatedTrashIcon(draft.note.isNotEmpty(),Modifier.size(24.dp).semantics { contentDescription="清空备注" })
-                    }
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     IconButton(onClick = onDismiss, modifier = Modifier.size(48.dp)

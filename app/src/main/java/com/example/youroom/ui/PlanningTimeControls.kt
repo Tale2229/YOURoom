@@ -43,7 +43,8 @@ internal fun PlanningTimeControls(goal: PlanningDraft, addEnabled: Boolean, expe
     onStart: (Int) -> Unit, onEnd: (Int) -> Unit,
     onAdd: () -> Unit, onExpected: () -> Unit, onFlexible: () -> Unit, onGenerate: () -> Unit,
     cancelEnabled: Boolean, onCancel: () -> Unit,
-    addAccepted: Boolean = false, addRejection: Int = 0, expectedAccepted: Boolean = false) {
+    addAccepted: Boolean = false, addRejection: Int = 0, expectedAccepted: Boolean = false,
+    onFullAdd: (() -> Unit)? = null) {
     val density = LocalDensity.current
     val shake = remember { Animatable(0f) }
     LaunchedEffect(addRejection) {
@@ -65,6 +66,7 @@ internal fun PlanningTimeControls(goal: PlanningDraft, addEnabled: Boolean, expe
         Column(Modifier.testTag("planner_actions"), verticalArrangement = Arrangement.SpaceBetween) {
             PlanningRailAction("添加时段", "planner_add_period", addEnabled && !addAccepted,
                 confirmation = if(addAccepted) "已添加" else null, briefFeedback = true, onClick = onAdd,
+                onDisabledClick=if(!addAccepted) onFullAdd else null,
                 modifier = Modifier.graphicsLayer { translationX = shake.value * 4.dp.toPx() }) {
                 Icon(Icons.Outlined.Add, null, Modifier.size(22.dp))
             }
@@ -73,7 +75,7 @@ internal fun PlanningTimeControls(goal: PlanningDraft, addEnabled: Boolean, expe
                     confirmation = if(expectedAccepted) "已打开" else null, briefFeedback = true, onClick = onExpected) {
                     Icon(Icons.Outlined.BookmarkBorder, null, Modifier.size(22.dp))
                 }
-                if (expectedCount > 0) Badge(Modifier.align(Alignment.TopEnd).offset(x = 1.dp, y = 1.dp)
+                if (expectedCount > 0) Badge(Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-3).dp)
                     .testTag("planner_expected_badge").semantics(mergeDescendants = true) {},
                     containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) {
                     Text(expectedCount.toString())
@@ -111,7 +113,8 @@ internal fun PlanningTimeControls(goal: PlanningDraft, addEnabled: Boolean, expe
 private fun PlanningRailAction(label: String, tag: String, enabled: Boolean, selected: Boolean = false,
     toggle: Boolean = false, primary: Boolean = false, pending: Boolean = false, confirmation: String? = null,
     briefFeedback: Boolean = false,
-    onClick: () -> Unit, modifier: Modifier = Modifier, icon: @Composable () -> Unit) {
+    onClick: () -> Unit, modifier: Modifier = Modifier, onDisabledClick: (() -> Unit)?=null,
+    icon: @Composable () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val colors = MaterialTheme.colorScheme
     val background by animateColorAsState(if (primary) colors.primary.copy(alpha = if (enabled || pending) 1f else .38f)
@@ -119,10 +122,11 @@ private fun PlanningRailAction(label: String, tag: String, enabled: Boolean, sel
         tween(if(briefFeedback) { if(confirmation!=null) 16 else 24 } else 100), label = "planning action state")
     val action = if (toggle) Modifier.toggleable(selected, enabled = enabled, role = Role.Checkbox,
         interactionSource = interaction, indication = null, onValueChange = { onClick() })
-    else Modifier.clickable(enabled = enabled, role = Role.Button, interactionSource = interaction,
-        indication = null, onClick = onClick)
+    else Modifier.clickable(enabled = enabled || onDisabledClick!=null, role = Role.Button, interactionSource = interaction,
+        indication = null, onClick = { if(enabled) onClick() else onDisabledClick?.invoke() })
     Box(modifier.size(40.dp).testTag(tag).then(action).semantics {
         contentDescription = label
+        if(!enabled) disabled()
         if (confirmation!=null) stateDescription = confirmation else if (pending) stateDescription = "计算中"
     }, contentAlignment = Alignment.Center) {
         Surface(Modifier.size(36.dp)

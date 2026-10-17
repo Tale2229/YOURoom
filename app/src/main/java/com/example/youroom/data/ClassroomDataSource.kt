@@ -7,6 +7,8 @@ interface ClassroomDataSource {
     val profiles: Flow<Map<String, RoomProfile>>
     suspend fun hasSession(): Boolean
     suspend fun login(account: String, password: String)
+    suspend fun login(account: String, password: String, rememberPassword: Boolean) = login(account, password)
+    suspend fun rememberedAccount(): String? = null
     suspend fun logout()
     suspend fun cached(campus: Campus): ClassroomSnapshot?
     suspend fun refresh(campus: Campus): ClassroomSnapshot

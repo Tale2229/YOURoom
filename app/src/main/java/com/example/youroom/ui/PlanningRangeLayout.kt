@@ -3,6 +3,7 @@ package com.example.youroom.ui
 import com.example.youroom.domain.LessonSlot
 import com.example.youroom.domain.PlanningDisplay
 import com.example.youroom.domain.StudyWindow
+import com.example.youroom.domain.PeriodStripLayout
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -19,13 +20,13 @@ internal data class PlanningRangeAnchor(
 }
 
 internal fun planningRangeAnchors(windows: List<StudyWindow>, slots: List<LessonSlot>,
-    width: Float, gutter: Float, gap: Float): List<PlanningRangeAnchor> {
+    width: Float, gutter: Float, gap: Float, layout: PeriodStripLayout = PeriodStripLayout.EQUAL): List<PlanningRangeAnchor> {
     val inner = width - 2 * gutter
     val first = slots.firstOrNull()?.start?.toSecondOfDay()?.div(60f)
     val last = slots.lastOrNull()?.end?.toSecondOfDay()?.div(60f)
     return windows.map { window ->
-        val start = PlanningDisplay.xAt(window.start.toFloat(), slots, inner, gap)
-        val end = PlanningDisplay.xAt(window.end.toFloat(), slots, inner, gap)
+        val start = PlanningDisplay.xAt(window.start.toFloat(), slots, inner, gap,layout)
+        val end = PlanningDisplay.xAt(window.end.toFloat(), slots, inner, gap,layout)
         if (start == null || end == null || first == null || last == null) {
             PlanningRangeAnchor(width / 2, width / 2, known = false)
         } else PlanningRangeAnchor(gutter + start, gutter + end,
@@ -101,6 +102,35 @@ internal fun routePlanningRange(anchor: PlanningRangeAnchor, label: PlanningRang
 private data class RangeLayoutChoice(val lanes: List<Int>, val centers: FloatArray, val score: Double)
 private data class RangeSeparation(val from: Int, val to: Int, val distance: Float)
 
+/** Allocate elbow heights jointly, rather than simply by time order. In canonical
+ * (labels-above-bars) coordinates, a horizontal leg crossing another text-side
+ * column must pass closer to the bars; crossing a bar-side column must pass closer
+ * to the labels. These precedence constraints mirror unchanged below the bars/RTL.
+ * Only heights change: label centers, bracket centers and the two-bend shape stay put. */
+private fun planningRangeTracks(leaders: List<PlanningRangeLeader>, order: List<Int>): Map<Int,Int> {
+    val bent=order.filter { !leaders[it].straight }
+    val before=Array(leaders.size) { mutableSetOf<Int>() }
+    bent.forEach { i ->
+        val wire=leaders[i]
+        fun inside(x: Float)=x>minOf(wire.verticalX,wire.endX)+.001f &&
+            x<maxOf(wire.verticalX,wire.endX)-.001f
+        bent.filter { it!=i }.forEach { j ->
+            if(inside(leaders[j].verticalX)) before[i]+=j
+            if(inside(leaders[j].endX)) before[j]+=i
+        }
+    }
+    val remaining=bent.toMutableList()
+    val assigned=linkedMapOf<Int,Int>()
+    while(remaining.isNotEmpty()) {
+        // Stable topological order. In extreme fallback layouts some constraints
+        // may conflict; keep this bounded and choose the fewest remaining conflicts.
+        val next=remaining.minBy { i -> before[i].count { it in remaining } }
+        assigned[next]=assigned.size
+        remaining.remove(next)
+    }
+    return assigned
+}
+
 /** Jointly place labels, with bounded displacement and chronological center order.
  * Search every row assignment for the at-most-three target periods. Longer room histories
  * use a small beam, not an unbounded combinatorial search on the UI thread.
@@ -167,7 +197,7 @@ internal fun arrangePlanningRanges(anchors: List<PlanningRangeAnchor>, sizes: Li
     val leaders=positioned.mapIndexed { index,label -> routePlanningRange(anchors[index],label,positioned,width,gutter,spacing/2) }
     val reservedTracks=(leaders.count { !it.straight }-1).coerceAtLeast(0)
     val annotationHeight=(labelBottom+spacing*1.5f+reservedTracks*spacing*3/8).roundToInt()
-    val tracks=chronologicalOrder.filter { !leaders[it].straight }.withIndex().associate { it.value to it.index }
+    val tracks=planningRangeTracks(leaders,chronologicalOrder)
     return PlanningRangeArrangement(positioned.mapIndexed { index,label -> label.copy(routeTrack=tracks[index] ?: 0) },
         labelBottom,leaders,annotationHeight)
 }

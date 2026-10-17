@@ -2,12 +2,16 @@ package com.example.youroom.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
@@ -18,10 +22,15 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.youroom.domain.*
 
 /** A top-aligned comparison panel. The detail list scrolls beneath fixed input
@@ -55,22 +64,54 @@ internal fun PlanningWorkspace(execution: PlanningExecution?, campus: Campus, in
     val selectedIndices=groups.firstOrNull { it.direction.name==selectedGroup }?.optionIndices.orEmpty()
     val rank=selectedIndices.indexOf(selected).takeIf { it>=0 }?.plus(1) ?: 1
     var expanded by rememberSaveable { mutableStateOf(false) }
+    val arrowFlip=animateFloatAsState(if(expanded) -1f else 1f,
+        tween(180,easing=FastOutSlowInEasing),label="alternative disclosure flip")
     LaunchedEffect(campus,execution?.id) { expanded=false }
     BackHandler(available && expanded) { expanded=false }
     Column(Modifier.fillMaxSize().testTag("planner_workspace")) {
             if (available) {
-                Column(Modifier.fillMaxWidth().heightIn(min=48.dp).testTag("planner_alternatives")
+                Spacer(Modifier.fillMaxWidth().height(12.dp).testTag("planner_heading_spacing"))
+                // Inset only the painted band. Keep the original A typography,
+                // key, spacing, content anchors and 48dp height unchanged.
+                Box(Modifier.fillMaxWidth().heightIn(min=48.dp).testTag("planner_alternatives")
                     .clickable(enabled=interactive,role=Role.Button,
                         interactionSource=remember { MutableInteractionSource() },indication=null) {
                         expanded=!expanded
                     }.semantics {
                         stateDescription=if (expanded) "已展开" else "已收起"
-                    }) {
-                    Row(Modifier.fillMaxWidth().heightIn(min=48.dp).padding(horizontal=24.dp),verticalAlignment=Alignment.CenterVertically) {
-                        Text("${PlanningDirection.valueOf(selectedGroup).title} · 方案 $rank/${selectedIndices.size.coerceAtLeast(1)}",
-                            Modifier.weight(1f),style=MaterialTheme.typography.labelLarge,maxLines=1,overflow=TextOverflow.Ellipsis)
-                        Text("其他方案",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.primary)
-                        Icon(Icons.Outlined.KeyboardArrowDown,null,Modifier.size(20.dp),tint=MaterialTheme.colorScheme.primary)
+                    },contentAlignment=Alignment.Center) {
+                    Box(Modifier.matchParentSize().padding(horizontal=16.dp)
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow).testTag("planner_alternatives_face"))
+                    Row(Modifier.fillMaxWidth().heightIn(min=48.dp).padding(horizontal=24.dp),
+                        verticalAlignment=Alignment.CenterVertically) {
+                        Box(Modifier.width(3.dp).height(22.dp).background(MaterialTheme.colorScheme.primary)
+                            .testTag("planner_alternatives_key"))
+                        Spacer(Modifier.width(9.dp))
+                        Row(Modifier.weight(1f),verticalAlignment=Alignment.CenterVertically) {
+                            Text(PlanningDirection.valueOf(selectedGroup).title,
+                                Modifier.weight(1f,fill=false).testTag("planner_alternatives_title"),
+                                style=MaterialTheme.typography.labelMedium.copy(fontSize=13.sp,lineHeight=20.sp,
+                                    fontWeight=FontWeight.SemiBold,letterSpacing=0.sp),
+                                color=MaterialTheme.colorScheme.primary,maxLines=1,overflow=TextOverflow.Ellipsis)
+                            Spacer(Modifier.width(9.dp))
+                            Box(Modifier.width(1.dp).height(12.dp).background(MaterialTheme.colorScheme.outlineVariant)
+                                .testTag("planner_alternatives_separator"))
+                            Spacer(Modifier.width(9.dp))
+                            Text("${rank.toString().padStart(2,'0')} / ${selectedIndices.size.coerceAtLeast(1).toString().padStart(2,'0')}",
+                                Modifier.testTag("planner_alternatives_count").semantics {
+                                    contentDescription="方案 $rank/${selectedIndices.size.coerceAtLeast(1)}"
+                                },style=MaterialTheme.typography.labelSmall.copy(fontSize=10.sp,lineHeight=14.sp,letterSpacing=0.sp),
+                                color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1)
+                        }
+                        Spacer(Modifier.width(9.dp))
+                        Text("其他方案",Modifier.testTag("planner_alternatives_entry"),
+                            style=MaterialTheme.typography.labelSmall.copy(letterSpacing=0.sp),
+                            color=MaterialTheme.colorScheme.primary,maxLines=1)
+                        // Reflect vertically through a flat midpoint, without a planar spin.
+                        Spacer(Modifier.width(4.dp))
+                        Icon(Icons.Outlined.KeyboardArrowDown,null,Modifier.size(15.dp)
+                            .graphicsLayer { scaleY=arrowFlip.value }.testTag("planner_alternatives_arrow"),
+                            tint=MaterialTheme.colorScheme.primary)
                     }
                 }
                 AnimatedVisibility(expanded) {
@@ -94,7 +135,10 @@ internal fun PlanningWorkspace(execution: PlanningExecution?, campus: Campus, in
                     }
                 }
                     val shownGroup=groups.firstOrNull { it.direction==direction }
-                    LazyRow(Modifier.fillMaxWidth().testTag("planner_alternative_list"),contentPadding=PaddingValues(horizontal=24.dp,vertical=8.dp),
+                    key(direction,execution?.id) {
+                    val summaries=remember { LazyListState() }
+                    LazyRow(Modifier.fillMaxWidth().testTag("planner_alternative_list"),state=summaries,
+                        contentPadding=PaddingValues(horizontal=24.dp,vertical=8.dp),
                         horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                         itemsIndexed(shownGroup?.optionIndices.orEmpty(),key={ _,index -> result.options[index].plan.signature }) { position,index ->
                             val option=result.options[index]
@@ -107,11 +151,41 @@ internal fun PlanningWorkspace(execution: PlanningExecution?, campus: Campus, in
                             }
                         }
                     }
-                    HorizontalDivider(Modifier.padding(horizontal=24.dp))
+                    PlanningAlternativeScrollbar(summaries)
+                    }
                 }
                 }
             }
         Box(Modifier.fillMaxWidth().weight(1f)) { content() }
+    }
+}
+
+/** A quiet, persistent overflow cue, not a loading/progress indicator. */
+@Composable
+private fun PlanningAlternativeScrollbar(state: LazyListState) {
+    val density=LocalDensity.current
+    val overflow by remember(state) { derivedStateOf { state.canScrollBackward || state.canScrollForward } }
+    Column {
+    Box(Modifier.fillMaxWidth().height(8.dp).padding(horizontal=24.dp),contentAlignment=Alignment.Center) {
+        if(overflow) {
+            val info=state.layoutInfo
+            val thumb=planningScrollIndicator(info.totalItemsCount,info.visibleItemsInfo.firstOrNull()?.size ?: 0,
+                with(density) { 8.dp.roundToPx() },info.beforeContentPadding+info.afterContentPadding,
+                info.viewportEndOffset-info.viewportStartOffset,state.firstVisibleItemIndex,state.firstVisibleItemScrollOffset)
+            if(thumb!=null) BoxWithConstraints(Modifier.fillMaxWidth().height(3.dp)
+                .background(MaterialTheme.colorScheme.outlineVariant,RoundedCornerShape(2.dp))
+                .testTag("planner_alternative_scrollbar").semantics { contentDescription="可左右滑动查看更多方案" }) {
+                val width=maxWidth*thumb.sizeFraction
+                Box(Modifier.offset(x=(maxWidth-width)*thumb.positionFraction).width(width).fillMaxHeight()
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha=.65f),RoundedCornerShape(2.dp))
+                    .testTag("planner_alternative_scroll_thumb"))
+            }
+        }
+    }
+    // A scroll cue replaces the divider, rather than stacking two long rules.
+    // Preserve the former divider's height so results below never jump by 1dp.
+    if(overflow) Spacer(Modifier.height(1.dp))
+    else HorizontalDivider(Modifier.padding(horizontal=24.dp).testTag("planner_alternative_divider"))
     }
 }
 
@@ -131,8 +205,7 @@ private fun PlanningSummary(plan: StudyPlan, rank: Int, selected: Boolean,
     }
 }
 
-internal fun planningRouteSummary(plan: StudyPlan): String = plan.windows.mapIndexed { index,window ->
-    val rooms=plan.steps.filterIsInstance<PlanningStep.Study>().filter { it.start>=window.start && it.end<=window.end }
-        .map { it.classroom.name }
-    (if (plan.windows.size>1) "${index+1} · " else "")+rooms.joinToString(" → ")
-}.joinToString("  /  ")
+internal fun planningRouteSummary(plan: StudyPlan): String = plan.steps.filterIsInstance<PlanningStep.Study>()
+    .fold(emptyList<Classroom>()) { rooms,study ->
+        if(rooms.lastOrNull()?.id==study.classroom.id) rooms else rooms+study.classroom
+    }.joinToString(" → ") { it.name }

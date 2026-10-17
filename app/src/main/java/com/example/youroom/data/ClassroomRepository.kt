@@ -16,16 +16,20 @@ class ClassroomRepository(
     private val session: SessionStore,
     private val clock: Clock = Clock.system(SchoolZone),
 ) : ClassroomDataSource {
+    private val authentication = SchoolSession(api, session)
     override val profiles = dao.profiles().map { rows -> rows.associate { it.roomId to it.toDomain() } }
 
-    override suspend fun hasSession(): Boolean = withContext(Dispatchers.IO) { !session.read().isNullOrBlank() }
+    override suspend fun hasSession(): Boolean = authentication.hasSession()
+    override suspend fun rememberedAccount(): String? = authentication.rememberedAccount()
 
     override suspend fun login(account: String, password: String) {
-        val token = api.login(account, password)
-        withContext(Dispatchers.IO) { session.save(token) }
+        login(account, password, false)
     }
 
-    override suspend fun logout() = withContext(Dispatchers.IO) { session.clear() }
+    override suspend fun login(account: String, password: String, rememberPassword: Boolean) =
+        authentication.login(account, password, rememberPassword)
+
+    override suspend fun logout() = authentication.logout()
 
     override suspend fun cached(campus: Campus): ClassroomSnapshot? {
         val cached = dao.snapshot(campus.dataKey) ?: return null
@@ -41,12 +45,13 @@ class ClassroomRepository(
     }
 
     override suspend fun refresh(campus: Campus): ClassroomSnapshot {
-        val token = withContext(Dispatchers.IO) { session.read()?.takeIf { it.isNotBlank() } }
-            ?: throw AuthenticationRequired()
+        var lease = authentication.lease()
         val date = LocalDate.now(clock.withZone(SchoolZone))
-        val json = try { api.classrooms(token, requireNotNull(campus.verifiedApiId)) } catch (error: AuthenticationRequired) {
-            logout()
-            throw error
+        val campusId = requireNotNull(campus.verifiedApiId)
+        val json = try { api.classrooms(lease.token, campusId) } catch (_: AuthenticationRequired) {
+            lease = authentication.recover(lease)
+            try { api.classrooms(lease.token, campusId) }
+            catch (_: AuthenticationRequired) { authentication.expire(lease) }
         }
         val now = clock.instant()
         if (now.atZone(SchoolZone).toLocalDate() != date) {
@@ -56,7 +61,9 @@ class ClassroomRepository(
             SchoolJson.snapshot(json, campus.dataKey, date, now).also { it.index }
         }
         // Replace only after full validation; failures preserve the previous snapshot.
-        dao.saveSnapshot(SnapshotEntity(campus.dataKey, date.toString(), now.toEpochMilli(), json))
+        authentication.withCurrent(lease) {
+            dao.saveSnapshot(SnapshotEntity(campus.dataKey, date.toString(), now.toEpochMilli(), json))
+        }
         return snapshot
     }
 

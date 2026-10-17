@@ -247,6 +247,9 @@ class PlanningRangeLayoutTest {
                     assertFalse("wire must not cross another time label",crossesText(a,b,it))
                 } }
             }
+            if(result.leaders.all { it.escapeX==null }) {
+                assertNoLeaderCrossings(result,xs.map { PlanningRangeAnchor(it-2,it+2) },1f)
+            }
         }
     }
 
@@ -276,6 +279,51 @@ class PlanningRangeLayoutTest {
         result.labels.forEach { assertTrue(it.left>=23.99f && it.right<=336.01f) }
         result.labels.forEachIndexed { i,a -> result.labels.drop(i+1).forEach { b ->
             assertTrue(a.lane!=b.lane || a.right+7.99<=b.left || b.right+7.99<=a.left)
+        } }
+    }
+
+    @Test fun eveningTargetsAndTheAfterClassLeaderUseNonCrossingElbowHeights() {
+        val day=com.example.youroom.data.DemoData.snapshot().slots
+        val windows=listOf(StudyWindow(1038,1098),StudyWindow(1158,1218),StudyWindow(1278,1338))
+        for (scale in listOf(1f,2f)) for (fontWidth in listOf(80,84,90,126)) {
+            val anchors=planningRangeAnchors(windows,day,360f*scale,24f*scale,3f*scale)
+            val result=arrangePlanningRanges(anchors,List(3) { PlanningRangeLabel((fontWidth*scale).toInt(),(19*scale).toInt()) },
+                360f*scale,24f*scale,8f*scale,4f*scale,5f*scale)
+            assertNoLeaderCrossings(result,anchors,scale)
+            assertTrue(result.leaders.all { it.escapeX==null })
+            // Routing changes neither true range centers nor chronological label order.
+            assertEquals(336f*scale,anchors.last().center,.01f)
+            assertTrue(result.labels.zipWithNext().all { (a,b) -> a.center<=b.center })
+        }
+    }
+
+    @Test fun mirroredMorningAndShuffledEveningInputsAlsoAvoidWireCrossings() {
+        val day=com.example.youroom.data.DemoData.snapshot().slots
+        val windows=listOf(StudyWindow(1278,1338),StudyWindow(1038,1098),StudyWindow(1158,1218))
+        val evening=planningRangeAnchors(windows,day,360f,24f,3f)
+        for (anchors in listOf(evening,evening.map {
+            it.copy(start=360-it.end,end=360-it.start,openStart=it.openEnd,openEnd=it.openStart)
+        })) {
+            val result=arrangePlanningRanges(anchors,List(3) { PlanningRangeLabel(84,19) },360f,24f,8f,4f,5f)
+            assertNoLeaderCrossings(result,anchors,1f)
+        }
+    }
+
+    private fun assertNoLeaderCrossings(result: PlanningRangeArrangement, anchors: List<PlanningRangeAnchor>, scale: Float) {
+        val paths=result.leaders.mapIndexed { i,leader -> leader.points(result.labels[i].bottom+2*scale,
+            result.labelBottom+4*scale+result.labels[i].routeTrack*3*scale,
+            result.annotationHeight+(if(anchors[i].outside) 8 else -2)*scale) }
+        paths.forEachIndexed { i,path -> paths.drop(i+1).forEach { other ->
+            path.zipWithNext().forEach { (a,b) -> other.zipWithNext().forEach { (c,d) ->
+                val horizontal=if(a.y==b.y) a to b else if(c.y==d.y) c to d else null
+                val vertical=if(a.x==b.x) a to b else if(c.x==d.x) c to d else null
+                if(horizontal!=null && vertical!=null) {
+                    val (h1,h2)=horizontal;val (v1,v2)=vertical
+                    val intersects=v1.x>minOf(h1.x,h2.x)+.01f && v1.x<maxOf(h1.x,h2.x)-.01f &&
+                        h1.y>minOf(v1.y,v2.y)+.01f && h1.y<maxOf(v1.y,v2.y)-.01f
+                    assertFalse("crossing: $path / $other",intersects)
+                }
+            } }
         } }
     }
 

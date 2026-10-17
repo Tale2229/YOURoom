@@ -66,6 +66,22 @@ class PlanningPresentationUiTest {
         assertEquals(original,draft);assertEquals(0,generations)
     }
 
+    @Test fun removingTheInputDividerRetainsItsOneDpSpacingAndTheTargetStripPosition() {
+        render()
+        compose.onNodeWithTag("planner_input_divider").assertDoesNotExist()
+        val gap=compose.onNodeWithTag("planner_input_spacing").assertHeightIsEqualTo(1.dp).fetchSemanticsNode().boundsInRoot
+        val editor=compose.onNodeWithTag("planner_editor").fetchSemanticsNode().boundsInRoot
+        val strip=compose.onNodeWithTag("planner_target_bar",true).fetchSemanticsNode().boundsInRoot
+        assertEquals(editor.bottom,gap.top,1f)
+        assertEquals(gap.bottom,strip.top,1f)
+        val pixels=compose.onNodeWithTag("planner_input_spacing").captureToImage().toPixelMap()
+        val paper=campusColorScheme(Campus.XITUCHENG,false).background
+        for(x in 0 until pixels.width) for(y in 0 until pixels.height) {
+            val p=pixels[x,y]
+            assertTrue(kotlin.math.abs(p.red-paper.red)+kotlin.math.abs(p.green-paper.green)+kotlin.math.abs(p.blue-paper.blue)<.02f)
+        }
+    }
+
     @Test fun detailScrollingAndPullingAtTheTopNeverMoveOrHideTheEditor() {
         shownPlan=plan.copy(steps=data.classrooms.mapIndexed { index,room ->
             PlanningStep.Study(480+index*10,490+index*10,room,false)

@@ -42,7 +42,8 @@ fun FilterDialog(state: YouRoomState, onDismiss: () -> Unit, onFilters: (SearchF
                     DialogFooterActions(state.filters.badgeCount > 0, "reset_filters", "close_filters",
                         { onFilters(SearchFilters(selectedSlots = state.filters.selectedSlots, query = state.filters.query)) }, onDismiss,
                         middleTag = "edit_tags", middleDescription = if (editingTags) "结束词条编辑" else "添加和整理词条",
-                        middleSelected = editingTags, onMiddle = { editingTags = !editingTags })
+                        middleSelected = editingTags, onMiddle = { editingTags = !editingTags },
+                        resetIconOffsetY = (-1).dp)
                 }
             }
         }

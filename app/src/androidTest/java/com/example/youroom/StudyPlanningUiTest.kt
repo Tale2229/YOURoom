@@ -53,7 +53,8 @@ class StudyPlanningUiTest {
     private fun waitForResult(tag: String) {
         compose.onNodeWithTag("planner_generate").performScrollTo()
         compose.waitUntil(20_000) { session.executions.value[state.campus]?.pending != true }
-        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag(tag))
+        if(tag=="planner_message") compose.onNodeWithTag(tag).assertIsDisplayed()
+        else compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag(tag))
     }
     private fun removePeriod(index: Int) {
         compose.onNodeWithTag("planner_target_range_$index",true).performClick()

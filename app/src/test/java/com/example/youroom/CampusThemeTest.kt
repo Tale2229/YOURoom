@@ -1,6 +1,7 @@
 package com.example.youroom
 
 import com.example.youroom.domain.Campus
+import com.example.youroom.domain.CampusTone
 import com.example.youroom.ui.theme.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
@@ -12,6 +13,17 @@ import org.junit.Test
 import kotlin.math.pow
 
 class CampusThemeTest {
+    @Test fun everySelectableToneKeepsReadableButtonsTextAndBadges() {
+        for (tone in CampusTone.entries) for (dark in listOf(false, true)) for (campus in Campus.entries) {
+            val c = campusColorScheme(campus, dark, tone)
+            assertTrue("$tone $dark button", contrast(c.primary, c.onPrimary) >= 4.5)
+            assertTrue("$tone $dark text", contrast(c.surface, c.onSurface) >= 4.5)
+            assertTrue("$tone $dark secondary", contrast(c.surface, c.onSurfaceVariant) >= 4.5)
+            assertTrue("$tone $dark selected", contrast(c.primaryContainer, c.onPrimaryContainer) >= 4.5)
+            assertTrue("$tone $dark controls", contrast(c.surfaceContainer, c.primary) >= 4.5)
+            assertTrue("$tone badge", contrast(campusBadgeColor(campus, tone), Color.White) >= 4.5)
+        }
+    }
     @Test fun campusSubtitleRetainsTheOriginalBodySmallTypography() {
         assertEquals(12.sp, Typography.bodySmall.fontSize)
         assertEquals(FontFamily.Default, Typography.bodySmall.fontFamily)

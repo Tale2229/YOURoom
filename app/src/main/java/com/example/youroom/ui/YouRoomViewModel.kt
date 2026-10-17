@@ -11,6 +11,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -23,6 +24,7 @@ data class YouRoomState(
     val initializing: Boolean = true,
     val loggedIn: Boolean = false,
     val loggingIn: Boolean = false,
+    val rememberedAccount: String? = null,
     val refreshing: Boolean = false,
     val snapshot: ClassroomSnapshot? = null,
     val campusSnapshots: Map<Campus, ClassroomSnapshot> = emptyMap(),
@@ -37,6 +39,8 @@ data class YouRoomState(
     val tagCatalog: TagCatalog = TagCatalog(),
     val error: String? = null,
     val selectedRoomId: String? = null,
+    val periodStrip: PeriodStripPreferences = PeriodStripPreferences(),
+    val appearance: AppearancePreferences = AppearancePreferences(),
 ) {
     val tagOrder: List<String> by lazy(LazyThreadSafetyMode.PUBLICATION) {
         tagCatalog.available(profiles.values.flatMap { it.allTags })
@@ -109,8 +113,81 @@ class YouRoomViewModel(
     private var demoSelectionDate: LocalDate? = null
     private var refreshJob: Job? = null
     private var refreshGeneration = 0L
+    private var loginJob: Job? = null
+    private var loginGeneration = 0L
+    private var persistedStrip=PeriodStripPreferences()
+    private var pendingStrip: PeriodStripPreferences?=null
+    private val stripWrites=Channel<PeriodStripPreferences>(Channel.CONFLATED)
+    private val appearanceReady = kotlinx.coroutines.CompletableDeferred<Unit>()
+    private var persistedAppearance = AppearancePreferences()
+    private var pendingAppearance: AppearancePreferences? = null
+    private val appearanceWrites = Channel<AppearancePreferences>(Channel.CONFLATED)
+
+    fun setCampusTone(campus: Campus, tone: CampusTone) {
+        if(state.value.initializing) return
+        setAppearance(state.value.appearance.withTone(campus,tone))
+    }
+
+    fun setDefaultCampus(campus: Campus) {
+        if(state.value.initializing) return
+        setAppearance(state.value.appearance.copy(defaultCampus=campus))
+    }
+
+    private fun setAppearance(value: AppearancePreferences) {
+        if(value==state.value.appearance) return
+        pendingAppearance=value
+        mutableState.update { it.copy(appearance=value) }
+        appearanceWrites.trySend(value)
+    }
+
+    fun setPeriodStrip(value: PeriodStripPreferences) {
+        if(value==state.value.periodStrip) return
+        pendingStrip=value
+        mutableState.update { it.copy(periodStrip=value) }
+        stripWrites.trySend(value)
+    }
 
     init {
+        viewModelScope.launch {
+            settings.appearance.catch { showError("无法读取外观设置。"); emit(AppearancePreferences()) }.collect { value ->
+                persistedAppearance=value
+                if(pendingAppearance==null || pendingAppearance==value) {
+                    pendingAppearance=null
+                    mutableState.update { it.copy(appearance=value) }
+                }
+                appearanceReady.complete(Unit)
+            }
+        }
+        viewModelScope.launch {
+            for(value in appearanceWrites) try { settings.saveAppearance(value) }
+            catch(error: Exception) {
+                if(error is CancellationException) throw error
+                if(pendingAppearance==value) {
+                    pendingAppearance=null
+                    mutableState.update { it.copy(appearance=persistedAppearance) }
+                }
+                showError("外观设置保存失败，请重试。")
+            }
+        }
+        viewModelScope.launch {
+            settings.periodStrip.catch { showError("无法读取时段条设置。") }.collect { value ->
+                persistedStrip=value
+                if(pendingStrip!=null && pendingStrip!=value) return@collect
+                pendingStrip=null
+                mutableState.update { it.copy(periodStrip=value) }
+            }
+        }
+        viewModelScope.launch {
+            for(value in stripWrites) try { settings.savePeriodStrip(value) }
+            catch(error: Exception) {
+                if(error is CancellationException) throw error
+                if(pendingStrip==value) {
+                    pendingStrip=null
+                    mutableState.update { it.copy(periodStrip=persistedStrip) }
+                }
+                showError("时段条设置保存失败，请重试。")
+            }
+        }
         viewModelScope.launch {
             repository.profiles.catch { showError("无法读取个人偏好，请重新启动 App。") }.collect { profiles ->
                 storedProfiles = profiles
@@ -161,9 +238,11 @@ class YouRoomViewModel(
                         realWorkspaces = realWorkspaces + (campus to withSnapshot(realWorkspaces.getValue(campus), snapshot, true))
                     }
                 }
+                val remembered = repository.rememberedAccount()
                 val authenticated = repository.hasSession()
-                restoreWorkspace(Campus.XITUCHENG)
-                mutableState.update { it.copy(initializing = false, loggedIn = authenticated,
+                appearanceReady.await()
+                restoreWorkspace(state.value.appearance.defaultCampus)
+                mutableState.update { it.copy(initializing = false, loggedIn = authenticated, rememberedAccount = remembered,
                     cachedCampuses = realWorkspaces.filterValues { workspace -> workspace.snapshot != null }.keys) }
                 if (authenticated) refresh()
             } catch (error: Exception) {
@@ -179,19 +258,25 @@ class YouRoomViewModel(
         }
     }
 
-    fun login(account: String, password: String) {
+    fun login(account: String, password: String) = login(account, password, false)
+
+    fun login(account: String, password: String, rememberPassword: Boolean) {
         if (state.value.loggingIn || state.value.initializing) return
         if (account.isBlank() || password.isEmpty()) { showError("请填写教务账号和密码。"); return }
         mutableState.update { it.copy(loggingIn = true, error = null) }
-        viewModelScope.launch {
+        val generation = ++loginGeneration
+        loginJob = viewModelScope.launch {
             try {
-                repository.login(account.trim(), password)
+                repository.login(account.trim(), password, rememberPassword)
+                if (generation != loginGeneration) return@launch
                 planning.clear()
-                mutableState.update { it.copy(loggedIn = true, loggingIn = false, viewingCache = false) }
+                mutableState.update { it.copy(loggedIn = true, loggingIn = false, viewingCache = false,
+                    rememberedAccount = account.trim().takeIf { rememberPassword }) }
                 refresh()
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
-                mutableState.update { it.copy(loggingIn = false, error = message(error)) }
+                if (generation != loginGeneration) return@launch
+                mutableState.update { it.copy(loggingIn = false, rememberedAccount = null, error = message(error)) }
             }
         }
     }
@@ -216,7 +301,7 @@ class YouRoomViewModel(
                 if (!isCurrentRequest(campus, generation)) return@launch
                 updateWorkspace(campus) { it.copy(refreshing = false, error = message(error)) }
                 if (error is AuthenticationRequired) mutableState.update {
-                    it.copy(loggedIn = false, viewingCache = false, selectedRoomId = null)
+                    it.copy(loggedIn = false, viewingCache = false, selectedRoomId = null, rememberedAccount = null)
                 }
             }
         }
@@ -238,7 +323,7 @@ class YouRoomViewModel(
             CampusWorkspace(snapshot = DemoData.snapshot(campus, clock))
         }
         mutableState.update { it.copy(demo = true, loggedIn = false, viewingCache = false, profiles = emptyMap(), tagCatalog = TagCatalog()) }
-        restoreWorkspace(Campus.XITUCHENG)
+        restoreWorkspace(state.value.appearance.defaultCampus)
     }
 
     fun viewCache() {
@@ -249,12 +334,14 @@ class YouRoomViewModel(
     }
 
     fun openLogin() {
+        loginGeneration++
+        loginJob?.cancel()
         planning.clear()
         cancelRefresh()
         demoWorkspaces = emptyMap()
-        mutableState.update { it.copy(demo = false, loggedIn = false, viewingCache = false,
+        mutableState.update { it.copy(demo = false, loggedIn = false, loggingIn = false, viewingCache = false,
             profiles = realProfiles(), tagCatalog = storedCatalog) }
-        restoreWorkspace(Campus.XITUCHENG)
+        restoreWorkspace(state.value.appearance.defaultCampus)
         mutableState.update { it.copy(error = null) }
     }
 
@@ -273,8 +360,14 @@ class YouRoomViewModel(
     fun logout() {
         if (state.value.demo || state.value.viewingCache) { openLogin(); return }
         cancelRefresh()
+        loginGeneration++
+        loginJob?.cancel()
         viewModelScope.launch {
-            try { repository.logout(); openLogin() }
+            try {
+                repository.logout()
+                mutableState.update { it.copy(rememberedAccount = null) }
+                openLogin()
+            }
             catch (error: Exception) {
                 if (error is CancellationException) throw error
                 showError("退出未完成，无法清除本机登录状态，请重试。")
@@ -517,7 +610,7 @@ class YouRoomViewModel(
     }
 
     private fun message(error: Exception): String = when (error) {
-        is AuthenticationRequired -> "登录状态已失效，请重新登录；本地收藏仍然保留。"
+        is AuthenticationRequired -> "${error.message} 本地收藏仍然保留。"
         is SchoolRequestFailed -> error.userMessage
         is InvalidSchoolResponse -> "教务返回的数据格式异常，旧缓存没有被覆盖。"
         else -> "操作未完成，请稍后重试。"

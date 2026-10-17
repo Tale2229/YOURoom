@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import com.example.youroom.domain.*
 import java.time.Clock
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 val PlanningGoalSaver = listSaver<PlanningDraft, Any>(
     save = { listOf("v3", it.start, it.end, it.flexible, it.origin ?: "", it.savedWindows.size) +
@@ -74,9 +75,18 @@ private fun StudyPlanningContent(state: YouRoomState, goal: PlanningDraft, execu
     var wheelGoal by remember(goal) { mutableStateOf(goal) }
     var expectedDialog by remember(state.campus) { mutableStateOf(false) }
     var additionError by remember(goal, state.campus) { mutableStateOf<PlanningResult?>(null) }
+    // Unlike validation errors, the toggle feedback must survive its own goal update.
+    var modeFeedback by remember(state.campus) { mutableStateOf<PlanningResult?>(null) }
+    LaunchedEffect(modeFeedback) {
+        if(modeFeedback != null) {
+            delay(2200)
+            modeFeedback=null
+        }
+    }
     var addAccepted by remember(state.campus) { mutableStateOf(false) }
     var expectedAccepted by remember(state.campus) { mutableStateOf(false) }
     var addRejection by remember(state.campus) { mutableIntStateOf(0) }
+    val fullAddCooldown=remember(state.campus) { PlanningTapCooldown() }
     LaunchedEffect(addAccepted) {
         if (addAccepted) {
             animate(0f,1f,animationSpec=tween(64)) { _,_ -> }
@@ -128,6 +138,7 @@ private fun StudyPlanningContent(state: YouRoomState, goal: PlanningDraft, execu
                         onEnd = { wheelGoal = wheelGoal.copy(end = it); onGoal(wheelGoal) },
                         onAdd = {
                             if (!addAccepted) {
+                                modeFeedback=null
                                 val now = if (state.demo) null else java.time.LocalTime.now(clock.withZone(SchoolZone))
                                     .let { (it.toSecondOfDay()+59)/60 }
                                 val addition = PlanningSchedule.add(goal,now)
@@ -136,19 +147,35 @@ private fun StudyPlanningContent(state: YouRoomState, goal: PlanningDraft, execu
                                     onGoal(addition.goal)
                                 } else {
                                     additionError=addition.error; addRejection++
-                                    scope.launch { listState.animateScrollToItem(0) }
                                 }
                             }
                         }, onExpected = { if (!expectedAccepted) { expectedAccepted=true;expectedDialog=true } },
-                        onFlexible = { onGoal(goal.copy(flexible = !goal.flexible)) },
-                        onGenerate = { additionError = null; onGenerate() },
+                        onFlexible = {
+                            val enabled=!goal.flexible
+                            additionError=null
+                            modeFeedback=PlanningResult(message=if(enabled) "已启用宽松模式" else "已关闭宽松模式")
+                            onGoal(goal.copy(flexible=enabled))
+                        },
+                        onGenerate = { additionError = null; modeFeedback=null; onGenerate() },
                         cancelEnabled = interactive, onCancel = onCancel,
-                        addAccepted = addAccepted, addRejection = addRejection, expectedAccepted = expectedAccepted)
+                        addAccepted = addAccepted, addRejection = addRejection, expectedAccepted = expectedAccepted,
+                        onFullAdd=if(interactive && !pending && goal.savedWindows.size>=PlanningPolicy.periodLimit) ({
+                            if(fullAddCooldown.acquire(android.os.SystemClock.elapsedRealtime())) {
+                                modeFeedback=null
+                                val feedback=PlanningResult(message="最多添加三个时段",problem=PlanningProblem.TOO_MANY)
+                                additionError=feedback;addRejection++
+                                scope.launch {
+                                    delay(2200)
+                                    if(additionError===feedback) additionError=null
+                                }
+                            }
+                        }) else null)
                     if (snapshot == null || stale) TextButton(onClick = onRefresh,
                         enabled = !state.refreshing && !state.demo, shape = MaterialTheme.shapes.small) { Text("获取今日数据") }
                 }
             }
-        HorizontalDivider(Modifier.padding(horizontal=24.dp).testTag("planner_input_divider"))
+        // Preserve the former divider's exact layout height without drawing a line.
+        Spacer(Modifier.fillMaxWidth().height(1.dp).testTag("planner_input_spacing"))
         Column(Modifier.weight(1f).fillMaxWidth().testTag("planner_results_area")) {
             PlanningTargetStrip(displaySlots,goal.savedWindows,clock, actions = PlanningRangeActions(
                 enabled = interactive && !pending && !startMoving && !endMoving,
@@ -156,26 +183,26 @@ private fun StudyPlanningContent(state: YouRoomState, goal: PlanningDraft, execu
                     onGoal(PlanningSchedule.remove(goal,index))
                     scope.launch { editorScroll.animateScrollTo(0) }
                 }, onDelete = { index -> onGoal(PlanningSchedule.remove(goal,index)) }))
-            PlanningWorkspace(execution,state.campus,interactive,{ id,index ->
-                onOption(id,index); scope.launch { listState.animateScrollToItem(0) }
-            }) {
-            LazyColumn(Modifier.fillMaxSize().testTag("planner_list"),state=listState,userScrollEnabled=interactive,
-                contentPadding=PaddingValues(bottom=24.dp)) {
-            if (execution != null && execution.input.today != planningToday) item {
+            // Keep feedback between the target strip and the plan heading, even
+            // after a route exists or its details have been scrolled down.
+            key(state.campus) {
+                PlanningFeedbackHost(additionError ?: modeFeedback ?: result?.takeIf { it.message != null },goal,clock,onGoal)
+            }
+            if (execution != null && execution.input.today != planningToday) {
                 StatusNotice("以下为 ${execution.input.today} 生成的计划，仅供回看。")
             }
-            if (pending) item {
+            if (pending) {
                 Row(Modifier.padding(horizontal = 24.dp, vertical = 12.dp).testTag("planner_loading"),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                     Text("比较时间与完整路线…", style = MaterialTheme.typography.bodySmall)
                 }
             }
-            item(key="planning_feedback") {
-                key(state.campus) {
-                    PlanningFeedbackHost(additionError ?: result?.takeIf { it.message != null },goal,clock,onGoal)
-                }
-            }
+            PlanningWorkspace(execution,state.campus,interactive,{ id,index ->
+                onOption(id,index); scope.launch { listState.animateScrollToItem(0) }
+            }) {
+            LazyColumn(Modifier.fillMaxSize().testTag("planner_list"),state=listState,userScrollEnabled=interactive,
+                contentPadding=PaddingValues(bottom=24.dp)) {
             if (result?.options?.isNotEmpty() == true) {
                 val frozen=execution!!.input.snapshot
                 val frozenSlots=frozen.slots.sortedBy { it.start }

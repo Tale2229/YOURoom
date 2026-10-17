@@ -62,8 +62,15 @@ internal object PlanningDisplay {
 
     /** Equal-width teaching bars, proportional time within each bar and within each gap.
      * Times outside teaching hours clamp to an edge; exact times remain in room captions. */
-    fun xAt(minute: Float, slots: List<LessonSlot>, width: Float, gap: Float): Float? {
+    fun xAt(minute: Float, slots: List<LessonSlot>, width: Float, gap: Float,
+        layout: PeriodStripLayout = PeriodStripLayout.EQUAL): Float? {
         if (!minute.isFinite() || !width.isFinite() || !gap.isFinite() || gap<0 || slots.isEmpty()) return null
+        if(layout==PeriodStripLayout.TIME_PROPORTIONAL) {
+            if(width<=0 || slots.any { it.end<=it.start } || slots.zipWithNext().any { (a,b) -> b.start<a.end }) return null
+            val first=slots.first().start.toSecondOfDay()/60f
+            val last=slots.last().end.toSecondOfDay()/60f
+            return ((minute-first)/(last-first)).coerceIn(0f,1f)*width
+        }
         val bar=(width-gap*(slots.size-1))/slots.size
         if (bar<=0) return null
         val first=slots.first().start.toSecondOfDay()/60f

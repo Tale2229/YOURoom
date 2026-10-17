@@ -80,8 +80,10 @@ class SettingsNavigationUiTest {
                 compose.waitForIdle()
                 val colors=campusColorScheme(target,isDark)
                 tags.forEachIndexed { index,tag ->
-                    val face=compose.onNodeWithTag("${tag}_face",true).assertWidthIsEqualTo(48.dp)
-                        .assertHeightIsEqualTo(40.dp).captureToImage().toPixelMap()
+                    val face=compose.onNodeWithTag("${tag}_face",true).assertWidthIsEqualTo(if(index==1) 44.dp else 48.dp)
+                        .assertHeightIsEqualTo(if(index==1) 36.dp else 40.dp).captureToImage().toPixelMap()
+                    compose.onNodeWithTag("${tag}_icon",true).assertWidthIsEqualTo(if(index==1) 21.dp else 25.dp)
+                        .assertHeightIsEqualTo(if(index==1) 21.dp else 25.dp)
                     val block=if(index==selected) colors.primary else colors.surface
                     val icon=if(index==selected) colors.surface else colors.primary
                     assertColor(block,face[8,8])
@@ -97,21 +99,32 @@ class SettingsNavigationUiTest {
         }
     }
 
-    @Test fun settingsShowsExplicitNonInteractivePlaceholdersAndRetainsUsefulInformation() {
+    @Test fun settingsKeepTheMainSurfaceBriefAndMoveDetailsIntoSecondarySheets() {
         render()
-        compose.onNodeWithText("设置").assertIsDisplayed()
         compose.onNodeWithText("个人偏好").assertDoesNotExist()
-        for(tag in listOf("settings_tone","settings_default_campus","settings_planning")) {
-            compose.onNodeWithTag(tag).performScrollTo().assertIsNotEnabled()
-                .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription,"待开发"))
-        }
-        compose.onNodeWithTag("settings_list").performScrollToNode(hasText("关于数据"))
-        compose.onNodeWithText("关于数据").assertIsDisplayed()
+        compose.onNodeWithTag("settings_theme_impression").assertIsDisplayed().assertWidthIsEqualTo(90.dp)
+            .assertHeightIsEqualTo(90.dp)
+        compose.onNodeWithTag("settings_list").performScrollToNode(hasTestTag("settings_planning"))
+        compose.onNodeWithTag("settings_planning").performClick()
+        compose.onNodeWithText("更多默认偏好待开放").assertIsDisplayed()
+        compose.onNodeWithTag("settings_sheet_close").performClick()
+        compose.onNodeWithTag("settings_list").performScrollToNode(hasTestTag("settings_about"))
+        compose.onNodeWithTag("settings_about").performClick()
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         val version=context.packageManager.getPackageInfo(context.packageName,0).versionName
-        compose.onNodeWithText("YouRoom $version · 非学校官方应用").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("YouRoom $version · 非学校官方应用").assertIsDisplayed()
         assertEquals(Campus.XITUCHENG,campus)
         assertTrue(cleared.isEmpty());assertEquals(0,logouts)
+    }
+
+    @Test fun roomMarksOpenTheirOwnSheetAndLeaveTheSettingsListPositionUnchanged() {
+        render()
+        val before=compose.onNodeWithTag("settings_room_marks").fetchSemanticsNode().boundsInRoot
+        compose.onNodeWithTag("settings_room_marks").performClick()
+        compose.onNodeWithText("还没有个人标记").assertIsDisplayed()
+        compose.onNodeWithTag("settings_sheet_close").performClick()
+        assertEquals(before,compose.onNodeWithTag("settings_room_marks").fetchSemanticsNode().boundsInRoot)
+        compose.onNodeWithText("还没有个人标记").assertDoesNotExist()
     }
 
     @Test fun roomMarksRemainEditableAndClearingStillRequiresConfirmation() {
@@ -141,7 +154,9 @@ class SettingsNavigationUiTest {
         compose.onNodeWithTag("settings_room_marks").performClick()
         compose.onNodeWithText(west.name).assertIsDisplayed()
         compose.onNodeWithText(shahe.name).assertDoesNotExist()
+        compose.onNodeWithTag("settings_sheet_close").performClick()
         compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeLeft() }
+        compose.onNodeWithTag("settings_room_marks").performClick()
         compose.onNodeWithText(shahe.name).assertIsDisplayed()
         compose.onNodeWithText(west.name).assertDoesNotExist()
         assertEquals(2,profiles.size);assertTrue(cleared.isEmpty())
@@ -150,6 +165,7 @@ class SettingsNavigationUiTest {
     @Test fun largeTextCanScrollToAllSettingsAndLogOutOnlyAfterConfirmation() {
         fontScale=1.5f
         render()
+        compose.onNodeWithTag("settings_list").performScrollToNode(hasTestTag("settings_default_campus"))
         compose.onNodeWithTag("settings_default_campus").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("settings_list").performScrollToNode(hasText("退出登录"))
         compose.onNodeWithText("退出登录").performClick()

@@ -83,26 +83,29 @@ class ControlRefinementUiTest {
         assertTrue(closed)
     }
 
-    @Test fun emptyNoteKeepsItsFloatingLabelAndCountInsideTheFrame() {
+    @Test fun noteLabelFloatsOnFocusAndTrashAndCountStayInsideTheFrame() {
         compose.setContent { YouRoomTheme { RoomNoteDialog(RoomMatch(room,profile,emptySet()),{closed=true},{profile=it}) } }
         val field=compose.onNodeWithTag("room_note_frame").fetchSemanticsNode().boundsInRoot
         val label=compose.onNodeWithTag("room_note_label",true).assertTextEquals("个人备注").fetchSemanticsNode().boundsInRoot
         val count=compose.onNodeWithTag("room_note_count",true).assertTextEquals("0/20").fetchSemanticsNode().boundsInRoot
         val clear=compose.onNodeWithTag("clear_room_note").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         val close=compose.onNodeWithTag("close_room_note").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-        assertTrue(label.top<field.top && label.bottom>field.top)
+        assertTrue(label.top>field.top+with(compose.density) { 8.dp.toPx() })
         assertTrue(count.bottom<=field.bottom && count.right<field.right)
-        assertTrue(clear.left>=field.right)
+        assertTrue(clear.left>=field.left && clear.right<=field.right)
         assertTrue(close.top-field.bottom<=with(compose.density) { 4.dp.toPx() })
-        assertTrue(field.height<=with(compose.density) { 68.dp.toPx() })
+        assertTrue(field.height<=with(compose.density) { 80.dp.toPx() })
         compose.onNodeWithText("清空").assertDoesNotExist()
         compose.onNodeWithText("关闭").assertDoesNotExist()
-        shot("note-empty-1.16.1")
+        shot("note-empty-1.16.2")
+        compose.onNodeWithTag("room_note").performClick()
+        val floated=compose.onNodeWithTag("room_note_label",true).fetchSemanticsNode().boundsInRoot
+        assertTrue(floated.top<label.top)
         compose.onNodeWithTag("room_note").performTextInput("靠窗座位")
         compose.onNodeWithTag("room_note_label",true).assertTextEquals("个人备注")
         compose.onNodeWithTag("room_note_count",true).assertTextEquals("4/20")
         assertEquals("靠窗座位",profile.note)
-        shot("note-editing-1.16.1")
+        shot("note-editing-1.16.2")
         compose.onNodeWithTag("clear_room_note").performClick()
         assertEquals("",profile.note)
         compose.onNodeWithTag("close_room_note").performClick()
@@ -127,5 +130,9 @@ class ControlRefinementUiTest {
         val right=compose.onNodeWithTag(close).fetchSemanticsNode().boundsInRoot
         assertEquals((left.center.x+right.center.x)/2,middle.center.x,1f)
         assertEquals(left.center.y,middle.center.y,1f);assertEquals(right.center.y,middle.center.y,1f)
+        val trash=compose.onNodeWithTag("${reset}_icon",true).fetchSemanticsNode().boundsInRoot
+        val rise=with(compose.density) { 1.dp.toPx() }
+        assertEquals("both tag and filter trash move, not their hit areas",left.center.y-rise,trash.center.y,.5f)
+        assertEquals(with(compose.density) { 48.dp.toPx() },left.height,.5f)
     }
 }

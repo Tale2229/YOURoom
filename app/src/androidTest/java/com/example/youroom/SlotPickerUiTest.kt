@@ -87,21 +87,22 @@ class SlotPickerUiTest {
                 val pixels=compose.onNodeWithTag("slot_face_$number",true).captureToImage().toPixelMap()
                 val fill=if(number==6) colors.primary else colors.surfaceContainer
                 assertEquals(fill,pixels[1,1]) // The stitch is inset, not the outside border.
-                val y=with(compose.density) { 4.dp.roundToPx() }
+                val stroke=with(compose.density) { .75.dp.toPx() }
+                val y=with(compose.density) { 3.dp.roundToPx() }
                 val inset=with(compose.density) { 6.dp.roundToPx() }
                 val line=(inset until pixels.width-inset).map { x ->
                     val p=pixels[x,y]
                     kotlin.math.abs(p.red-fill.red)+kotlin.math.abs(p.green-fill.green)+kotlin.math.abs(p.blue-fill.blue)>.12f
                 }
-                assertTrue("period $number keeps an open middle",line.count { !it } > line.count { it })
+                assertTrue("period $number restores visible stitches",line.count { it }>2)
+                assertTrue("period $number keeps spaces between stitches",line.count { !it }>2)
                 val x=with(compose.density) { 8.dp.roundToPx() }
                 val topInk=(0 until pixels.height/4).filter { row ->
                     val p=pixels[x,row]
                     kotlin.math.abs(p.red-fill.red)+kotlin.math.abs(p.green-fill.green)+kotlin.math.abs(p.blue-fill.blue)>.12f
                 }
-                val stroke=with(compose.density) { 2.dp.toPx() }
                 assertEquals("outer blank margin remains 3dp",with(compose.density) { 3.dp.toPx() },topInk.first().toFloat(),1f)
-                assertEquals("stitch width is 2dp",stroke,topInk.size.toFloat(),1f)
+                assertEquals("light stitch width is 0.75dp",stroke,topInk.size.toFloat(),1f)
                 val ink=(inset until pixels.width-inset).first { x ->
                     val p=pixels[x,y]
                     kotlin.math.abs(p.red-fill.red)+kotlin.math.abs(p.green-fill.green)+kotlin.math.abs(p.blue-fill.blue)>.12f
@@ -114,17 +115,33 @@ class SlotPickerUiTest {
                 fun contrast(c: androidx.compose.ui.graphics.Color)=kotlin.math.abs(c.red-fill.red)+
                     kotlin.math.abs(c.green-fill.green)+kotlin.math.abs(c.blue-fill.blue)
                 assertTrue("softer stitch contrast than the former dark thread",contrast(p)<contrast(old))
+                val fullInk=expected.copy(alpha=if(number==6) .35f else .36f).compositeOver(fill)
+                assertTrue("scheme A limits thread opacity",contrast(p)<=contrast(fullInk)+.015f)
                 fun isInk(x: Int,y: Int): Boolean {
                     val p=pixels[x,y]
                     return kotlin.math.abs(p.red-fill.red)+kotlin.math.abs(p.green-fill.green)+kotlin.math.abs(p.blue-fill.blue)>.12f
                 }
-                for (xx in 0 until pixels.width)
-                    assertEquals("horizontal stitches are symmetric",isInk(xx,y),isInk(pixels.width-1-xx,y))
-                for (yy in 0 until pixels.height)
-                    assertEquals("vertical stitches are symmetric",isInk(y,yy),isInk(y,pixels.height-1-yy))
+                fun colorDistance(a: androidx.compose.ui.graphics.Color,b: androidx.compose.ui.graphics.Color)=
+                    kotlin.math.abs(a.red-b.red)+kotlin.math.abs(a.green-b.green)+kotlin.math.abs(a.blue-b.blue)
+                // Fractional stroke widths and screenshot cropping can put the
+                // two antialiased edges one physical pixel apart. Geometry is
+                // tested exactly on the host; here compare each mirrored pixel
+                // with its immediate neighborhood rather than thresholding it.
+                for (xx in 0 until pixels.width) {
+                    val best=(-1..1).minOf { delta -> colorDistance(pixels[xx,y],
+                        pixels[(pixels.width-1-xx+delta).coerceIn(0,pixels.width-1),y]) }
+                    assertTrue("horizontal stitch mirror",best<.06f)
+                }
+                for (yy in 0 until pixels.height) {
+                    val best=(-1..1).minOf { delta -> colorDistance(pixels[y,yy],
+                        pixels[y,(pixels.height-1-yy+delta).coerceIn(0,pixels.height-1)]) }
+                    assertTrue("vertical stitch mirror",best<.06f)
+                }
                 for (right in listOf(false,true)) for (bottom in listOf(false,true)) {
-                    val cornerX=if(right) pixels.width-1-y else y
-                    val cornerY=if(bottom) pixels.height-1-y else y
+                    // Use the center pixel of the fractional-width corner path.
+                    val center=with(compose.density) { 3.375.dp.toPx() }.toInt()
+                    val cornerX=if(right) pixels.width-1-center else center
+                    val cornerY=if(bottom) pixels.height-1-center else center
                     val dx=if(right) -1 else 1;val dy=if(bottom) -1 else 1
                     val horizontal=(0 until pixels.width/3).first { !isInk(cornerX+dx*it,cornerY) }
                     val vertical=(0 until pixels.height/3).first { !isInk(cornerX,cornerY+dy*it) }
@@ -135,7 +152,7 @@ class SlotPickerUiTest {
             if(!dark) {
                 val instrumentation=InstrumentationRegistry.getInstrumentation()
                 instrumentation.waitForIdleSync();android.os.SystemClock.sleep(150)
-                File(instrumentation.targetContext.getExternalFilesDir(null),"slot-stitch-${target.dataKey}-1.16.png")
+                File(instrumentation.targetContext.getExternalFilesDir(null),"slot-stitch-${target.dataKey}-1.16.5.png")
                     .outputStream().use {
                         instrumentation.uiAutomation.takeScreenshot().compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)
                     }

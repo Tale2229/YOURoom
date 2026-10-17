@@ -129,7 +129,7 @@ internal fun ExpectedRoomDialog(state: YouRoomState, selected: Set<String>,
                         verticalAlignment = Alignment.CenterVertically) {
                         ExpectedDialogAction("清空期望教室",Modifier.weight(ColumnWeight).testTag("expected_clear"),
                             enabled = campusSelection.isNotEmpty(),onClick = { onSelected(selected-campusSelection.toSet()) }) {
-                            AnimatedTrashIcon(campusSelection.isNotEmpty(),Modifier.size(24.dp).testTag("expected_clear_icon"))
+                            AnimatedTrashIcon(campusSelection.isNotEmpty(),Modifier.size(24.dp).offset(y=(-1).dp).testTag("expected_clear_icon"))
                         }
                         ExpectedDialogAction(if (current?.id in selected) "取消期望教室" else "添加期望教室",
                             Modifier.weight(ColumnWeight).testTag("expected_pin"),

@@ -3,10 +3,17 @@ package com.example.youroom.ui
 import androidx.compose.animation.SplineBasedFloatDecayAnimationSpec
 import androidx.compose.animation.core.generateDecayAnimationSpec
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.stopScroll
+import androidx.compose.foundation.gestures.FlingBehavior
+import androidx.compose.foundation.gestures.ScrollScope
+import androidx.compose.foundation.interaction.DragInteraction
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.gestures.snapping.SnapLayoutInfoProvider
 import androidx.compose.foundation.gestures.snapping.SnapPosition
 import androidx.compose.foundation.gestures.snapping.snapFlingBehavior
@@ -39,6 +46,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import com.example.youroom.domain.planningTime
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.*
 
@@ -97,7 +106,6 @@ internal fun WheelTimePicker(title: String, minuteOfDay: Int, tag: String,
             settledMinute = minuteOfDay % 60
         }
     }
-    LaunchedEffect(hourMoving, minuteMoving) { currentOnMoving(hourMoving || minuteMoving) }
     DisposableEffect(Unit) { onDispose { currentOnMoving(false) } }
     Column(modifier.testTag(tag).semantics {
         text = AnnotatedString(planningTime(minuteOfDay))
@@ -113,7 +121,7 @@ internal fun WheelTimePicker(title: String, minuteOfDay: Int, tag: String,
             TimeWheel("小时", 24, minuteOfDay / 60, "${tag}_hour_wheel", Modifier.weight(1f), {
                 settledHour = it
                 currentOnTime(settledHour * 60 + settledMinute)
-            }, { hourMoving = it }, viewportRows)
+            }, { hourMoving = it; currentOnMoving(hourMoving || minuteMoving) }, viewportRows)
             Text(":", Modifier.offset { IntOffset(0, -2) }.width(12.dp)
                 .testTag("${tag}_colon").clearAndSetSemantics {},
                 style = MaterialTheme.typography.headlineMedium.copy(
@@ -122,7 +130,7 @@ internal fun WheelTimePicker(title: String, minuteOfDay: Int, tag: String,
             TimeWheel("分钟", 60, minuteOfDay % 60, "${tag}_minute_wheel", Modifier.weight(1f), {
                 settledMinute = it
                 currentOnTime(settledHour * 60 + settledMinute)
-            }, { minuteMoving = it }, viewportRows)
+            }, { minuteMoving = it; currentOnMoving(hourMoving || minuteMoving) }, viewportRows)
         }
     }
 }
@@ -149,6 +157,17 @@ internal fun CylinderWheel(unit: String, labels: List<String>, value: Int, tag: 
     fun targetIndex(value: Int, around: Int) = if (cyclic) timeWheelNearestIndex(value, around, count) else value
     val itemCount = if (cyclic) count * TimeWheelCycles else count
     val list = rememberLazyListState(initialFirstVisibleItemIndex = initial)
+    val dragged by list.interactionSource.collectIsDraggedAsState()
+    var awaitingFling by remember { mutableStateOf(false) }
+    var flingRunning by remember { mutableStateOf(false) }
+    LaunchedEffect(list) {
+        list.interactionSource.interactions.collect { interaction ->
+            when(interaction) {
+                is DragInteraction.Start -> awaitingFling=true
+                is DragInteraction.Cancel -> awaitingFling=false
+            }
+        }
+    }
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     val currentHaptic by rememberUpdatedState(haptic)
@@ -165,10 +184,22 @@ internal fun CylinderWheel(unit: String, labels: List<String>, value: Int, tag: 
     }.coerceAtLeast(48.dp)
     val rowPx = with(LocalDensity.current) { rowHeight.toPx() }
     val density = LocalDensity.current
-    val fling = remember(list, density) {
+    val nativeFling = remember(list, density) {
         snapFlingBehavior(SnapLayoutInfoProvider(list, SnapPosition.Center),
             TimeWheelDecay(SplineBasedFloatDecayAnimationSpec(density)).generateDecayAnimationSpec(),
-            spring(dampingRatio = 1f, stiffness = 400f))
+            // Native inertia is unchanged; its final alignment has a finite
+            // duration instead of a spring's invisible asymptotic tail.
+            tween(durationMillis=160,easing=LinearOutSlowInEasing))
+    }
+    val fling=remember(nativeFling) {
+        object: FlingBehavior {
+            override suspend fun ScrollScope.performFling(initialVelocity: Float): Float {
+                flingRunning=true
+                awaitingFling=false
+                return try { with(nativeFling) { performFling(initialVelocity) } }
+                finally { flingRunning=false }
+            }
+        }
     }
     val colors = MaterialTheme.colorScheme
     LaunchedEffect(value, rowPx) {
@@ -204,17 +235,54 @@ internal fun CylinderWheel(unit: String, labels: List<String>, value: Int, tag: 
     }
     LaunchedEffect(list) {
         var wasMoving = false
-        snapshotFlow { list.isScrollInProgress }.distinctUntilChanged().collect { moving ->
-            currentOnMoving(moving)
+        // The lazy list briefly reports idle between drag release and native
+        // fling startup. That is a handoff, not a settled time to publish.
+        snapshotFlow { list.isScrollInProgress || awaitingFling || flingRunning }.distinctUntilChanged().collect { moving ->
             if (wasMoving && !moving && !externalAnimation && synchronizedValue == currentValue) {
                 val settled = indexValue(list.layoutInfo.centerPosition(initial).roundToInt())
                 if (settled != currentValue) currentOnValue(settled)
             }
+            // Commit the final value before reopening the add/generate actions.
+            currentOnMoving(moving)
             wasMoving = moving
         }
     }
+    LaunchedEffect(list,rowPx) {
+        val alignmentTolerance=with(density) { .25.dp.toPx() }
+        val slowSpeed=with(density) { 12.dp.toPx() }
+        while(isActive) {
+            snapshotFlow { list.isScrollInProgress && externalAnimation }.first { it }
+            // A held finger is not an animation: don't request perpetual frames
+            // while it rests, and never finish a drag on the user's behalf.
+            snapshotFlow { !dragged || !list.isScrollInProgress }.first { it }
+            var previous=position
+            var previousFrame=withFrameNanos { it }
+            var travelled=false
+            while(list.isScrollInProgress && externalAnimation) {
+                if(dragged) break
+                val frame=withFrameNanos { it }
+                val next=position
+                if(abs(next-previous)*rowPx>.01f) travelled=true
+                val speed=abs(next-previous)*rowPx*1_000_000_000f/(frame-previousFrame).coerceAtLeast(1L)
+                val target=next.roundToInt().coerceIn(0,itemCount-1)
+                if(travelled && !dragged && abs(next-target)*rowPx<=alignmentTolerance && speed<=slowSpeed &&
+                    indexValue(target)==currentValue) {
+                    // Only controlled shortcut springs are trimmed. Interrupting
+                    // the native drag-to-fling handoff could commit twice.
+                    list.stopScroll()
+                    list.scrollToItem(target)
+                    break
+                }
+                previous=next;previousFrame=frame
+            }
+        }
+    }
     fun select(index: Int) {
-        scope.launch { list.animateScrollToItem(index.coerceIn(0, itemCount - 1)) }
+        scope.launch {
+            val target=index.coerceIn(0,itemCount-1)
+            list.animateScrollBy((target-position)*rowPx,tween(160,easing=LinearOutSlowInEasing))
+            list.scrollToItem(target)
+        }
     }
     BoxWithConstraints(modifier.widthIn(min = 48.dp).height(rowHeight * viewportRows).clipToBounds()) {
         val measurer = rememberTextMeasurer()

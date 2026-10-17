@@ -11,6 +11,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -43,6 +44,10 @@ class YouRoomUiTest {
             override suspend fun deleteProfile(roomId: String) = error("Real persistence disabled in UI tests")
         }
         val settings = object : FilterSettings {
+            override val appearance=MutableStateFlow(AppearancePreferences())
+            override suspend fun saveAppearance(value: AppearancePreferences) { appearance.value=value }
+            override val periodStrip=MutableStateFlow(PeriodStripPreferences())
+            override suspend fun savePeriodStrip(value: PeriodStripPreferences) { periodStrip.value=value }
             override val filters = MutableStateFlow(SearchFilters())
             override val catalog = MutableStateFlow(TagCatalog())
         override val buildings = MutableStateFlow(Campus.entries.associateWith { emptySet<String>() })
@@ -133,6 +138,65 @@ class YouRoomUiTest {
         compose.onNodeWithTag("planner_target_range_0").assertTextContains("08:00–09:35")
         compose.onNodeWithTag("planner_start").assertTextContains("09:35")
         compose.onNodeWithTag("planner_end").assertTextContains("10:35")
+    }
+
+    @Test fun stripSettingsApplyAcrossTabsAndDoNotRegenerateOrClearTheExistingPlan() {
+        enterDemo()
+        compose.onNodeWithTag("tab_settings").performClick()
+        compose.onNodeWithTag("settings_strip_layout").performScrollTo()
+        compose.onNodeWithTag("settings_strip_TIME_PROPORTIONAL").performClick()
+        compose.onNodeWithTag("settings_strip_numbers").performScrollTo().performClick()
+        compose.onNodeWithTag("tab_rooms").performClick()
+        compose.onNodeWithTag("room_period_number_01:2-201_1",true).performScrollTo().assertIsDisplayed()
+        val fifth=compose.onNodeWithTag("room_period_01:2-201_5",true).fetchSemanticsNode().boundsInRoot
+        val sixth=compose.onNodeWithTag("room_period_01:2-201_6",true).fetchSemanticsNode().boundsInRoot
+        assertEquals(fifth.width,sixth.left-fifth.right,1f)
+        compose.onNodeWithTag("tab_planner").performClick()
+        generatePlanner()
+        val execution=capturedModel.planning.executions.value.getValue(Campus.XITUCHENG)
+        compose.onNodeWithTag("planner_target_number_1",true).assertExists()
+        compose.onNodeWithTag("tab_settings").performClick()
+        compose.onNodeWithTag("settings_strip_layout").performScrollTo()
+        compose.onNodeWithTag("settings_strip_EQUAL").performClick()
+        compose.onNodeWithTag("tab_planner").performClick()
+        compose.onNodeWithTag("planner_target_range_0",true).assertExists()
+        assertEquals(execution,capturedModel.planning.executions.value.getValue(Campus.XITUCHENG))
+        val a=compose.onNodeWithTag("planner_target_period_5",true).fetchSemanticsNode().boundsInRoot
+        val b=compose.onNodeWithTag("planner_target_period_6",true).fetchSemanticsNode().boundsInRoot
+        assertEquals(with(compose.density) { 3.dp.toPx() },b.left-a.right,1f)
+    }
+
+    @Test fun numberSwitchAlreadyShowsTheSavedCheckWhileTheSettingsPageIsEntering() {
+        enterDemo()
+        compose.runOnIdle { capturedModel.setPeriodStrip(PeriodStripPreferences(showNumbers=true)) }
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance=false
+        compose.onNodeWithTag("tab_settings").performClick()
+        compose.mainClock.advanceTimeBy(96)
+        compose.onNodeWithTag("settings_strip_numbers_switch",true).assertIsOn().assertIsNotEnabled()
+        assertTrue(capturedModel.state.value.periodStrip.showNumbers)
+        compose.mainClock.advanceTimeBy(1400)
+        compose.onNodeWithTag("settings_strip_numbers_switch",true).assertIsOn().assertIsEnabled()
+        compose.mainClock.autoAdvance=true
+    }
+
+    @Test fun appearanceChangesApplyAcrossTabsAndKeepTheExistingPlan() {
+        enterDemo()
+        compose.onNodeWithTag("tab_planner").performClick()
+        generatePlanner()
+        val execution=capturedModel.planning.executions.value.getValue(Campus.XITUCHENG)
+        compose.onNodeWithTag("tab_settings").performClick()
+        compose.onNodeWithTag("settings_theme_previous").performClick()
+        assertEquals(CampusTone.CLAY,capturedModel.state.value.appearance.westTone)
+        compose.onNodeWithTag("tab_rooms").performClick()
+        compose.onNodeWithTag("slot_1").assertIsSelected()
+        compose.onNodeWithTag("tab_planner").performClick()
+        compose.onNodeWithTag("planner_target_range_0",true).assertExists()
+        assertEquals(execution,capturedModel.planning.executions.value.getValue(Campus.XITUCHENG))
+        compose.onNodeWithTag("tab_settings").performClick()
+        compose.onNodeWithTag("settings_theme_name").assertTextEquals("陶土")
+        compose.onNodeWithTag("settings_theme_impression").assert(androidx.compose.ui.test.SemanticsMatcher.expectValue(
+            com.example.youroom.ui.ThemeMosaicProgress,1f))
     }
 
     @Test fun plannerSwitchesCampusesWithoutKeepingWestRoomsOrTheRemovedRulesHeading() {
@@ -238,7 +302,7 @@ class YouRoomUiTest {
         assertPlanWindow("08:00—12:00")
         compose.onNodeWithTag("planner_add_period").performScrollTo()
         compose.onNodeWithTag("planner_add_period").performClick()
-        compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_message"))
+        compose.onNodeWithTag("planner_message").assertIsDisplayed()
         compose.onNodeWithTag("planner_message").assertTextContains("结束时间必须晚于开始时间", substring = true)
     }
 
@@ -943,6 +1007,7 @@ class YouRoomUiTest {
         compose.onNodeWithContentDescription("排除 2-201").assertIsDisplayed()
         compose.onNodeWithTag("close_room_actions").performClick()
         compose.onNodeWithTag("room_excluded_01:2-201", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithTag("settings_sheet_close").performClick()
         compose.onNodeWithTag("tab_rooms").performClick()
         revealRoom("01:2-201")
         compose.onNodeWithContentDescription("取消收藏 2-201").assertIsDisplayed()
@@ -1018,7 +1083,7 @@ class YouRoomUiTest {
         enterDemo()
         compose.onNodeWithTag("tab_settings").performClick()
         val header = compose.onNodeWithTag("campus_header").fetchSemanticsNode().boundsInRoot
-        compose.onNodeWithTag("settings_list").performScrollToNode(hasText("关于数据"))
+        compose.onNodeWithTag("settings_list").performScrollToNode(hasTestTag("settings_about"))
         assertEquals(header, compose.onNodeWithTag("campus_header").fetchSemanticsNode().boundsInRoot)
         compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeLeft() }
         compose.onNodeWithTag("campus_label").assertTextEquals("沙河")

@@ -69,9 +69,12 @@ fun WorkspaceNavigation(tab: Int, onTab: (Int) -> Unit) {
                         .selectable(selected, role = Role.Tab, interactionSource=remember { MutableInteractionSource() },
                             indication=null,onClick = { onTab(index) }).semantics { contentDescription=label },
                         contentAlignment=Alignment.Center) {
-                        Surface(Modifier.size(width=48.dp,height=40.dp).testTag("${tag}_face"),
+                        Surface(Modifier.size(width=if(index==1) 44.dp else 48.dp,
+                            height=if(index==1) 36.dp else 40.dp).testTag("${tag}_face"),
                             shape=MaterialTheme.shapes.small,color=background,contentColor=foreground) {
-                            Box(contentAlignment=Alignment.Center) { Icon(icon,null,Modifier.size(25.dp)) }
+                            Box(contentAlignment=Alignment.Center) {
+                                Icon(icon,null,Modifier.size(if(index==1) 21.dp else 25.dp).testTag("${tag}_icon"))
+                            }
                         }
                     }
                 }

@@ -3,6 +3,7 @@ package com.example.youroom
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -146,6 +147,8 @@ class ExpectedRoomUiTest {
         assertEquals(selected.center.x,close.center.x,1f)
         assertEquals(clear.center.y,pin.center.y,1f)
         assertEquals(pin.center.y,close.center.y,1f)
+        val trash=compose.onNodeWithTag("expected_clear_icon",true).fetchSemanticsNode().boundsInRoot
+        assertEquals(clear.center.y-with(compose.density) { 1.dp.toPx() },trash.center.y,.5f)
         assertTrue(pin.top >= right.bottom)
         assertEquals(35f,ExpectedPinTilt,0f)
         compose.onNodeWithText("清空").assertDoesNotExist()

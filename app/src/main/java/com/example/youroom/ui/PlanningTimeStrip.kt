@@ -6,8 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -15,6 +13,9 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
@@ -22,7 +23,11 @@ import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextAlign
 import kotlin.math.roundToInt
+import kotlin.math.tan
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
@@ -42,20 +47,26 @@ internal fun PlanningTargetStrip(slots: List<LessonSlot>, windows: List<StudyWin
     val dark=MaterialTheme.colorScheme.primary
     val light=MaterialTheme.colorScheme.outlineVariant
     val rtl=LocalLayoutDirection.current==LayoutDirection.Rtl
+    val preferences=LocalPeriodStripPreferences.current
+    val numberHeight=with(LocalDensity.current) { 10.sp.toDp() }
     PlanningRangeStrip(windows,slots,"planner_target_range","planner_target_range_lines",
         modifier.fillMaxWidth().testTag("planner_target_strip")
         .semantics(mergeDescendants=true) {
             contentDescription="已添加时段："+windows.joinToString("、") { "${planningTime(it.start)}–${planningTime(it.end)}" }
             stateDescription="当前时间 ${now.hour.toString().padStart(2,'0')}:${now.minute.toString().padStart(2,'0')}"
         }, below = true, actions = actions) {
-        Box(Modifier.fillMaxWidth().height(36.dp).testTag("planner_target_bar")) {
-        Row(Modifier.fillMaxWidth().padding(horizontal=24.dp).padding(top=14.dp),horizontalArrangement=Arrangement.spacedBy(3.dp)) {
+        Box(Modifier.fillMaxWidth().height(36.dp+if(preferences.showNumbers) numberHeight+3.dp else 0.dp).testTag("planner_target_bar")) {
+        if(slots.isEmpty()) Row(Modifier.fillMaxWidth().padding(horizontal=24.dp).padding(top=14.dp),
+            horizontalArrangement=Arrangement.spacedBy(3.dp)) {
+            repeat(14) { Box(Modifier.weight(1f).height(5.dp).testTag("planner_target_period_${it+1}").background(light)) }
+        } else PeriodBarsRow(slots,preferences.layout,Modifier.fillMaxWidth().padding(horizontal=24.dp).padding(top=14.dp)) {
             // Keep the initial visual strip even before a school response is available.
             val count=slots.size.takeIf { it>0 } ?: 14
             repeat(count) { index ->
                 val slot=slots.getOrNull(index)
                 val portions=slot?.let { PlanningDisplay.portions(it,windows) }.orEmpty()
-                Box(Modifier.weight(1f).height(5.dp).testTag("planner_target_period_${slot?.number ?: index+1}")
+                Column {
+                Box(Modifier.fillMaxWidth().height(5.dp).testTag("planner_target_period_${slot?.number ?: index+1}")
                     .semantics { stateDescription=portions.joinToString { "${it.start}–${it.end}" }.ifEmpty { "未选中" } }
                     .drawBehind {
                         drawRect(light)
@@ -63,12 +74,28 @@ internal fun PlanningTargetStrip(slots: List<LessonSlot>, windows: List<StudyWin
                             Offset((if (rtl) 1-range.end else range.start)*size.width,0f),
                             Size((range.end-range.start)*size.width,size.height)) }
                     })
+                if(preferences.showNumbers) Text((slot?.number ?: index+1).toString(),Modifier.fillMaxWidth().padding(top=3.dp)
+                    .testTag("planner_target_number_${slot?.number ?: index+1}").clearAndSetSemantics {},
+                    fontSize=8.sp,lineHeight=10.sp,textAlign=TextAlign.Center,maxLines=1,softWrap=false,
+                    color=MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha=.65f))
+                }
             }
         }
         Canvas(Modifier.fillMaxSize().padding(horizontal=24.dp).testTag("planner_now_marker")) {
-            val x=PlanningDisplay.xAt(now.toSecondOfDay()/60f,slots,size.width,3.dp.roundToPx().toFloat()) ?: return@Canvas
+            val x=PlanningDisplay.xAt(now.toSecondOfDay()/60f,slots,size.width,3.dp.roundToPx().toFloat(),preferences.layout) ?: return@Canvas
             val visual=if (rtl) size.width-x else x
-            drawLine(dark,Offset(visual,9.dp.toPx()),Offset(visual,24.dp.toPx()),1.dp.toPx())
+            // Hollow isosceles triangle with a 50° downward apex (65° base angles).
+            // Scale the previous 10/3dp marker by 1.5, preserving its apex angle.
+            // Keep the 1dp outline and include it in the 2dp air gap.
+            val base=5.dp.toPx()
+            val height=base/(2f*tan(Math.toRadians(25.0)).toFloat())
+            val tip=11.5.dp.toPx()
+            drawPath(Path().apply {
+                moveTo(visual-base/2,tip-height)
+                lineTo(visual+base/2,tip-height)
+                lineTo(visual,tip)
+                close()
+            },dark,style=Stroke(1.dp.toPx(),join=StrokeJoin.Round))
         }
         }
     }
@@ -97,6 +124,7 @@ private fun PlanningRangeStrip(windows: List<StudyWindow>, slots: List<LessonSlo
     val paper=MaterialTheme.colorScheme.surface
     val textStyle=MaterialTheme.typography.bodySmall
     val rtl=LocalLayoutDirection.current==LayoutDirection.Rtl
+    val preferences=LocalPeriodStripPreferences.current
     SubcomposeLayout(modifier) { constraints ->
         val width=constraints.maxWidth
         val strip=subcompose("availability",bars).single().measure(Constraints.fixedWidth(width))
@@ -104,7 +132,7 @@ private fun PlanningRangeStrip(windows: List<StudyWindow>, slots: List<LessonSlo
             return@SubcomposeLayout layout(width,strip.height) { strip.place(0,0) }
         }
         val gutter=24.dp.roundToPx().toFloat()
-        val anchors=planningRangeAnchors(windows,slots,width.toFloat(),gutter,3.dp.roundToPx().toFloat())
+        val anchors=planningRangeAnchors(windows,slots,width.toFloat(),gutter,3.dp.roundToPx().toFloat(),preferences.layout)
         val labelConstraints=Constraints(maxWidth=(width-2*gutter.roundToInt()).coerceAtLeast(0))
         val labels=subcompose("labels") {
             windows.forEachIndexed { index,window ->
@@ -130,12 +158,8 @@ private fun PlanningRangeStrip(windows: List<StudyWindow>, slots: List<LessonSlo
                             CustomAccessibilityAction("编辑时段") { if (actions.enabled) { actions.onEdit(index); true } else false },
                             CustomAccessibilityAction("删除时段") { if (actions.enabled) { actions.onDelete(index); true } else false })
                     }, style=textStyle,color=color,maxLines=1,softWrap=false)
-                    if (actions != null) DropdownMenu(menu,{ menu=false }) {
-                        DropdownMenuItem(text={ Text("编辑") }, onClick={ menu=false; actions.onEdit(index) },
-                            enabled=actions.enabled, modifier=Modifier.testTag("planner_edit_period_$index"))
-                        DropdownMenuItem(text={ Text("删除") }, onClick={ menu=false; actions.onDelete(index) },
-                            enabled=actions.enabled, modifier=Modifier.testTag("planner_remove_period_$index"))
-                    }
+                    if (actions != null) PlanningPeriodMenu(menu,actions.enabled,index,{ menu=false },
+                        { menu=false;actions.onEdit(index) },{ menu=false;actions.onDelete(index) })
                 }
             }
         }.map { it.measure(labelConstraints) }
@@ -153,8 +177,8 @@ private fun PlanningRangeStrip(windows: List<StudyWindow>, slots: List<LessonSlo
                 anchors.forEachIndexed { index,anchor ->
                     if (!anchor.known) return@forEachIndexed
                     val label=arrangement.labels[index]
-                    // Separate elbows vertically too, so close ranges do not share
-                    // one misleading horizontal leader when their labels stagger.
+                    // Joint routing assigns heights by crossing constraints, not
+                    // just chronology; keep those heights when mirroring below/RTL.
                     val corridor=arrangement.labelBottom+4.dp.toPx()+label.routeTrack*3.dp.toPx()
                     fun leader(from: Offset,to: Offset) {
                         if (from!=to) drawLine(color.copy(alpha=.65f),from,to,.75.dp.toPx(),pathEffect=dash)

@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -30,6 +32,9 @@ import androidx.compose.ui.window.PopupPositionProvider
 import com.example.youroom.domain.LessonSlot
 import com.example.youroom.domain.PeriodStripGeometry
 import com.example.youroom.domain.PeriodWave
+import com.example.youroom.domain.PeriodStripLayout
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextAlign
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -39,14 +44,20 @@ private val PeriodStripTopPadding = 8.dp
 /** A single popup stays attached while its anchor moves between the strip's original bars. */
 internal class PeriodStripTooltipPositionProvider(private val index: Int, private val count: Int,
     private val gutter: Int, private val gap: Int, private val top: Int, private val lift: Int,
-    private val barHeight: Int, private val delegate: PopupPositionProvider) : PopupPositionProvider {
+    private val barHeight: Int, private val delegate: PopupPositionProvider,
+    private val slots: List<LessonSlot> = emptyList(),
+    private val mode: PeriodStripLayout = PeriodStripLayout.EQUAL) : PopupPositionProvider {
     override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize,
         layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
         val width = (anchorBounds.width - 2 * gutter - gap * (count - 1)).toFloat() / count
         val visual = if (layoutDirection == LayoutDirection.Rtl) count - 1 - index else index
-        val left = anchorBounds.left + gutter + (visual * (width + gap)).roundToInt()
+        val timeBar=if(mode==PeriodStripLayout.TIME_PROPORTIONAL)
+            PeriodStripGeometry.bars(slots,(anchorBounds.width-2*gutter).toFloat(),gap.toFloat(),mode).getOrNull(index) else null
+        val left = anchorBounds.left + gutter + if(timeBar==null) (visual * (width + gap)).roundToInt()
+            else (if(layoutDirection==LayoutDirection.Rtl) anchorBounds.width-2*gutter-timeBar.end else timeBar.start).roundToInt()
+        val actualWidth=timeBar?.width ?: width
         val y = anchorBounds.top + top - lift
-        return delegate.calculatePosition(IntRect(left, y, left + width.roundToInt(), y + barHeight),
+        return delegate.calculatePosition(IntRect(left, y, left + actualWidth.roundToInt(), y + barHeight),
             windowSize, layoutDirection, popupContentSize)
     }
 }
@@ -56,6 +67,7 @@ internal fun RoomAvailabilityStrip(roomId: String, freeSlots: Set<Int>, slots: L
     enabled: Boolean, modifier: Modifier = Modifier, inspectionKey: Any? = null,
     wave: RoomPeriodWave? = null, onInspection: () -> Unit = {}) {
     val inspectionEnabled = enabled && wave?.isRunning != true
+    val preferences=LocalPeriodStripPreferences.current
     // Reset transient inspection when the room, response/date, or real period times change.
     var inspected by remember(roomId, slots, inspectionKey) { mutableStateOf<Int?>(null) }
     var pointerHeld by remember(roomId, slots, inspectionKey) { mutableStateOf(false) }
@@ -66,8 +78,11 @@ internal fun RoomAvailabilityStrip(roomId: String, freeSlots: Set<Int>, slots: L
     val latestInspection by rememberUpdatedState(onInspection)
     val gutter = with(density) { 24.dp.roundToPx().toFloat() }
     val gap = with(density) { 3.dp.roundToPx().toFloat() }
-    fun numberAt(x: Float): Int? = PeriodStripGeometry.nearestIndex(x - gutter,
-        geometry.width - 2 * gutter, slots.size, gap, direction == LayoutDirection.Rtl)?.let { slots[it].number }
+    fun numberAt(x: Float): Int? {
+        val width=geometry.width-2*gutter
+        val bars=PeriodStripGeometry.bars(slots,width,gap,preferences.layout)
+        return PeriodStripGeometry.nearestIndex(x-gutter,width,bars,direction==LayoutDirection.Rtl)?.let { slots[it].number }
+    }
     LaunchedEffect(inspectionEnabled) { if (!inspectionEnabled) { inspected = null; pointerHeld = false } }
     LaunchedEffect(pointerHeld, inspected) {
         // Accessibility/keyboard inspection has no pointer release to dismiss it.
@@ -79,7 +94,7 @@ internal fun RoomAvailabilityStrip(roomId: String, freeSlots: Set<Int>, slots: L
     }
     Box(modifier.fillMaxWidth().testTag("room_period_strip_$roomId")
         .onSizeChanged { geometry.width = it.width.toFloat() }
-        .pointerInput(roomId, slots, inspectionKey, inspectionEnabled, direction, gutter, gap) {
+        .pointerInput(roomId, slots, inspectionKey, inspectionEnabled, direction, gutter, gap, preferences.layout) {
             awaitEachGesture {
                 val down = awaitFirstDown(pass = PointerEventPass.Initial)
                 if (!inspectionEnabled || slots.isEmpty()) return@awaitEachGesture
@@ -122,14 +137,15 @@ internal fun RoomAvailabilityStrip(roomId: String, freeSlots: Set<Int>, slots: L
                 } finally { inspected = null; pointerHeld = false }
             }
         }) {
-        Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = PeriodStripTopPadding, bottom = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        PeriodBarsRow(slots,preferences.layout,
+            Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = PeriodStripTopPadding, bottom = 16.dp)) {
             slots.forEachIndexed { index, slot -> key(slot.number) {
                 val shown = inspectionEnabled && inspected == slot.number
                 val color = availabilityColor(slot.number in freeSlots)
                 val visual = if (direction == LayoutDirection.Rtl) slots.lastIndex - index else index
                 val lift by animateDpAsState(if (shown) (-4).dp else 0.dp, tween(90), label = "period_inspection_lift")
-                Box(Modifier.weight(1f).height(5.dp).offset { IntOffset(0, lift.roundToPx()) }
+                Column {
+                Box(Modifier.fillMaxWidth().height(5.dp).offset { IntOffset(0, lift.roundToPx()) }
                     .testTag("room_period_${roomId}_${slot.number}")
                     .onKeyEvent { event ->
                         if (inspectionEnabled && event.type == KeyEventType.KeyUp && event.key in listOf(Key.Enter, Key.Spacebar)) {
@@ -144,19 +160,31 @@ internal fun RoomAvailabilityStrip(roomId: String, freeSlots: Set<Int>, slots: L
                             onClick("查看节次时间") { inspectAccessibly(slot.number) }
                         }
                     }.drawBehind {
-                        val extension = (wave?.amplitude(visual, slots.size) ?: 0f) *
+                        val first=slots.first().let { (it.start.toSecondOfDay()+it.end.toSecondOfDay())/2f }
+                        val last=slots.last().let { (it.start.toSecondOfDay()+it.end.toSecondOfDay())/2f }
+                        val center=(slot.start.toSecondOfDay()+slot.end.toSecondOfDay())/2f
+                        val position=if(last==first) .5f else (center-first)/(last-first)
+                        val amplitude=if(preferences.layout==PeriodStripLayout.TIME_PROPORTIONAL)
+                            wave?.spatialAmplitude(if(direction==LayoutDirection.Rtl) 1-position else position,slots.size)
+                            else wave?.amplitude(visual,slots.size)
+                        val extension = (amplitude ?: 0f) *
                             PeriodWave.maximumExtensionDp.dp.toPx()
                         // Extend upwards into existing padding. The baseline, hit
                         // boxes, colors and row/list measurements never animate.
                         drawRect(color, Offset(0f, -extension), Size(size.width, size.height + extension))
                     })
+                if(preferences.showNumbers) Text(slot.number.toString(),Modifier.fillMaxWidth().padding(top=3.dp)
+                    .testTag("room_period_number_${roomId}_${slot.number}").clearAndSetSemantics {},
+                    fontSize=8.sp,lineHeight=10.sp,textAlign=TextAlign.Center,maxLines=1,softWrap=false,
+                    color=MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha=.65f))
+                }
             } }
         }
         slots.firstOrNull { inspectionEnabled && it.number == inspected }?.let { slot ->
-            val position = remember(slot.number, slots, density) { with(density) {
+            val position = remember(slot.number, slots, density, preferences.layout) { with(density) {
                 PeriodStripTooltipPositionProvider(slots.indexOf(slot), slots.size, 24.dp.roundToPx(), 3.dp.roundToPx(),
                     PeriodStripTopPadding.roundToPx(), 4.dp.roundToPx(), 5.dp.roundToPx(),
-                    SlotTimeTooltipPositionProvider(28.dp.roundToPx(), 8.dp.roundToPx()))
+                    SlotTimeTooltipPositionProvider(28.dp.roundToPx(), 8.dp.roundToPx()),slots,preferences.layout)
             } }
             // Updating number/anchor does not remove and recreate an Android popup window.
             SlotTimeTooltip(slot, tagPrefix = "room_time_$roomId", positionOverride = position)

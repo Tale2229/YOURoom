@@ -24,6 +24,9 @@ internal class RoomPeriodWave {
         return PeriodWave.amplitude(progress.value, visualIndex, count)
     }
 
+    fun spatialAmplitude(position: Float, count: Int): Float =
+        if(running) PeriodWave.spatialAmplitude(progress.value,position,count) else 0f
+
     @Composable
     fun Run() {
         LaunchedEffect(request) {

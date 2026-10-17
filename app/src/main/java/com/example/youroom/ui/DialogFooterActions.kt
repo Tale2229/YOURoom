@@ -15,16 +15,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 
 @Composable
 internal fun DialogFooterActions(hasSelection: Boolean, resetTag: String, closeTag: String,
     onReset: () -> Unit, onClose: () -> Unit, middleTag: String? = null,
     middleDescription: String = "添加词条", middleSelected: Boolean = false,
-    onMiddle: (() -> Unit)? = null) {
+    onMiddle: (() -> Unit)? = null, resetIconOffsetY: Dp = 0.dp) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically) {
         FooterIcon("重置", resetTag, onReset) {
-            AnimatedTrashIcon(hasSelection, Modifier.size(24.dp).testTag("${resetTag}_icon"))
+            AnimatedTrashIcon(hasSelection, Modifier.size(24.dp).offset(y=resetIconOffsetY).testTag("${resetTag}_icon"))
         }
         if (middleTag != null && onMiddle != null) FooterIcon(middleDescription, middleTag, onMiddle,
             Modifier.semantics { selected=middleSelected;stateDescription=if(middleSelected) "编辑中" else "未编辑" }) {

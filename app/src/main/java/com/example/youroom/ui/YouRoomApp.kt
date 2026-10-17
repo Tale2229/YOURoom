@@ -38,7 +38,8 @@ fun YouRoomApp(model: YouRoomViewModel) {
         planningDate = state.today.toString(); planningDemo = state.demo
     }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { model.onForeground() }
-    YouRoomTheme(campus = state.campus) {
+    YouRoomTheme(campus = state.campus, appearance = state.appearance) {
+        CompositionLocalProvider(LocalPeriodStripPreferences provides state.periodStrip) {
         RoomSearchFocusBoundary(Modifier.fillMaxSize()) {
         Scaffold(
             bottomBar = {
@@ -63,7 +64,7 @@ fun YouRoomApp(model: YouRoomViewModel) {
                     when (route) {
                         "loading" -> LoadingScreen()
                         "login" -> LoginScreen(state, model::login, { tab = 0; model.showDemo() },
-                            { tab = 0; model.viewCache() })
+                            { tab = 0; model.viewCache() }, onRememberedLogin = model::login)
                         else -> WorkspacePages(state, tab, model, goal, plans,
                             { goal = it }, { model.generatePlanning(goal) }, ::editRoom, ::manageRoom)
                     }
@@ -81,6 +82,7 @@ fun YouRoomApp(model: YouRoomViewModel) {
                     { model.toggleFavorite(room.classroom) }, { roomEditor = RoomEditor.TAGS },
                     { roomEditor = RoomEditor.NOTE }, { model.toggleExcluded(room.classroom) })
             }
+        }
         }
     }
 }
@@ -120,7 +122,9 @@ private fun WorkspacePages(state: YouRoomState, tab: Int, model: YouRoomViewMode
                             model::refresh, manageRoom, { campus,id,index -> model.planning.select(campus,id,index) },showHeader = false,
                             sharedHeaderMoving = headerMoving, interactive = active, onCancel = model::cancelPlanning)
                         else -> SettingsScreen(state, manageRoom, model::clearProfile, model::logout,
-                            model::setCampus, showHeader = false, sharedHeaderMoving = headerMoving, interactive = active)
+                            model::setCampus, showHeader = false, sharedHeaderMoving = headerMoving, interactive = active,
+                            onPeriodStrip = model::setPeriodStrip,
+                            onTone = model::setCampusTone, onDefaultCampus = model::setDefaultCampus)
                     }
                 }
             }

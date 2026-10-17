@@ -6,6 +6,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.Lock
@@ -28,15 +30,17 @@ import com.example.youroom.ui.theme.YouRoomTheme
 
 @Composable
 fun LoginScreen(state: YouRoomState, onLogin: (String, String) -> Unit,
-    onDemo: () -> Unit, onCache: () -> Unit) {
-    var account by rememberSaveable { mutableStateOf("") }
+    onDemo: () -> Unit, onCache: () -> Unit,
+    onRememberedLogin: (String, String, Boolean) -> Unit = { account, password, _ -> onLogin(account, password) }) {
+    var account by rememberSaveable { mutableStateOf(state.rememberedAccount.orEmpty()) }
+    var rememberPassword by rememberSaveable { mutableStateOf(state.rememberedAccount != null) }
     // Deliberately NOT saveable: no plaintext password in saved instance state.
     var password by remember { mutableStateOf("") }
     var visible by remember { mutableStateOf(false) }
     val focus = LocalFocusManager.current
     val submit = {
         focus.clearFocus()
-        onLogin(account, password)
+        onRememberedLogin(account, password, rememberPassword)
         password = ""
     }
     Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState())
@@ -67,6 +71,13 @@ fun LoginScreen(state: YouRoomState, onLogin: (String, String) -> Unit,
                 Icon(if (visible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
                     if (visible) "隐藏密码" else "显示密码")
             } })
+        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("remember-password")
+            .toggleable(rememberPassword, enabled = !state.loggingIn, role = Role.Checkbox,
+                onValueChange = { rememberPassword = it }), verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(rememberPassword, onCheckedChange = null, enabled = !state.loggingIn)
+            Spacer(Modifier.width(10.dp))
+            Text("记住密码", style = MaterialTheme.typography.bodyMedium)
+        }
         Button(onClick = submit, Modifier.fillMaxWidth().height(52.dp).testTag("login"),
             shape = MaterialTheme.shapes.small,
             enabled = !state.loggingIn && account.isNotBlank() && password.isNotEmpty()) {
@@ -80,12 +91,13 @@ fun LoginScreen(state: YouRoomState, onLogin: (String, String) -> Unit,
         }
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(Icons.Outlined.Lock, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("密码只用于本次 HTTPS 登录，不会保存。登录状态加密保存在本机。",
+            Text(if (rememberPassword) "密码加密保存在本机，仅用于登录过期后自动重登；退出登录时清除。"
+                else "密码仅用于本次 HTTPS 登录，不会保存。登录状态加密保存在本机。",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         HorizontalDivider(Modifier.padding(vertical = 4.dp))
         Text("连接提示", style = MaterialTheme.typography.titleSmall)
-        Text("请使用能够访问教务服务的网络。校外可尝试连接校园 VPN；网页登录式 WebVPN 不一定接管 App 网络。",
+        Text("可通过能访问教务服务的网络使用，不要求始终连接校园网；连接失败时请检查网络或校园访问策略。",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedButton(onClick = onDemo, enabled = !state.loggingIn, shape = MaterialTheme.shapes.small,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("demo")) {

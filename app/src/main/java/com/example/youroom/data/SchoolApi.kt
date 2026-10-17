@@ -11,8 +11,9 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-class AuthenticationRequired : Exception("登录状态已失效，请重新登录。")
-class SchoolRequestFailed(val userMessage: String) : Exception(userMessage)
+class AuthenticationRequired(message: String = "登录状态已失效，请重新登录。") : Exception(message)
+open class SchoolRequestFailed(val userMessage: String) : Exception(userMessage)
+class SchoolLoginRejected(message: String) : SchoolRequestFailed(message)
 
 class SchoolApi(
     private val client: OkHttpClient = defaultClient(),
@@ -29,11 +30,9 @@ class SchoolApi(
         val root = withContext(Dispatchers.Default) { SchoolJson.response(response.body) }
         if (response.status !in 200..299 || root["code"]?.jsonPrimitive?.content != "1") {
             val message = root["Msg"]?.jsonPrimitive?.content.orEmpty()
-            throw SchoolRequestFailed(when {
-                "验证码" in message -> "学校要求验证码，当前版本暂不支持，请先使用官方教务页面。"
-                response.status in 500..599 -> "教务登录服务暂不可用，请稍后重试。"
-                else -> "登录未成功，请确认使用教务系统的账号和密码。"
-            })
+            if ("验证码" in message) throw SchoolLoginRejected("学校要求验证码，请先使用官方教务页面。")
+            if (response.status in 500..599) throw SchoolRequestFailed("教务登录服务暂不可用，请稍后重试。")
+            throw SchoolLoginRejected("登录未成功，请确认使用教务系统的账号和密码。")
         }
         return try {
             root["data"]!!.jsonObject["token"]!!.jsonPrimitive.content.also {
@@ -72,7 +71,7 @@ class SchoolApi(
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
                 if (continuation.isActive) continuation.resumeWith(Result.failure(
-                    SchoolRequestFailed("无法连接教务服务，请检查网络；校外可尝试校园 VPN。")))
+                    SchoolRequestFailed("无法连接教务服务，请检查网络后重试。")))
             }
             override fun onResponse(call: Call, response: Response) {
                 response.use {

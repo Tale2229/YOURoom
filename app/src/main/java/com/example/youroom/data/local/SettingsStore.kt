@@ -13,6 +13,10 @@ import kotlinx.serialization.json.*
 import java.io.IOException
 
 interface FilterSettings {
+    val appearance: Flow<AppearancePreferences> get() = kotlinx.coroutines.flow.flowOf(AppearancePreferences())
+    suspend fun saveAppearance(value: AppearancePreferences) { error("Appearance storage is unavailable") }
+    val periodStrip: Flow<PeriodStripPreferences>
+    suspend fun savePeriodStrip(value: PeriodStripPreferences)
     val filters: Flow<SearchFilters>
     val catalog: Flow<TagCatalog>
     val buildings: Flow<Map<Campus, Set<String>>>
@@ -59,12 +63,20 @@ class SharedFilterMigration : DataMigration<Preferences> {
 private val Context.youRoomSettings by preferencesDataStore(name = "youroom_settings",
     produceMigrations = { listOf(CampusFilterMigration(), SharedFilterMigration(), TagCatalogMigration()) })
 
-class SettingsStore(context: Context) : FilterSettings {
-    private val store = context.youRoomSettings
+class SettingsStore internal constructor(private val store: androidx.datastore.core.DataStore<Preferences>) : FilterSettings {
+    constructor(context: Context) : this(context.youRoomSettings)
     private val values = store.data.catch { error ->
         if (error is IOException) emit(emptyPreferences()) else throw error
     }
     override val filters = values.map(SharedFilterPreferences::read).distinctUntilChanged()
+    override val appearance = values.map(AppearancePreferenceKeys::read).distinctUntilChanged()
+    override suspend fun saveAppearance(value: AppearancePreferences) {
+        store.edit { AppearancePreferenceKeys.write(it, value) }
+    }
+    override val periodStrip = values.map(PeriodStripPreferenceKeys::read).distinctUntilChanged()
+    override suspend fun savePeriodStrip(value: PeriodStripPreferences) {
+        store.edit { PeriodStripPreferenceKeys.write(it,value) }
+    }
     override val catalog = values.map(TagCatalogPreferences::read).distinctUntilChanged()
     override val buildings = values.map { value -> Campus.entries.associateWith { BuildingFilterPreferences.read(value, it) } }
         .distinctUntilChanged()
@@ -86,6 +98,33 @@ class SettingsStore(context: Context) : FilterSettings {
     }
     override suspend fun reorderTags(names: List<String>) {
         store.edit { TagCatalogPreferences.write(it, TagCatalogPreferences.read(it).reordered(names)) }
+    }
+}
+
+object AppearancePreferenceKeys {
+    val west = stringPreferencesKey("appearance.01.tone")
+    val shahe = stringPreferencesKey("appearance.04.tone")
+    val defaultCampus = stringPreferencesKey("appearance.default_campus")
+    fun read(values: Preferences) = AppearancePreferences(
+        CampusTone.entries.firstOrNull { it.id == values[west] } ?: CampusTone.SAND,
+        CampusTone.entries.firstOrNull { it.id == values[shahe] } ?: CampusTone.PINE,
+        Campus.entries.firstOrNull { it.dataKey == values[defaultCampus] } ?: Campus.XITUCHENG)
+    fun write(values: MutablePreferences, appearance: AppearancePreferences) {
+        values[west] = appearance.westTone.id
+        values[shahe] = appearance.shaheTone.id
+        values[defaultCampus] = appearance.defaultCampus.dataKey
+    }
+}
+
+object PeriodStripPreferenceKeys {
+    val layout=stringPreferencesKey("display.period_strip.layout")
+    val numbers=booleanPreferencesKey("display.period_strip.numbers")
+    fun read(values: Preferences)=PeriodStripPreferences(
+        PeriodStripLayout.entries.firstOrNull { it.name==values[layout] } ?: PeriodStripLayout.EQUAL,
+        values[numbers] ?: false)
+    fun write(values: MutablePreferences,value: PeriodStripPreferences) {
+        values[layout]=value.layout.name
+        values[numbers]=value.showNumbers
     }
 }
 

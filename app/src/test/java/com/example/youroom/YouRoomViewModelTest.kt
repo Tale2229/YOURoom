@@ -26,10 +26,11 @@ class YouRoomViewModelTest {
     private fun checkModel(authenticated: Boolean = true,
         setupSource: FakeSource.() -> Unit = {},
         testClock: Clock = clock,
+        initialAppearance: AppearancePreferences = AppearancePreferences(),
         block: suspend TestScope.(YouRoomViewModel, FakeSource, FakeSettings) -> Unit) = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val source = FakeSource(authenticated).apply(setupSource)
-        val settings = FakeSettings()
+        val settings = FakeSettings().apply { appearance.value = initialAppearance }
         val model = YouRoomViewModel(source, settings, testClock,StandardTestDispatcher(testScheduler))
         val store = ViewModelStore().apply { put("test", model) }
         try { runCurrent(); block(model, source, settings) }
@@ -118,6 +119,64 @@ class YouRoomViewModelTest {
         assertFalse(model.state.value.loggedIn)
         assertFalse(model.state.value.showWorkspace)
         assertEquals(profile, model.state.value.profiles[profile.roomId])
+    }
+
+    @Test fun rememberedAccountLoadsWithoutExposingPasswordInUiState() = checkModel(false,
+        setupSource = { remembered = "dummy-remembered" }) { model, _, _ ->
+        assertEquals("dummy-remembered", model.state.value.rememberedAccount)
+        assertFalse(model.state.value.loggedIn)
+        assertFalse(model.state.value.toString().contains("password"))
+    }
+
+    @Test fun manualLoginForwardsConsentAndTrimsAccount() = checkModel(false) { model, source, _ ->
+        model.login("  dummy-account  ", "dummy-password", true); runCurrent()
+        assertTrue(source.lastRemember)
+        assertEquals("dummy-account", source.lastAccount)
+        assertEquals("dummy-account", model.state.value.rememberedAccount)
+        assertTrue(model.state.value.loggedIn)
+        assertFalse(model.state.value.loggingIn)
+        assertEquals(listOf(Campus.XITUCHENG), source.requests)
+    }
+
+    @Test fun legacyTwoArgumentLoginDoesNotOptIntoRemembering() = checkModel(false) { model, source, _ ->
+        model.login("dummy-account", "dummy-password"); runCurrent()
+        assertFalse(source.lastRemember)
+        assertNull(model.state.value.rememberedAccount)
+    }
+
+    @Test fun logoutClearsRememberedAccountButRetainsRoomMarks() = checkModel(
+        setupSource = { remembered = "dummy-account" }) { model, source, _ ->
+        val room = snapshot(Campus.XITUCHENG).classrooms.first()
+        val profile = room.emptyProfile().copy(favorite = true, note = "保留")
+        source.profiles.value = mapOf(room.id to profile); runCurrent()
+        model.logout(); runCurrent()
+        assertNull(model.state.value.rememberedAccount)
+        assertNull(source.remembered)
+        assertFalse(model.state.value.showWorkspace)
+        assertEquals(profile, model.state.value.profiles[room.id])
+    }
+
+    @Test fun canceledLateManualLoginCannotReopenWorkspace() = checkModel(false) { model, source, _ ->
+        var late: kotlin.coroutines.Continuation<Unit>? = null
+        source.loginAction = { suspendCoroutine { late = it } }
+        model.login("dummy-account", "dummy-password", true); runCurrent()
+        assertTrue(model.state.value.loggingIn)
+        model.logout(); runCurrent()
+        late!!.resume(Unit); runCurrent()
+        assertFalse(model.state.value.loggedIn)
+        assertFalse(model.state.value.loggingIn)
+        assertNull(model.state.value.rememberedAccount)
+        assertTrue(source.requests.isEmpty())
+    }
+
+    @Test fun backgroundRefreshSuccessDoesNotClearPlansOrChangeRememberChoice() = checkModel(
+        setupSource = { remembered = "dummy-account" }) { model, _, _ ->
+        model.generatePlanning(PlanningDraft(savedWindows = listOf(StudyWindow(480, 720)))); runCurrent()
+        val existing = model.planning.executions.value.getValue(Campus.XITUCHENG)
+        model.refresh(); runCurrent()
+        assertSame(existing, model.planning.executions.value.getValue(Campus.XITUCHENG))
+        assertEquals("dummy-account", model.state.value.rememberedAccount)
+        assertTrue(model.state.value.loggedIn)
     }
 
     @Test fun demoSwitchRetainsDemoFiltersAndNeverSavesRealPreferences() = checkModel(false) { model, source, settings ->
@@ -501,9 +560,20 @@ class YouRoomViewModelTest {
         val profileDeletes = mutableListOf<String>()
         var profileSaver: suspend (RoomProfile) -> Unit = { profiles.value += it.roomId to it }
         var loader: suspend (Campus) -> ClassroomSnapshot = { snapshot(it) }
+        var remembered: String? = null
+        var lastRemember = false
+        var lastAccount: String? = null
+        var loginAction: suspend () -> Unit = {}
         override suspend fun hasSession() = authenticated
         override suspend fun login(account: String, password: String) { authenticated = true }
-        override suspend fun logout() { authenticated = false }
+        override suspend fun login(account: String, password: String, rememberPassword: Boolean) {
+            lastAccount = account; lastRemember = rememberPassword
+            loginAction()
+            authenticated = true
+            remembered = account.takeIf { rememberPassword }
+        }
+        override suspend fun rememberedAccount() = remembered
+        override suspend fun logout() { authenticated = false; remembered = null }
         override suspend fun cached(campus: Campus): ClassroomSnapshot? = caches[campus]
         override suspend fun refresh(campus: Campus): ClassroomSnapshot { requests += campus; return loader(campus) }
         override suspend fun saveProfile(profile: RoomProfile) { profileWrites += profile; profileSaver(profile) }
@@ -511,6 +581,24 @@ class YouRoomViewModelTest {
     }
 
     private class FakeSettings : FilterSettings {
+        override val appearance = MutableStateFlow(AppearancePreferences())
+        var appearanceGate: CompletableDeferred<Unit>? = null
+        var appearanceFailure = false
+        val appearanceSaved = mutableListOf<AppearancePreferences>()
+        override suspend fun saveAppearance(value: AppearancePreferences) {
+            appearanceGate?.await()
+            if (appearanceFailure) throw java.io.IOException("test")
+            appearanceSaved += value; appearance.value = value
+        }
+        override val periodStrip=MutableStateFlow(PeriodStripPreferences())
+        var stripGate: CompletableDeferred<Unit>?=null
+        var stripFailure=false
+        val stripSaved=mutableListOf<PeriodStripPreferences>()
+        override suspend fun savePeriodStrip(value: PeriodStripPreferences) {
+            stripGate?.await()
+            if(stripFailure) throw java.io.IOException("test")
+            stripSaved+=value;periodStrip.value=value
+        }
         override val filters = MutableStateFlow(SearchFilters())
         override val catalog = MutableStateFlow(TagCatalog())
         override val buildings = MutableStateFlow(Campus.entries.associateWith { emptySet<String>() })
@@ -543,5 +631,101 @@ class YouRoomViewModelTest {
         settings.saveGate!!.complete(Unit); runCurrent()
         assertTrue(model.state.value.filters.favoritesOnly)
         assertFalse(model.state.value.filters.outletsOnly)
+    }
+
+    @Test fun savedDefaultCampusIsUsedBeforeTheFirstRequest() = checkModel(
+        initialAppearance = AppearancePreferences(CampusTone.CLAY, CampusTone.SLATE, Campus.SHAHE)) { model, source, _ ->
+        assertEquals(Campus.SHAHE, model.state.value.campus)
+        assertEquals(listOf(Campus.SHAHE), source.requests)
+        assertEquals(CampusTone.SLATE, model.state.value.appearance.tone(Campus.SHAHE))
+    }
+
+    @Test fun changingAppearanceDoesNotSwitchCampusOrTouchSearchMarksOrExistingPlan() = checkModel { model, source, settings ->
+        model.generatePlanning(PlanningDraft(flexible = false, savedWindows = listOf(StudyWindow(480, 720))))
+        runCurrent()
+        val plans = model.planning.executions.value
+        val before = model.state.value
+        val requests = source.requests.toList()
+        model.setCampusTone(Campus.XITUCHENG, CampusTone.CLAY)
+        model.setDefaultCampus(Campus.SHAHE)
+        runCurrent()
+        assertEquals(Campus.XITUCHENG, model.state.value.campus)
+        assertEquals(CampusTone.PINE, model.state.value.appearance.shaheTone)
+        assertEquals(CampusTone.CLAY, settings.appearance.value.westTone)
+        assertEquals(Campus.SHAHE, settings.appearance.value.defaultCampus)
+        assertEquals(before.filters, model.state.value.filters)
+        assertEquals(before.profiles, model.state.value.profiles)
+        assertEquals(plans, model.planning.executions.value)
+        assertEquals(requests, source.requests)
+        model.showDemo(); runCurrent()
+        assertEquals(Campus.SHAHE, model.state.value.campus)
+        model.openLogin(); runCurrent()
+        assertEquals(Campus.SHAHE, model.state.value.campus)
+        assertEquals(CampusTone.CLAY, model.state.value.appearance.westTone)
+    }
+
+    @Test fun rapidToneAndDefaultChangesPreserveBothCampusesDespiteOlderEmissions() = checkModel { model, _, settings ->
+        settings.appearanceGate = CompletableDeferred()
+        model.setCampusTone(Campus.XITUCHENG, CampusTone.CLAY); runCurrent()
+        val first = model.state.value.appearance
+        model.setCampusTone(Campus.SHAHE, CampusTone.SLATE)
+        model.setDefaultCampus(Campus.SHAHE); runCurrent()
+        val latest = model.state.value.appearance
+        settings.appearance.value = first; runCurrent()
+        assertEquals(latest, model.state.value.appearance)
+        settings.appearanceGate!!.complete(Unit); runCurrent()
+        assertEquals(listOf(first, latest), settings.appearanceSaved)
+        assertEquals(latest, settings.appearance.value)
+        assertEquals(latest, model.state.value.appearance)
+    }
+
+    @Test fun failedAppearanceSaveRollsBackAndCanBeRetried() = checkModel { model, _, settings ->
+        settings.appearanceFailure = true
+        model.setCampusTone(Campus.XITUCHENG, CampusTone.CLAY); runCurrent()
+        assertEquals(AppearancePreferences(), model.state.value.appearance)
+        assertTrue(model.state.value.error!!.contains("外观设置保存失败"))
+        settings.appearanceFailure = false
+        model.setCampusTone(Campus.XITUCHENG, CampusTone.CLAY); runCurrent()
+        assertEquals(CampusTone.CLAY, settings.appearance.value.westTone)
+    }
+
+    @Test fun stripDefaultsAreOriginalAndChangesDoNotTouchSearchOrPlans() = checkModel { model, source, settings ->
+        assertEquals(PeriodStripPreferences(),model.state.value.periodStrip)
+        val before=model.state.value.filters
+        val requests=source.requests.toList()
+        val pref=PeriodStripPreferences(PeriodStripLayout.TIME_PROPORTIONAL,true)
+        model.setPeriodStrip(pref)
+        assertEquals(pref,model.state.value.periodStrip)
+        runCurrent()
+        assertEquals(listOf(pref),settings.stripSaved)
+        assertEquals(before,model.state.value.filters);assertEquals(requests,source.requests)
+        assertTrue(model.planning.executions.value.isEmpty())
+        model.setCampus(Campus.SHAHE);runCurrent()
+        assertEquals(pref,model.state.value.periodStrip)
+        model.showDemo();runCurrent();assertEquals(pref,model.state.value.periodStrip)
+        model.openLogin();runCurrent();assertEquals(pref,model.state.value.periodStrip)
+    }
+
+    @Test fun rapidStripChangesAreSerializedAndOlderEmissionsCannotUndoTheLatest() = checkModel { model, _, settings ->
+        val first=PeriodStripPreferences(PeriodStripLayout.TIME_PROPORTIONAL)
+        val last=PeriodStripPreferences(PeriodStripLayout.EQUAL,true)
+        settings.stripGate=CompletableDeferred()
+        model.setPeriodStrip(first);runCurrent()
+        model.setPeriodStrip(last);runCurrent()
+        settings.periodStrip.value=first;runCurrent()
+        assertEquals(last,model.state.value.periodStrip)
+        settings.stripGate!!.complete(Unit);runCurrent()
+        assertEquals(listOf(first,last),settings.stripSaved)
+        assertEquals(last,settings.periodStrip.value);assertEquals(last,model.state.value.periodStrip)
+    }
+
+    @Test fun failedStripSaveRollsBackToSavedValueAndCanBeRetried() = checkModel { model, _, settings ->
+        val pref=PeriodStripPreferences(PeriodStripLayout.TIME_PROPORTIONAL,true)
+        settings.stripFailure=true
+        model.setPeriodStrip(pref);runCurrent()
+        assertEquals(PeriodStripPreferences(),model.state.value.periodStrip)
+        assertTrue(model.state.value.error!!.contains("时段条设置保存失败"))
+        settings.stripFailure=false;model.setPeriodStrip(pref);runCurrent()
+        assertEquals(pref,model.state.value.periodStrip)
     }
 }

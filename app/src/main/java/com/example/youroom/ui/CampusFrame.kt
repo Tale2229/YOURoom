@@ -44,7 +44,7 @@ internal fun CampusHeaderPager(state: YouRoomState, motion: CampusHeaderMotion, 
         key = { Campus.entries[it].dataKey }) { index ->
         val displayed = Campus.entries[index]
         val visibleSemantics = if (motion.pager.currentPage == index) Modifier else Modifier.clearAndSetSemantics {}
-        YouRoomTheme(campus = displayed) {
+        YouRoomTheme(campus = displayed, appearance = state.appearance) {
             Surface(Modifier.fillMaxWidth().then(visibleSemantics)) {
                 CampusHeader(state.copy(campus = displayed), onCampus)
             }
@@ -102,7 +102,7 @@ internal fun CampusFrame(state: YouRoomState, onCampus: (Campus) -> Unit, showHe
                     val page = if (ready) observed else held
                     SideEffect { if (ready) held = observed }
                     val active = ready && !moving && interactive
-                    YouRoomTheme(campus = displayed) {
+                    YouRoomTheme(campus = displayed, appearance = state.appearance) {
                         Surface(Modifier.fillMaxSize().testTag(if (bodyTag == "campus_body")
                             "campus_content_${displayed.dataKey}" else "${bodyTag}_content_${displayed.dataKey}")
                             .zIndex(if (visible) 1f else 0f)

@@ -38,6 +38,82 @@ class PlanningFeedbackUiTest {
         }
     }
     private fun add()=compose.onNodeWithTag("planner_add_period")
+    @Test fun looseModeFeedbackSlidesFromTheLeftAndExpiresWithoutChangingChoices() {
+        val windows=listOf(StudyWindow(480,540))
+        val expected=setOf(snapshot.classrooms.first().id)
+        goal=PlanningDraft(flexible=false,savedWindows=windows,expectedRooms=expected)
+        render();compose.mainClock.autoAdvance=false
+        compose.onNodeWithTag("planner_adjust").assertIsOff().performClick()
+        compose.mainClock.advanceTimeBy(48)
+        compose.onNodeWithTag("planner_adjust").assertIsOn()
+        compose.onNodeWithTag("planner_message").assertTextEquals("已启用宽松模式")
+        val entering=compose.onNodeWithTag("planner_feedback").fetchSemanticsNode().positionInRoot.x
+        compose.mainClock.advanceTimeBy(350)
+        val settled=compose.onNodeWithTag("planner_feedback").fetchSemanticsNode().positionInRoot.x
+        assertTrue(entering<settled-20f)
+        compose.mainClock.advanceTimeBy(1900)
+        val leaving=compose.onNodeWithTag("planner_feedback").fetchSemanticsNode().positionInRoot.x
+        assertTrue(leaving<settled)
+        compose.mainClock.advanceTimeBy(350)
+        compose.onNodeWithTag("planner_message").assertDoesNotExist()
+        assertTrue(goal.flexible);assertEquals(windows,goal.savedWindows);assertEquals(expected,goal.expectedRooms)
+        assertEquals(0,generated)
+        compose.mainClock.autoAdvance=true
+    }
+
+    @Test fun latestLooseModeToggleOwnsItsDismissTimerAndNewValidationReplacesIt() {
+        goal=PlanningDraft(600,550,flexible=false)
+        render();compose.mainClock.autoAdvance=false
+        compose.onNodeWithTag("planner_adjust").performClick()
+        compose.mainClock.advanceTimeBy(1200)
+        compose.onNodeWithTag("planner_adjust").performClick()
+        compose.mainClock.advanceTimeBy(1300)
+        compose.onNodeWithTag("planner_adjust").assertIsOff()
+        compose.onNodeWithTag("planner_message").assertTextEquals("已关闭宽松模式")
+        compose.mainClock.advanceTimeBy(1300)
+        compose.onNodeWithTag("planner_message").assertDoesNotExist()
+        compose.onNodeWithTag("planner_adjust").performClick()
+        compose.mainClock.advanceTimeBy(300)
+        add().performClick()
+        compose.mainClock.advanceTimeBy(350)
+        compose.onNodeWithTag("planner_message").assertTextContains("结束时间必须晚于开始时间",substring=true)
+        compose.mainClock.advanceTimeBy(2500)
+        compose.onNodeWithTag("planner_message").assertTextContains("结束时间必须晚于开始时间",substring=true)
+        assertEquals(0,generated)
+        compose.mainClock.autoAdvance=true
+    }
+
+    @Test fun fullCapacityRejectsTapsWithOneThrottledShakeAndKeepsAllChoices() {
+        val windows=listOf(StudyWindow(480,540),StudyWindow(600,660),StudyWindow(720,780))
+        val expected=setOf(snapshot.classrooms.first().id)
+        goal=PlanningDraft(840,900,savedWindows=windows,expectedRooms=expected)
+        render();compose.mainClock.autoAdvance=false
+        val original=add().fetchSemanticsNode().positionInRoot.x
+        add().assertIsNotEnabled().performTouchInput { click() }
+        compose.mainClock.advanceTimeBy(48)
+        compose.onNodeWithTag("planner_message").assertTextEquals("最多添加三个时段")
+        assertTrue(add().fetchSemanticsNode().positionInRoot.x<original)
+        compose.mainClock.advanceTimeBy(350)
+        repeat(5) {
+            add().performTouchInput { click() }
+            compose.mainClock.advanceTimeBy(32)
+            assertEquals("cooldown must not restart the shake",original,add().fetchSemanticsNode().positionInRoot.x,1f)
+        }
+        assertEquals(windows,goal.savedWindows);assertEquals(expected,goal.expectedRooms)
+        assertEquals(0,generated)
+        compose.mainClock.autoAdvance=true
+    }
+
+    @Test fun removingAFullPeriodImmediatelyRestoresNormalConfirmationWithoutClearingThePlan() {
+        goal=PlanningDraft(840,900,savedWindows=listOf(StudyWindow(480,540),StudyWindow(600,660),StudyWindow(720,780)))
+        render()
+        add().assertIsNotEnabled().performTouchInput { click() }
+        compose.runOnIdle { goal=goal.copy(savedWindows=goal.savedWindows.dropLast(1)) }
+        add().assertIsEnabled().performClick()
+        assertEquals(3,goal.savedWindows.size)
+        assertEquals(StudyWindow(840,900),goal.savedWindows.last())
+        assertEquals(0,generated)
+    }
     private fun shot(name: String) {
         compose.waitForIdle()
         val instrumentation=InstrumentationRegistry.getInstrumentation()

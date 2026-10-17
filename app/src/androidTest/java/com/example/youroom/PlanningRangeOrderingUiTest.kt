@@ -87,6 +87,16 @@ class PlanningRangeOrderingUiTest {
         }
         shot("planner-range-centered-lunch-1.15.5")
     }
+    @Test fun eveningAndAfterClassElbowsStaySeparateAboveAndBelowTheBars() {
+        windows=listOf(StudyWindow(1038,1098),StudyWindow(1158,1218),StudyWindow(1278,1338));render()
+        for(target in listOf(true,false)) {
+            val labels=windows.indices.map { label(it,target).fetchSemanticsNode().boundsInRoot }
+            assertTrue(labels.zipWithNext().all { (a,b) -> a.center.x<b.center.x })
+            labels.forEachIndexed { i,a -> labels.drop(i+1).forEach { b -> assertFalse(a.overlaps(b)) } }
+            label(2,target).assertTextEquals(if(target) "21:18–22:18" else "21:18–22:17")
+        }
+        shot("planner-evening-noncrossing-1.16.3")
+    }
     @Test fun adjacentHalfHoursShiftTheSecondTimeToItsVerticalColumnInBothStrips() {
         windows=listOf(StudyWindow(840,870),StudyWindow(870,900));render()
         for(target in listOf(true,false)) {

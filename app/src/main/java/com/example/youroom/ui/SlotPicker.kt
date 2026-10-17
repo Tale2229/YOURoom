@@ -199,7 +199,8 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                                     val background by animateColorAsState(
                                         if (isSelected) colors.primary else colors.surfaceContainer,
                                         tween(140), label = "slot_background")
-                                    val stitch by animateColorAsState(if (isSelected) colors.onPrimary else colors.outline,
+                                    val stitch by animateColorAsState(
+                                        if (isSelected) colors.onPrimary.copy(alpha=.35f) else colors.outline.copy(alpha=.36f),
                                         tween(140), label = "slot_stitch")
                                     Box(modifier.height(48.dp).testTag("slot_${slot.number}")
                                         .onGloballyPositioned {
@@ -222,7 +223,7 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                                             contentColor = if (isSelected) colors.onPrimary else colors.onSurfaceVariant) {
                                             Box(Modifier.fillMaxSize().drawWithContent {
                                                 drawContent()
-                                                drawSlotStitches(stitch.copy(alpha = .65f))
+                                                drawSlotStitches(stitch)
                                             }, contentAlignment = Alignment.Center) {
                                                 Text("${slot.number}", style = MaterialTheme.typography.labelLarge)
                                             }
@@ -312,7 +313,7 @@ private fun CompactFilterAction(campus: Campus, count: Int, onClick: () -> Unit,
                 Box(Modifier.fillMaxWidth().height(36.dp).background(colors.surfaceContainer,
                     RectangleShape).drawWithContent {
                     drawContent()
-                    drawSlotStitches(colors.outline.copy(alpha = .65f))
+                    drawSlotStitches(colors.outline.copy(alpha = .36f))
                 }.testTag("extra_filters_face"), contentAlignment = Alignment.Center) {
                     Icon(Icons.Outlined.Tune, "筛选教室", Modifier.size(20.dp))
                 }
@@ -320,7 +321,7 @@ private fun CompactFilterAction(campus: Campus, count: Int, onClick: () -> Unit,
         }
         if (count > 0) Surface(Modifier.align(Alignment.TopEnd).offset(x = 4.dp)
             .testTag("filter_badge").semantics(mergeDescendants = true) {}, shape = androidx.compose.foundation.shape.CircleShape,
-            color = campusBadgeColor(campus), contentColor = Color.White) {
+            color = campusBadgeColor(campus, com.example.youroom.ui.theme.LocalCampusAppearance.current.tone(campus)), contentColor = Color.White) {
             Box(Modifier.heightIn(min = 20.dp).widthIn(min = 20.dp).padding(horizontal = 4.dp),
                 contentAlignment = Alignment.Center) {
                 Text("$count", style = MaterialTheme.typography.labelSmall)

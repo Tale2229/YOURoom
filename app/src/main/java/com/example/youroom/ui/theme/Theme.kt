@@ -4,13 +4,42 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import com.example.youroom.domain.Campus
+import com.example.youroom.domain.CampusTone
+import com.example.youroom.domain.AppearancePreferences
 
-fun campusBadgeColor(campus: Campus) = if (campus == Campus.XITUCHENG) Color(0xFF493D27) else Color(0xFF203F34)
+val LocalCampusAppearance = staticCompositionLocalOf { AppearancePreferences() }
 
-fun campusColorScheme(campus: Campus, darkTheme: Boolean): ColorScheme {
-    val west = campus == Campus.XITUCHENG
+fun campusBadgeColor(campus: Campus, tone: CampusTone = CampusTone.default(campus)) = when(tone) {
+    CampusTone.SAND -> Color(0xFF493D27)
+    CampusTone.PINE -> Color(0xFF203F34)
+    CampusTone.SLATE -> Color(0xFF34474D)
+    CampusTone.CLAY -> Color(0xFF5B3E34)
+}
+
+fun campusColorScheme(campus: Campus, darkTheme: Boolean,
+    tone: CampusTone = CampusTone.default(campus)): ColorScheme {
+    if(tone == CampusTone.SLATE || tone == CampusTone.CLAY) {
+        val clay = tone == CampusTone.CLAY
+        val base = campusColorScheme(campus,darkTheme,CampusTone.SAND)
+        val primary = if(darkTheme) { if(clay) Color(0xFFE6BBA9) else Color(0xFFB7CED5) }
+            else if(clay) Color(0xFF785548) else Color(0xFF4C6068)
+        val container = if(darkTheme) { if(clay) Color(0xFF49332B) else Color(0xFF2B3C43) }
+            else if(clay) Color(0xFFF0E5DF) else Color(0xFFE7ECEC)
+        val control = if(darkTheme) { if(clay) Color(0xFF30251F) else Color(0xFF242D31) }
+            else if(clay) Color(0xFFF4EDE7) else Color(0xFFEDF0EE)
+        val onPrimary = if(darkTheme) { if(clay) Color(0xFF281B16) else Color(0xFF162227) } else Color.White
+        return base.copy(primary=primary,onPrimary=onPrimary,secondary=primary,onSecondary=onPrimary,
+            tertiary=primary,onTertiary=onPrimary,primaryContainer=container,onPrimaryContainer=primary,
+            secondaryContainer=container,onSecondaryContainer=primary,tertiaryContainer=container,onTertiaryContainer=primary,
+            surfaceContainer=control,surfaceContainerLow=control,
+            surfaceContainerHigh=container,surfaceContainerHighest=container,
+            outline=primary.copy(alpha=.65f))
+    }
+    val west = tone == CampusTone.SAND
     val accent = if (west) XituchengKhaki else ShaheGreen
     if (darkTheme) {
         val primary = if (west) Color(0xFFD7C4A1) else Color(0xFFA8D2BD)
@@ -64,15 +93,19 @@ fun campusColorScheme(campus: Campus, darkTheme: Boolean): ColorScheme {
 fun YouRoomTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     campus: Campus = Campus.XITUCHENG,
+    appearance: AppearancePreferences = LocalCampusAppearance.current,
     content: @Composable () -> Unit
 ) {
     // Each campus surface has a stable palette. Animate its layer, not MaterialTheme:
     // interpolating colors would invalidate every consumer on every transition frame.
-    val colors = remember(campus, darkTheme) { campusColorScheme(campus, darkTheme) }
+    val tone = appearance.tone(campus)
+    val colors = remember(campus, darkTheme, tone) { campusColorScheme(campus, darkTheme, tone) }
+    CompositionLocalProvider(LocalCampusAppearance provides appearance) {
     MaterialTheme(
         colorScheme = colors,
         typography = Typography,
         shapes = YouRoomShapes,
         content = content
     )
+    }
 }

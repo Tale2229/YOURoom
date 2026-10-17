@@ -85,8 +85,35 @@ class CompactPlanningUiTest {
         compose.onNodeWithTag("planner_generate").assertContentDescriptionEquals("生成规划")
         compose.onNodeWithTag("planner_adjust").assertIsOn().performClick().assertIsOff()
         compose.onNodeWithTag("planner_expected_badge").assertTextEquals("2")
+        val badge=compose.onNodeWithTag("planner_expected_badge").fetchSemanticsNode().boundsInRoot
+        assertEquals(buttons[1].right+with(compose.density) { 3.dp.toPx() },badge.right,.5f)
+        assertEquals(buttons[1].top-with(compose.density) { 3.dp.toPx() },badge.top,.5f)
         assertEquals(0,generations)
         shot("planner-compact-west")
+    }
+
+    @Test fun postGenerationFeedbackStaysBetweenTargetStripAndHeadingOutsideTheDetailList() {
+        render()
+        fun assertOrder() {
+            val strip=compose.onNodeWithTag("planner_target_strip",true).fetchSemanticsNode().boundsInRoot
+            val feedback=compose.onNodeWithTag("planner_feedback").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+            val heading=compose.onNodeWithTag("planner_alternatives").fetchSemanticsNode().boundsInRoot
+            assertTrue(strip.bottom<=feedback.top)
+            assertTrue(feedback.bottom<=heading.top)
+            compose.onNodeWithTag("planner_message").assert(!hasAnyAncestor(hasTestTag("planner_list")))
+            compose.onNodeWithTag("planner_step_0").assertExists()
+            assertEquals(0,generations)
+        }
+        compose.onNodeWithTag("planner_list").performScrollToIndex(1)
+        compose.onNodeWithTag("planner_adjust").performClick()
+        compose.onNodeWithTag("planner_message").assertTextEquals("已关闭宽松模式")
+        assertOrder()
+        compose.onNodeWithTag("planner_add_period").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("planner_add_period").assertIsNotEnabled().performTouchInput { click() }
+        compose.onNodeWithTag("planner_message").assertTextEquals("最多添加三个时段")
+        assertOrder()
+        shot("planner-feedback-above-heading-1.17.3")
     }
 
     @Test fun targetTimesAreBelowTheirBarsWhileActualRoomTimesStayAbove() {
@@ -119,6 +146,52 @@ class CompactPlanningUiTest {
         assertEquals(0,generations)
         compose.onNodeWithTag("planner_generate").performClick()
         assertEquals(1,generations)
+    }
+
+    @Test fun periodActionsUseOneRowOfAccessibleIconsAndRetainEditingAndDeletion() {
+        render();label(0).performClick()
+        val edit=compose.onNodeWithTag("planner_edit_period_0").assertHasClickAction().assertHeightIsEqualTo(48.dp)
+        val remove=compose.onNodeWithTag("planner_remove_period_0").assertHasClickAction().assertHeightIsEqualTo(48.dp)
+        edit.assertContentDescriptionEquals("编辑时段");remove.assertContentDescriptionEquals("删除时段")
+        val e=edit.fetchSemanticsNode().boundsInRoot;val d=remove.fetchSemanticsNode().boundsInRoot
+        val face=compose.onNodeWithTag("planner_period_actions_face_0",true)
+            .assertWidthIsEqualTo(96.dp).assertHeightIsEqualTo(32.dp).fetchSemanticsNode().boundsInRoot
+        val popup=compose.onNodeWithTag("planner_period_actions_0",true)
+            .assertWidthIsEqualTo(96.dp).assertHeightIsEqualTo(48.dp).fetchSemanticsNode().boundsInRoot
+        assertEquals(popup.center,face.center)
+        assertEquals(e.top,d.top,1f);assertTrue(e.right<=d.left)
+        compose.onNodeWithText("编辑").assertDoesNotExist();compose.onNodeWithText("删除").assertDoesNotExist()
+        shot("planner-period-icon-menu-1.16.4")
+        edit.performClick()
+        assertEquals(660,goal.start);assertEquals(720,goal.end)
+        assertEquals(listOf(StudyWindow(840,1020)),goal.savedWindows)
+        label(0).performClick();compose.onNodeWithTag("planner_remove_period_0").performClick()
+        assertTrue(goal.savedWindows.isEmpty())
+        compose.onNodeWithTag("planner_step_0").assertExists();assertEquals(0,generations)
+    }
+
+    @Test fun compactPeriodPopupDismissesOnBackAndOutsideWithoutChangingSavedPeriods() {
+        render()
+        val saved=goal.savedWindows
+        label(0).performClick()
+        compose.onNodeWithTag("planner_period_actions_0").assertIsDisplayed()
+        androidx.test.espresso.Espresso.pressBack()
+        compose.onNodeWithTag("planner_period_actions_0").assertDoesNotExist()
+        label(0).performClick()
+        compose.onNodeWithTag("planner_period_actions_0").assertIsDisplayed()
+        // Compose's root-targeted injection bypasses the separate popup window.
+        // Use a screen-level tap in the editor to exercise Android's outside touch.
+        val instrumentation=InstrumentationRegistry.getInstrumentation()
+        val now=android.os.SystemClock.uptimeMillis()
+        val x=with(compose.density) { 12.dp.toPx() }
+        val y=with(compose.density) { 100.dp.toPx() }
+        for((action,time) in listOf(android.view.MotionEvent.ACTION_DOWN to now,android.view.MotionEvent.ACTION_UP to now+50)) {
+            val event=android.view.MotionEvent.obtain(now,time,action,x,y,0)
+            event.source=android.view.InputDevice.SOURCE_TOUCHSCREEN
+            try { assertTrue(instrumentation.uiAutomation.injectInputEvent(event,true)) } finally { event.recycle() }
+        }
+        compose.onNodeWithTag("planner_period_actions_0").assertDoesNotExist()
+        assertEquals(saved,goal.savedWindows);assertEquals(0,generations)
     }
 
     @Test fun editOpensThePanelAndRefillsOnlyTheChosenConfirmedPeriod() {
