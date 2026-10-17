@@ -19,11 +19,13 @@ data class AppearancePreferences(
         copy(westTone = tone) else copy(shaheTone = tone)
 }
 
-internal object ThemeMosaicWave {
-    const val grid = 6
-    const val durationMillis = 560
-    fun phase(progress: Float, row: Int, column: Int): Float =
-        ((progress.coerceIn(0f, 1f) * durationMillis - (row + column) * 30f) / 260f).coerceIn(0f, 1f)
+internal object ThemePageWave {
+    const val debounceMillis = 320L
+    const val durationMillis = 760
+    fun phase(progress: Float, row: Int, column: Int, rows: Int, columns: Int): Float {
+        val distance = (row + column).toFloat() / (rows + columns - 2).coerceAtLeast(1)
+        return ((progress.coerceIn(0f, 1f) - distance * .62f) / .38f).coerceIn(0f, 1f)
+    }
     fun blend(phase: Float): Float {
         val p = ((phase - .2f) / .6f).coerceIn(0f, 1f)
         return p * p * (3 - 2 * p)

@@ -43,14 +43,15 @@ class AppearancePreferencesTest {
     }
 
     @Test fun mosaicTravelsDiagonallyAndAllTilesFinishWithinOneAnimation() {
-        for (r in 0 until 6) for (c in 0 until 6) {
-            assertEquals(0f, ThemeMosaicWave.phase(0f, r, c))
-            assertEquals(1f, ThemeMosaicWave.phase(1f, r, c))
-            assertEquals(ThemeMosaicWave.phase(.4f, r, c), ThemeMosaicWave.phase(.4f, c, r))
-            assertTrue(ThemeMosaicWave.phase(.4f, 0, 0) >= ThemeMosaicWave.phase(.4f, r, c))
+        for (rows in listOf(4, 10, 24)) for (r in 0 until rows) for (c in 0 until 6) {
+            assertEquals(0f, ThemePageWave.phase(0f, r, c, rows, 6), .00001f)
+            assertEquals(1f, ThemePageWave.phase(1f, r, c, rows, 6), .00001f)
+            assertTrue(ThemePageWave.phase(.4f, 0, 0, rows, 6) >= ThemePageWave.phase(.4f, r, c, rows, 6))
+            if (r > 0) assertTrue(ThemePageWave.phase(.4f, r - 1, c, rows, 6) >= ThemePageWave.phase(.4f, r, c, rows, 6))
         }
-        assertTrue(ThemeMosaicWave.phase(.4f, 0, 0) > ThemeMosaicWave.phase(.4f, 5, 5))
-        assertEquals(0f, ThemeMosaicWave.blend(0f)); assertEquals(1f, ThemeMosaicWave.blend(1f))
-        assertEquals(.5f, ThemeMosaicWave.blend(.5f), .0001f)
+        assertTrue(ThemePageWave.phase(.4f, 0, 0, 10, 6) > ThemePageWave.phase(.4f, 9, 5, 10, 6))
+        assertEquals(0f, ThemePageWave.blend(0f)); assertEquals(1f, ThemePageWave.blend(1f))
+        assertEquals(.5f, ThemePageWave.blend(.5f), .0001f)
+        assertEquals(320L, ThemePageWave.debounceMillis)
     }
 }

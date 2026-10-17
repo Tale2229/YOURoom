@@ -33,11 +33,24 @@ class CampusThemeTest {
         assertEquals(0xFF315C4E.toInt(), campusColorScheme(Campus.SHAHE, false).primary.toArgb())
     }
 
-    @Test fun bothCampusesShareNeutralPaperAndTextColors() {
+    @Test fun allTonesHaveTheirOwnPaperInkMutedRulesAndSurfaces() {
         val west = campusColorScheme(Campus.XITUCHENG, false)
         val shahe = campusColorScheme(Campus.SHAHE, false)
-        assertEquals(west.surface, shahe.surface)
-        assertEquals(west.onSurface, shahe.onSurface)
+        assertNotEquals(west.surface, shahe.surface)
+        assertNotEquals(west.onSurface, shahe.onSurface)
+        for (dark in listOf(false, true)) {
+            val all = CampusTone.entries.map { campusColorScheme(Campus.XITUCHENG, dark, it) }
+            listOf<(androidx.compose.material3.ColorScheme) -> Color>({ it.background }, { it.surface },
+                { it.onSurface }, { it.onSurfaceVariant }, { it.outlineVariant }, { it.surfaceContainer }).forEach { role ->
+                assertEquals(4, all.map(role).distinct().size)
+            }
+            all.forEach { c ->
+                assertTrue(contrast(c.inverseSurface, c.inverseOnSurface) >= 4.5)
+                assertTrue(contrast(c.errorContainer, c.onErrorContainer) >= 4.5)
+                assertTrue(contrast(c.primaryFixed, c.onPrimaryFixed) >= 4.5)
+                assertEquals(c.primary, c.onTertiaryContainer)
+            }
+        }
     }
 
     @Test fun primaryTextAndButtonsRetainReadableContrastInBothModes() {
@@ -89,18 +102,18 @@ class CampusThemeTest {
         assertEquals(0xFF28241E.toInt(), campusColorScheme(Campus.XITUCHENG, true).surfaceContainer.toArgb())
     }
 
-    @Test fun shaheRetainsItsExistingPaletteInBothModes() {
+    @Test fun pineUsesGreenPaperInBothModesAndRetainsItsPrimaryHue() {
         val light = campusColorScheme(Campus.SHAHE, false)
         val dark = campusColorScheme(Campus.SHAHE, true)
         val expected = listOf(
-            light.primary to 0xFF315C4E, light.primaryContainer to 0xFFE6EEE7,
-            light.background to 0xFFF7F6F2, light.surface to 0xFFF7F6F2,
-            light.surfaceContainer to 0xFFEDEFE8, light.onSurfaceVariant to 0xFF646A66,
-            light.outlineVariant to 0xFFDCE0DA, campusBadgeColor(Campus.SHAHE) to 0xFF203F34,
+            light.primary to 0xFF315C4E, light.primaryContainer to 0xFFDFEADF,
+            light.background to 0xFFF0F5EF, light.surface to 0xFFF0F5EF,
+            light.surfaceContainer to 0xFFE7EFE4, light.onSurfaceVariant to 0xFF526555,
+            light.outlineVariant to 0xFFD2DFD0, campusBadgeColor(Campus.SHAHE) to 0xFF203F34,
             dark.primary to 0xFFA8D2BD, dark.primaryContainer to 0xFF254639,
-            dark.background to 0xFF141715, dark.surface to 0xFF191D1A,
-            dark.surfaceContainer to 0xFF232A24, dark.onSurfaceVariant to 0xFFB5BCB3,
-            dark.outlineVariant to 0xFF39423A)
+            dark.background to 0xFF121A16, dark.surface to 0xFF17211B,
+            dark.surfaceContainer to 0xFF203026, dark.onSurfaceVariant to 0xFFADBDAD,
+            dark.outlineVariant to 0xFF35473B)
         expected.forEach { (color, argb) -> assertEquals(argb.toInt(), color.toArgb()) }
     }
 

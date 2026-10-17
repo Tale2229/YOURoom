@@ -137,7 +137,7 @@ class PeriodStripSettingsUiTest {
 
     @Test fun settingsExposeOriginalDefaultBothStylesAndIndependentNumberToggle() {
         render(settings=true)
-        compose.onNodeWithTag("settings_strip_layout").performScrollTo()
+        compose.onNodeWithTag("settings_strip_layout").performScrollTo().performClick()
         compose.onNodeWithTag("settings_strip_EQUAL").assertIsSelected()
         compose.onNodeWithTag("settings_strip_TIME_PROPORTIONAL").performClick()
         assertEquals(PeriodStripLayout.TIME_PROPORTIONAL,preference.layout)

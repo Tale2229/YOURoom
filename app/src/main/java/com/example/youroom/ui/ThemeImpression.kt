@@ -1,10 +1,11 @@
 package com.example.youroom.ui
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -31,65 +32,69 @@ import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.*
 import com.example.youroom.domain.*
 import com.example.youroom.ui.theme.campusColorScheme
-import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.sin
 
-internal val ThemeMosaicProgress = SemanticsPropertyKey<Float>("ThemeMosaicProgress")
+internal val ThemePreviewSlideProgress = SemanticsPropertyKey<Float>("ThemePreviewSlideProgress")
 private data class ImpressionFrames(val from: ImageBitmap, val to: ImageBitmap)
 
 @Composable
 internal fun ThemeImpressionPicker(campus: Campus, tone: CampusTone, enabled: Boolean,
     onTone: (Campus, CampusTone) -> Unit) {
     val density = LocalDensity.current
-    val pixels = with(density) { 90.dp.roundToPx() }
+    val pixels = with(density) { 75.dp.roundToPx() }
     val night = MaterialTheme.colorScheme.surface.luminance() < .5f
     val latestAction by rememberUpdatedState(onTone)
-    // Campus/appearance recreation starts settled; only an explicit tone change waves.
+    val selectable = enabled && LocalThemePreview.current?.busy != true
+    // This small preview moves immediately; the page's separate wave is debounced.
     key(campus, pixels, night) {
         var displayedTone by remember { mutableStateOf(tone) }
         var frames by remember { impression(pixels,density,tone,night).let { mutableStateOf(ImpressionFrames(it,it)) } }
         val progress = remember { Animatable(1f) }
-        val paper = MaterialTheme.colorScheme.surface
+        var direction by remember { mutableIntStateOf(1) }
         LaunchedEffect(tone) {
             if(displayedTone == tone) return@LaunchedEffect
-            val frozen = bitmap(pixels,density) { mosaic(frames,progress.value,paper) }
+            val frozen = bitmap(pixels,density) { slide(frames,progress.value,direction) }
             val next = impression(pixels,density,tone,night)
+            direction = if(displayedTone.step(-1) == tone) -1 else 1
             displayedTone=tone
             progress.snapTo(0f)
             frames=ImpressionFrames(frozen,next)
-            progress.animateTo(1f,tween(ThemeMosaicWave.durationMillis,easing=LinearEasing))
+            progress.animateTo(1f,tween(220,easing=FastOutSlowInEasing))
             frames=ImpressionFrames(next,next)
         }
-        fun step(direction: Int) { if(enabled) latestAction(campus,tone.step(direction)) }
+        fun step(direction: Int) { if(selectable) latestAction(campus,tone.step(direction)) }
         Column(Modifier.fillMaxWidth().padding(top=22.dp,bottom=18.dp),horizontalAlignment=Alignment.CenterHorizontally,
             verticalArrangement=Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(18.dp)) {
-                ThemeArrow(false,enabled) { step(-1) }
-                Canvas(Modifier.size(90.dp).testTag("settings_theme_impression")
+                ThemeArrow(false,selectable,enabled) { step(-1) }
+                Box(Modifier.size(95.dp).testTag("settings_theme_frame")
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(14.dp))
+                    .padding(10.dp)) {
+                Canvas(Modifier.size(75.dp).testTag("settings_theme_impression")
                     .clip(RoundedCornerShape(4.dp))
                     .semantics {
                         contentDescription="${campus.label}配色预览"
                         stateDescription=tone.title
-                        this[ThemeMosaicProgress]=progress.value
+                        this[ThemePreviewSlideProgress]=progress.value
                         customActions=listOf(
-                            CustomAccessibilityAction("上一配色") { if(enabled) { step(-1);true } else false },
-                            CustomAccessibilityAction("下一配色") { if(enabled) { step(1);true } else false })
-                        if(!enabled) disabled()
+                            CustomAccessibilityAction("上一配色") { if(selectable) { step(-1);true } else false },
+                            CustomAccessibilityAction("下一配色") { if(selectable) { step(1);true } else false })
+                        if(!selectable) disabled()
                     }
                     .onKeyEvent {
-                        if(enabled && it.type==KeyEventType.KeyUp && it.key in listOf(Key.DirectionLeft,Key.DirectionRight)) {
+                        if(selectable && it.type==KeyEventType.KeyUp && it.key in listOf(Key.DirectionLeft,Key.DirectionRight)) {
                             step(if(it.key==Key.DirectionRight) 1 else -1);true
                         } else false
-                    }.focusable(enabled)
-                    .pointerInput(enabled,campus,tone) {
+                    }.focusable(selectable)
+                    .pointerInput(selectable,campus,tone) {
                         var traveled=0f
                         detectHorizontalDragGestures(onDragStart={traveled=0f},onDragCancel={traveled=0f},
-                            onDragEnd={ if(enabled && abs(traveled)>=24.dp.toPx()) step(if(traveled<0) 1 else -1) }) { change, dx ->
-                            if(enabled) { traveled+=dx;change.consume() }
+                            onDragEnd={ if(selectable && abs(traveled)>=24.dp.toPx()) step(if(traveled<0) 1 else -1) }) { change, dx ->
+                            if(selectable) { traveled+=dx;change.consume() }
                         }
-                    }) { mosaic(frames,progress.value,paper) }
-                ThemeArrow(true,enabled) { step(1) }
+                    }) { slide(frames,progress.value,direction) }
+                }
+                ThemeArrow(true,selectable,enabled) { step(1) }
             }
             Text(tone.title,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier=Modifier.testTag("settings_theme_name"))
@@ -98,11 +103,12 @@ internal fun ThemeImpressionPicker(campus: Campus, tone: CampusTone, enabled: Bo
 }
 
 @Composable
-private fun ThemeArrow(next: Boolean, enabled: Boolean, onClick: () -> Unit) {
+private fun ThemeArrow(next: Boolean, enabled: Boolean, showEnabled: Boolean, onClick: () -> Unit) {
     val interaction=remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale=animateFloatAsState(if(pressed) .82f else 1f,tween(90),label="theme arrow press")
-    val ink=MaterialTheme.colorScheme.primary.copy(alpha=if(enabled) 1f else .38f)
+    // Lock input without flashing between a captured bright arrow and a dim live one.
+    val ink=MaterialTheme.colorScheme.primary.copy(alpha=if(showEnabled) 1f else .38f)
     Box(Modifier.size(48.dp).testTag(if(next) "settings_theme_next" else "settings_theme_previous")
         .clickable(enabled=enabled,role=Role.Button,interactionSource=interaction,indication=null,onClick=onClick)
         .semantics { contentDescription=if(next) "下一配色" else "上一配色" },contentAlignment=Alignment.Center) {
@@ -154,23 +160,11 @@ private fun impression(pixels: Int,density: Density,tone: CampusTone,dark: Boole
     }
 }
 
-private fun DrawScope.mosaic(images: ImpressionFrames,progress: Float,paper: Color) {
+private fun DrawScope.slide(images: ImpressionFrames,progress: Float,direction: Int) {
     if(progress>=1f) { drawImage(images.to);return }
     if(progress<=0f) { drawImage(images.from);return }
-    drawRect(paper)
-    val side=size.width/ThemeMosaicWave.grid
-    for(row in 0 until ThemeMosaicWave.grid) for(column in 0 until ThemeMosaicWave.grid) {
-        val phase=ThemeMosaicWave.phase(progress,row,column)
-        val wave=sin(phase*PI).toFloat()
-        val blend=ThemeMosaicWave.blend(phase)
-        val x=column*side;val y=row*side
-        translate(x,y-3.dp.toPx()*wave) {
-            scale(1f-.035f*wave,pivot=Offset(side/2,side/2)) {
-                clipRect(0f,0f,side,side) {
-                    drawImage(images.from,Offset(-x,-y))
-                    drawImage(images.to,Offset(-x,-y),alpha=blend)
-                }
-            }
-        }
+    clipRect {
+        drawImage(images.from,Offset(-direction * size.width * progress,0f))
+        drawImage(images.to,Offset(direction * size.width * (1f-progress),0f))
     }
 }

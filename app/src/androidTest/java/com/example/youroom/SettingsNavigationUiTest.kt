@@ -102,8 +102,9 @@ class SettingsNavigationUiTest {
     @Test fun settingsKeepTheMainSurfaceBriefAndMoveDetailsIntoSecondarySheets() {
         render()
         compose.onNodeWithText("个人偏好").assertDoesNotExist()
-        compose.onNodeWithTag("settings_theme_impression").assertIsDisplayed().assertWidthIsEqualTo(90.dp)
-            .assertHeightIsEqualTo(90.dp)
+        compose.onNodeWithTag("settings_theme_impression").assertIsDisplayed().assertWidthIsEqualTo(75.dp)
+            .assertHeightIsEqualTo(75.dp)
+        compose.onNodeWithTag("settings_theme_frame").assertWidthIsEqualTo(95.dp).assertHeightIsEqualTo(95.dp)
         compose.onNodeWithTag("settings_list").performScrollToNode(hasTestTag("settings_planning"))
         compose.onNodeWithTag("settings_planning").performClick()
         compose.onNodeWithText("更多默认偏好待开放").assertIsDisplayed()

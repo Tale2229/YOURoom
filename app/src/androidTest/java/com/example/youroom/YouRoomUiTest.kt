@@ -143,7 +143,7 @@ class YouRoomUiTest {
     @Test fun stripSettingsApplyAcrossTabsAndDoNotRegenerateOrClearTheExistingPlan() {
         enterDemo()
         compose.onNodeWithTag("tab_settings").performClick()
-        compose.onNodeWithTag("settings_strip_layout").performScrollTo()
+        compose.onNodeWithTag("settings_strip_layout").performScrollTo().performClick()
         compose.onNodeWithTag("settings_strip_TIME_PROPORTIONAL").performClick()
         compose.onNodeWithTag("settings_strip_numbers").performScrollTo().performClick()
         compose.onNodeWithTag("tab_rooms").performClick()
@@ -187,7 +187,8 @@ class YouRoomUiTest {
         val execution=capturedModel.planning.executions.value.getValue(Campus.XITUCHENG)
         compose.onNodeWithTag("tab_settings").performClick()
         compose.onNodeWithTag("settings_theme_previous").performClick()
-        assertEquals(CampusTone.CLAY,capturedModel.state.value.appearance.westTone)
+        compose.waitUntil(5_000) { capturedModel.state.value.appearance.westTone == CampusTone.CLAY }
+        compose.waitForIdle()
         compose.onNodeWithTag("tab_rooms").performClick()
         compose.onNodeWithTag("slot_1").assertIsSelected()
         compose.onNodeWithTag("tab_planner").performClick()
@@ -196,7 +197,7 @@ class YouRoomUiTest {
         compose.onNodeWithTag("tab_settings").performClick()
         compose.onNodeWithTag("settings_theme_name").assertTextEquals("陶土")
         compose.onNodeWithTag("settings_theme_impression").assert(androidx.compose.ui.test.SemanticsMatcher.expectValue(
-            com.example.youroom.ui.ThemeMosaicProgress,1f))
+            com.example.youroom.ui.ThemePreviewSlideProgress,1f))
     }
 
     @Test fun plannerSwitchesCampusesWithoutKeepingWestRoomsOrTheRemovedRulesHeading() {

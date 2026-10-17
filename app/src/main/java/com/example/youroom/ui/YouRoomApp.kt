@@ -17,7 +17,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.youroom.ui.theme.YouRoomTheme
 import com.example.youroom.domain.PlanningDraft
 
 @Composable
@@ -38,7 +37,8 @@ fun YouRoomApp(model: YouRoomViewModel) {
         planningDate = state.today.toString(); planningDemo = state.demo
     }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { model.onForeground() }
-    YouRoomTheme(campus = state.campus, appearance = state.appearance) {
+    ThemeTransitionHost(state.campus, state.appearance, tab to state.showWorkspace,
+        enabled = state.showWorkspace, onTone = model::setCampusTone) { requestTone ->
         CompositionLocalProvider(LocalPeriodStripPreferences provides state.periodStrip) {
         RoomSearchFocusBoundary(Modifier.fillMaxSize()) {
         Scaffold(
@@ -66,7 +66,7 @@ fun YouRoomApp(model: YouRoomViewModel) {
                         "login" -> LoginScreen(state, model::login, { tab = 0; model.showDemo() },
                             { tab = 0; model.viewCache() }, onRememberedLogin = model::login)
                         else -> WorkspacePages(state, tab, model, goal, plans,
-                            { goal = it }, { model.generatePlanning(goal) }, ::editRoom, ::manageRoom)
+                            { goal = it }, { model.generatePlanning(goal) }, ::editRoom, ::manageRoom, requestTone)
                     }
                 }
             }
@@ -91,7 +91,8 @@ fun YouRoomApp(model: YouRoomViewModel) {
 private fun WorkspacePages(state: YouRoomState, tab: Int, model: YouRoomViewModel,
     goal: PlanningDraft, plans: Map<com.example.youroom.domain.Campus,PlanningExecution>,
     onGoal: (PlanningDraft) -> Unit, onGenerate: () -> Unit,
-    editRoom: (String, RoomEditor) -> Unit, manageRoom: (String?) -> Unit) {
+    editRoom: (String, RoomEditor) -> Unit, manageRoom: (String?) -> Unit,
+    onTone: (com.example.youroom.domain.Campus, com.example.youroom.domain.CampusTone) -> Unit) {
     val header = rememberCampusHeaderMotion(state.campus)
     val headerMoving by remember(header) { derivedStateOf { header.moving } }
     val savedPages = rememberSaveableStateHolder()
@@ -124,7 +125,7 @@ private fun WorkspacePages(state: YouRoomState, tab: Int, model: YouRoomViewMode
                         else -> SettingsScreen(state, manageRoom, model::clearProfile, model::logout,
                             model::setCampus, showHeader = false, sharedHeaderMoving = headerMoving, interactive = active,
                             onPeriodStrip = model::setPeriodStrip,
-                            onTone = model::setCampusTone, onDefaultCampus = model::setDefaultCampus)
+                            onTone = onTone, onDefaultCampus = model::setDefaultCampus)
                     }
                 }
             }

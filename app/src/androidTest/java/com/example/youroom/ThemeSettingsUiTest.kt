@@ -29,16 +29,21 @@ class ThemeSettingsUiTest {
     private var campus by mutableStateOf(Campus.XITUCHENG)
     private var appearance by mutableStateOf(AppearancePreferences())
     private var fontScale by mutableFloatStateOf(1f)
+    private var page by mutableIntStateOf(2)
+    private var rejectChanges = false
     private val changes = mutableListOf<Pair<Campus, CampusTone>>()
     private fun render() = compose.setContent {
         val density = LocalDensity.current
         CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
-            YouRoomTheme(campus = campus, appearance = appearance) { Surface {
+            ThemeTransitionHost(campus, appearance, page, true, { c, tone ->
+                changes += c to tone
+                if (!rejectChanges) appearance = appearance.withTone(c, tone)
+            }) { requestTone -> Surface {
                 Column {
                     Box(Modifier.weight(1f)) {
                         SettingsScreen(YouRoomState(initializing = false, campus = campus,
                             snapshot = DemoData.snapshot(campus), appearance = appearance), {}, {}, {}, { campus = it },
-                            onTone = { c, tone -> changes += c to tone; appearance = appearance.withTone(c, tone) },
+                            onTone = requestTone,
                             onDefaultCampus = { appearance = appearance.copy(defaultCampus = it) })
                     }
                     WorkspaceNavigation(2, {})
@@ -46,7 +51,17 @@ class ThemeSettingsUiTest {
             } }
         }
     }
-    private fun progress() = compose.onNodeWithTag("settings_theme_impression").fetchSemanticsNode().config[ThemeMosaicProgress]
+    private fun progress() = compose.onNodeWithTag("theme_transition_page").fetchSemanticsNode().config[ThemePageWaveProgress]
+    private fun settle(tone: CampusTone) {
+        compose.waitUntil(5_000) { appearance.tone(campus) == tone }
+        compose.waitForIdle()
+    }
+    private fun awaitWaveStarted() {
+        compose.waitUntil(5_000) {
+            compose.mainClock.advanceTimeByFrame()
+            progress() in .0001f.. .99f
+        }
+    }
     private fun shot(name: String) {
         val i = InstrumentationRegistry.getInstrumentation()
         i.waitForIdleSync()
@@ -60,14 +75,18 @@ class ThemeSettingsUiTest {
     @Test fun campusChoicesStayIndependentAndDefaultSelectorDoesNotChangeCurrentCampus() {
         render()
         compose.onNodeWithTag("settings_theme_next").assertWidthIsEqualTo(48.dp).performClick()
+        settle(CampusTone.PINE)
         assertEquals(CampusTone.PINE, appearance.westTone)
         assertEquals(CampusTone.PINE, appearance.shaheTone)
         compose.onNodeWithTag("settings_theme_next").performClick()
+        settle(CampusTone.SLATE)
         assertEquals(CampusTone.SLATE, appearance.westTone)
         compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeLeft() }
         assertEquals(Campus.SHAHE, campus)
         compose.onNodeWithTag("settings_theme_previous").performClick()
+        settle(CampusTone.SAND)
         assertEquals(CampusTone.SAND, appearance.shaheTone)
+        compose.onNodeWithTag("settings_default_campus").performScrollTo().performClick()
         compose.onNodeWithTag("settings_list").performScrollToNode(hasTestTag("settings_default_04"))
         compose.onNodeWithTag("settings_default_04").performClick().assertIsSelected()
         assertEquals(Campus.SHAHE, campus)
@@ -77,24 +96,41 @@ class ThemeSettingsUiTest {
         assertEquals(3, changes.size)
     }
 
-    @Test fun waveStartsOnlyOnColorChangeAndRapidChangesRetargetWithoutAQueue() {
+    @Test fun rapidSelectionsPreviewImmediatelyButOnlyTheLastQuietChoiceCommitsAndWavesTheWholePage() {
         appearance = AppearancePreferences(westTone = CampusTone.CLAY)
         render()
         assertEquals(1f, progress())
-        val initial = compose.onNodeWithTag("settings_theme_impression").captureToImage().toPixelMap()
+        val header = compose.onNodeWithTag("campus_header").fetchSemanticsNode().id
         compose.mainClock.autoAdvance = false
         compose.onNodeWithTag("settings_theme_next").performClick()
         compose.mainClock.advanceTimeBy(160)
-        assertTrue(progress() in .01f.. .99f)
-        val middle = compose.onNodeWithTag("settings_theme_impression").captureToImage().toPixelMap()
-        assertTrue((0 until initial.width).any { x -> (0 until initial.height).any { y -> initial[x,y] != middle[x,y] } })
-        shot("settings-wave-1.19")
+        compose.onNodeWithTag("settings_theme_name").assertTextEquals("砂岩")
+        assertEquals(CampusTone.CLAY, appearance.westTone); assertTrue(changes.isEmpty())
         compose.onNodeWithTag("settings_theme_next").performClick()
-        compose.mainClock.advanceTimeBy(80)
+        compose.mainClock.advanceTimeBy(160)
+        compose.onNodeWithTag("settings_theme_name").assertTextEquals("松绿")
+        assertTrue(changes.isEmpty()); assertEquals(1f, progress())
         compose.onNodeWithTag("settings_theme_previous").performClick()
-        compose.mainClock.advanceTimeBy(640)
+        compose.mainClock.advanceTimeBy(288)
+        assertTrue(changes.isEmpty())
+        compose.mainClock.advanceTimeBy(64)
+        compose.waitUntil(5_000) { changes.size == 1 }
+        awaitWaveStarted()
+        compose.mainClock.advanceTimeBy(384)
+        assertTrue(progress() in .01f.. .99f)
+        val middle = compose.onNodeWithTag("theme_transition_page").captureToImage().toPixelMap()
+        val night = InstrumentationRegistry.getInstrumentation().targetContext.resources.configuration.uiMode and
+            android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val before = campusColorScheme(Campus.XITUCHENG, night, CampusTone.CLAY).surface
+        val after = campusColorScheme(Campus.XITUCHENG, night, CampusTone.SAND).surface
+        assertEquals(after, middle[4,12])
+        assertEquals(before, middle[middle.width-4,middle.height-20])
+        shot("settings-page-wave-1.20.1")
+        compose.mainClock.advanceTimeBy(600)
         assertEquals(1f, progress())
         assertEquals(CampusTone.SAND, appearance.westTone)
+        assertEquals(listOf(Campus.XITUCHENG to CampusTone.SAND), changes)
+        assertEquals(header, compose.onNodeWithTag("campus_header").fetchSemanticsNode().id)
         compose.onNodeWithTag("settings_theme_impression").assert(SemanticsMatcher.expectValue(
             androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "砂岩"))
         compose.mainClock.autoAdvance = true
@@ -104,11 +140,84 @@ class ThemeSettingsUiTest {
         assertEquals(1f, progress())
     }
 
+    @Test fun returningToTheAppliedToneBeforeTheDelayDoesNotWriteOrWave() {
+        render(); compose.mainClock.autoAdvance=false
+        compose.onNodeWithTag("settings_theme_next").performClick()
+        compose.mainClock.advanceTimeBy(144)
+        compose.onNodeWithTag("settings_theme_previous").performClick()
+        compose.mainClock.advanceTimeBy(1600)
+        assertTrue(changes.isEmpty()); assertEquals(1f, progress())
+        assertEquals(CampusTone.SAND, appearance.westTone)
+        compose.mainClock.autoAdvance=true
+    }
+
+    @Test fun leavingThePageKeepsTheLastChoiceWithoutCarryingTheWaveIntoAnotherPageOrCampus() {
+        render(); compose.mainClock.autoAdvance=false
+        compose.onNodeWithTag("settings_theme_next").performClick()
+        compose.mainClock.advanceTimeBy(144)
+        compose.runOnIdle { page=0 }
+        compose.mainClock.advanceTimeBy(1600)
+        assertEquals(listOf(Campus.XITUCHENG to CampusTone.PINE),changes); assertEquals(1f,progress())
+        compose.runOnIdle { page=2;campus=Campus.SHAHE }
+        compose.mainClock.advanceTimeBy(1200)
+        assertEquals(1,changes.size); assertEquals(1f,progress())
+        compose.onNodeWithTag("settings_theme_name").assertTextEquals("松绿")
+        compose.mainClock.autoAdvance=true
+    }
+
+    @Test fun selectorButtonsAndArtworkAreLockedDuringTheWaveAndUnlockWithoutQueuingClicks() {
+        render()
+        compose.mainClock.autoAdvance=false
+        compose.onNodeWithTag("settings_theme_next").performClick()
+        compose.mainClock.advanceTimeBy(352)
+        compose.waitUntil(5_000) { changes.size==1 }
+        awaitWaveStarted()
+        compose.mainClock.advanceTimeBy(96)
+        assertTrue(progress() in .01f.. .99f)
+        compose.onNodeWithTag("settings_theme_previous").assertIsNotEnabled().performClick()
+        compose.onNodeWithTag("settings_theme_next").assertIsNotEnabled().performClick()
+        compose.onNodeWithTag("settings_theme_impression").assertIsNotEnabled()
+        compose.onNodeWithTag("settings_theme_impression").performTouchInput { swipeLeft() }
+        compose.mainClock.advanceTimeBy(64)
+        compose.onNodeWithTag("settings_theme_next").performClick()
+        compose.mainClock.advanceTimeBy(288)
+        assertEquals(1,changes.size)
+        compose.onNodeWithTag("settings_theme_name").assertTextEquals("松绿")
+        compose.mainClock.advanceTimeBy(1000)
+        compose.onNodeWithTag("settings_theme_previous").assertIsEnabled()
+        compose.onNodeWithTag("settings_theme_next").assertIsEnabled()
+        compose.onNodeWithTag("settings_theme_next").performClick()
+        compose.mainClock.autoAdvance=true
+        settle(CampusTone.SLATE)
+        assertEquals(listOf(Campus.XITUCHENG to CampusTone.PINE, Campus.XITUCHENG to CampusTone.SLATE),changes)
+        assertEquals(1f,progress())
+    }
+
+    @Test fun failedApplicationDoesNotRetryOnPageExitOrReplayOnReturn() {
+        rejectChanges=true
+        render(); compose.mainClock.autoAdvance=false
+        compose.onNodeWithTag("settings_theme_next").performClick()
+        compose.mainClock.advanceTimeBy(352)
+        compose.waitUntil(5_000) { changes.size==1 }
+        compose.runOnIdle { page=0 }
+        compose.mainClock.advanceTimeBy(1200)
+        assertEquals(1,changes.size)
+        assertEquals(CampusTone.SAND,appearance.westTone)
+        assertEquals(1f,progress())
+        compose.runOnIdle { page=2 }
+        compose.mainClock.advanceTimeBy(1200)
+        assertEquals(1,changes.size)
+        compose.onNodeWithTag("settings_theme_name").assertTextEquals("砂岩")
+        compose.mainClock.autoAdvance=true
+    }
+
     @Test fun artworkCanSwipeBothWaysAndAllPalettesFitWithoutClippingAtLargeFonts() {
         render()
         compose.onNodeWithTag("settings_theme_impression").performTouchInput { swipeLeft() }
+        settle(CampusTone.PINE)
         assertEquals(CampusTone.PINE, appearance.westTone)
         compose.onNodeWithTag("settings_theme_impression").performTouchInput { swipeRight() }
+        settle(CampusTone.SAND)
         assertEquals(CampusTone.SAND, appearance.westTone)
         for (c in Campus.entries) for (tone in CampusTone.entries) {
             compose.runOnIdle { campus = c; appearance = appearance.withTone(c, tone) }
@@ -116,14 +225,15 @@ class ThemeSettingsUiTest {
             compose.onNodeWithTag("settings_theme_impression").assertIsDisplayed()
             compose.onNodeWithTag("settings_theme_previous").assertIsDisplayed()
             compose.onNodeWithTag("settings_theme_next").assertIsDisplayed()
-            shot("settings-${c.dataKey}-${tone.id}-1.19")
+            shot("settings-${c.dataKey}-${tone.id}-1.20.2")
         }
         compose.runOnIdle { fontScale = 1.5f }
+        compose.onNodeWithTag("settings_default_campus").performScrollTo().performClick()
         compose.onNodeWithTag("settings_list").performScrollToNode(hasTestTag("settings_default_04"))
         compose.onNodeWithTag("settings_default_04").assertIsDisplayed().performClick()
         compose.onNodeWithTag("settings_list").performScrollToNode(hasTestTag("settings_logout"))
         compose.onNodeWithTag("settings_logout").assertIsDisplayed()
-        shot("settings-large-text-1.19")
+        shot("settings-large-text-1.20.2")
     }
 
     @Test fun realDataStoreRestoresBothPalettesAndDefaultCampusWithoutTouchingMarksOrFilters() = runBlocking {
