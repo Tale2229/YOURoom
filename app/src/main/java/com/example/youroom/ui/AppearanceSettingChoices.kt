@@ -14,6 +14,9 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -22,14 +25,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.youroom.data.DemoData
 import com.example.youroom.domain.*
 
@@ -59,7 +61,7 @@ internal fun AppearanceSettingChoices(state: YouRoomState, enabled: Boolean,
                     "settings_default_${campus.dataKey}", { onCampus(campus) })
             }
         }
-        Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).testTag("settings_strip_numbers")
+        Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("settings_strip_numbers")
             .clickable(enabled = enabled, role = Role.Switch, interactionSource = remember { MutableInteractionSource() },
                 indication = null) { onStrip(state.periodStrip.copy(showNumbers = !state.periodStrip.showNumbers)) },
             verticalAlignment = Alignment.CenterVertically) {
@@ -80,25 +82,18 @@ private fun SettingsChoiceGroup(title: String, summary: String, tag: String, ena
         tween(180, easing = FastOutSlowInEasing), label = "$tag disclosure")
     val ink = MaterialTheme.colorScheme.onSurfaceVariant
     Column {
-        Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).testTag(tag)
+        Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag(tag)
             .clickable(enabled = enabled, role = Role.Button,
                 interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onToggle)
             .semantics { stateDescription = if (expanded) "已展开" else "已收起" }
             .padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-            Text(summary, Modifier.testTag("${tag}_summary"), style = MaterialTheme.typography.bodySmall, color = ink, maxLines = 1,
+            Text(summary, Modifier.testTag("${tag}_summary"), style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp), color = ink, maxLines = 1,
                 overflow = TextOverflow.Ellipsis)
-            Canvas(Modifier.size(18.dp).testTag("${tag}_arrow")
+            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, null, Modifier.size(18.dp).testTag("${tag}_arrow")
                 .semantics { this[SettingsDisclosureRotation] = rotation.value }
-                .graphicsLayer { rotationZ = rotation.value }) {
-                val path = Path().apply {
-                    moveTo(size.width * .68f, size.height * .2f)
-                    lineTo(size.width * .35f, size.height * .5f)
-                    lineTo(size.width * .68f, size.height * .8f)
-                }
-                drawPath(path, ink, style = Stroke(1.5.dp.toPx(), cap = StrokeCap.Round))
-            }
+                .graphicsLayer { rotationZ = rotation.value }, tint = ink)
         }
         AnimatedVisibility(expanded, enter = expandVertically(tween(180)) + fadeIn(tween(140)),
             exit = shrinkVertically(tween(160)) + fadeOut(tween(100))) {
@@ -118,7 +113,7 @@ private fun SettingOption(title: String, selected: Boolean, enabled: Boolean, ta
             interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onSelect)
         .padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text(title, Modifier.widthIn(min = 60.dp), style = MaterialTheme.typography.bodyMedium)
+        Text(title, Modifier.widthIn(min = 60.dp), style = MaterialTheme.typography.bodySmall)
         if (preview != null) preview(Modifier.weight(1f).height(5.dp)) else Spacer(Modifier.weight(1f))
         Canvas(Modifier.size(20.dp).testTag("${tag}_radio")) {
             drawCircle(if (selected) ink else outline, size.minDimension / 2 - 1.dp.toPx(),

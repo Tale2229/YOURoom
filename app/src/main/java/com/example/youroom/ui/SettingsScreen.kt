@@ -69,7 +69,7 @@ private fun SettingsContent(state: YouRoomState, onRoom: (String?) -> Unit,
         if (state.demo) item { Text("演示模式", Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp),
             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         item { AppearanceSettingChoices(state, interactive, onPeriodStrip, onDefaultCampus) }
-        item { HorizontalDivider(Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) }
+        item { HorizontalDivider(Modifier.padding(horizontal = 24.dp, vertical = 6.dp)) }
         item { SettingsEntry("教室标记", Icons.Outlined.StarBorder, "settings_room_marks", interactive,
             value = profiles.size.toString()) { sheet = "marks" } }
         item { SettingsEntry("规划偏好", Icons.Outlined.Tune, "settings_planning", interactive) { sheet = "planning" } }
@@ -121,14 +121,14 @@ private fun SettingsContent(state: YouRoomState, onRoom: (String?) -> Unit,
 @Composable
 private fun SettingsEntry(title: String, icon: ImageVector, tag: String, enabled: Boolean,
     value: String? = null, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).testTag(tag)
+    Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag(tag)
         .clickable(enabled = enabled, role = Role.Button, interactionSource = remember { MutableInteractionSource() },
             indication = null, onClick = onClick).padding(horizontal = 24.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         Icon(icon, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
         Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
         if (value != null) Text(value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-        Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, Modifier.size(18.dp),
+        Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, Modifier.size(18.dp).testTag("${tag}_arrow"),
             tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

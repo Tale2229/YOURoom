@@ -225,7 +225,7 @@ class ThemeSettingsUiTest {
             compose.onNodeWithTag("settings_theme_impression").assertIsDisplayed()
             compose.onNodeWithTag("settings_theme_previous").assertIsDisplayed()
             compose.onNodeWithTag("settings_theme_next").assertIsDisplayed()
-            shot("settings-${c.dataKey}-${tone.id}-1.20.2")
+            shot("settings-${c.dataKey}-${tone.id}-1.20.3")
         }
         compose.runOnIdle { fontScale = 1.5f }
         compose.onNodeWithTag("settings_default_campus").performScrollTo().performClick()
@@ -233,7 +233,7 @@ class ThemeSettingsUiTest {
         compose.onNodeWithTag("settings_default_04").assertIsDisplayed().performClick()
         compose.onNodeWithTag("settings_list").performScrollToNode(hasTestTag("settings_logout"))
         compose.onNodeWithTag("settings_logout").assertIsDisplayed()
-        shot("settings-large-text-1.20.2")
+        shot("settings-large-text-1.20.3")
     }
 
     @Test fun realDataStoreRestoresBothPalettesAndDefaultCampusWithoutTouchingMarksOrFilters() = runBlocking {

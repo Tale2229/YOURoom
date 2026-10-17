@@ -33,9 +33,14 @@ import androidx.compose.ui.unit.*
 import com.example.youroom.domain.*
 import com.example.youroom.ui.theme.campusColorScheme
 import kotlin.math.abs
+import kotlin.math.tan
 
 internal val ThemePreviewSlideProgress = SemanticsPropertyKey<Float>("ThemePreviewSlideProgress")
 private data class ImpressionFrames(val from: ImageBitmap, val to: ImageBitmap)
+private val ThemeArrowHeight = 30.dp
+private val ThemeArrowWidth = (ThemeArrowHeight.value / (2f * tan(Math.toRadians(50.0)).toFloat())).dp
+// The tips point away from the frame; measure their 35dp distance, not the hit boxes' gap.
+private val ThemeArrowFrameGap = 35.dp - (48.dp + ThemeArrowWidth) / 2
 
 @Composable
 internal fun ThemeImpressionPicker(campus: Campus, tone: CampusTone, enabled: Boolean,
@@ -65,10 +70,10 @@ internal fun ThemeImpressionPicker(campus: Campus, tone: CampusTone, enabled: Bo
         fun step(direction: Int) { if(selectable) latestAction(campus,tone.step(direction)) }
         Column(Modifier.fillMaxWidth().padding(top=22.dp,bottom=18.dp),horizontalAlignment=Alignment.CenterHorizontally,
             verticalArrangement=Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(18.dp)) {
+            Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(ThemeArrowFrameGap)) {
                 ThemeArrow(false,selectable,enabled) { step(-1) }
                 Box(Modifier.size(95.dp).testTag("settings_theme_frame")
-                    .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(14.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha=.3f), RoundedCornerShape(14.dp))
                     .padding(10.dp)) {
                 Canvas(Modifier.size(75.dp).testTag("settings_theme_impression")
                     .clip(RoundedCornerShape(4.dp))
@@ -112,11 +117,13 @@ private fun ThemeArrow(next: Boolean, enabled: Boolean, showEnabled: Boolean, on
     Box(Modifier.size(48.dp).testTag(if(next) "settings_theme_next" else "settings_theme_previous")
         .clickable(enabled=enabled,role=Role.Button,interactionSource=interaction,indication=null,onClick=onClick)
         .semantics { contentDescription=if(next) "下一配色" else "上一配色" },contentAlignment=Alignment.Center) {
-        Canvas(Modifier.size(14.dp).graphicsLayer { scaleX=scale.value;scaleY=scale.value }) {
+        Canvas(Modifier.size(ThemeArrowWidth, ThemeArrowHeight)
+            .testTag(if(next) "settings_theme_next_triangle" else "settings_theme_previous_triangle")
+            .graphicsLayer { scaleX=scale.value;scaleY=scale.value }) {
             val triangle=Path().apply {
-                moveTo(if(next) size.width*.8f else size.width*.2f,size.height*.5f)
-                lineTo(if(next) size.width*.2f else size.width*.8f,size.height*.15f)
-                lineTo(if(next) size.width*.2f else size.width*.8f,size.height*.85f)
+                moveTo(if(next) size.width else 0f,size.height*.5f)
+                lineTo(if(next) 0f else size.width,0f)
+                lineTo(if(next) 0f else size.width,size.height)
                 close()
             }
             drawPath(triangle,ink)

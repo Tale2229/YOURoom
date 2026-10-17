@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
@@ -22,6 +23,8 @@ import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 import java.io.File
+import kotlin.math.atan
+import kotlin.math.tan
 
 class AppearanceSettingChoicesUiTest {
     @get:Rule val compose = createComposeRule()
@@ -64,7 +67,70 @@ class AppearanceSettingChoicesUiTest {
         assertEquals(thickness, image.top-frame.top, 1f); assertEquals(thickness, frame.bottom-image.bottom, 1f)
         val pixels = compose.onNodeWithTag("settings_theme_frame").captureToImage().toPixelMap()
         assertNotEquals(pixels[0,0], pixels[5,pixels.height/2])
-        shot("settings-compact-collapsed-1.20.2")
+        shot("settings-compact-collapsed-1.20.4")
+    }
+
+    @Test fun themeFrameIs70PercentTransparentAndArrowTipsAre35dpAwayWith100DegreeApexes() {
+        render()
+        val night = InstrumentationRegistry.getInstrumentation().targetContext.resources.configuration.uiMode and
+            android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val expectedWidth = (30f / (2 * tan(Math.toRadians(50.0)).toFloat())).dp
+        for (target in Campus.entries) {
+            compose.runOnIdle { campus = target }
+            compose.waitForIdle()
+            val colors = campusColorScheme(target, night, appearance.tone(target))
+            val pixels = compose.onNodeWithTag("settings_theme_frame").captureToImage().toPixelMap()
+            val expected = colors.surfaceContainerHighest.copy(alpha = .3f).compositeOver(colors.surface)
+            val actual = pixels[5, pixels.height / 2]
+            assertEquals(expected.red, actual.red, .015f)
+            assertEquals(expected.green, actual.green, .015f)
+            assertEquals(expected.blue, actual.blue, .015f)
+            val frame = compose.onNodeWithTag("settings_theme_frame").fetchSemanticsNode().boundsInRoot
+            val clearance = with(compose.density) { 35.dp.toPx() }
+            for (next in listOf(false, true)) {
+                val tag = if (next) "settings_theme_next" else "settings_theme_previous"
+                val hit = compose.onNodeWithTag(tag).assertWidthIsEqualTo(48.dp).assertHeightIsEqualTo(48.dp)
+                    .fetchSemanticsNode().boundsInRoot
+                assertTrue(if (next) hit.left >= frame.right else hit.right <= frame.left)
+                val triangle = compose.onNodeWithTag("${tag}_triangle", true)
+                    .assertHeightIsEqualTo(30.dp).assertWidthIsEqualTo(expectedWidth).fetchSemanticsNode().boundsInRoot
+                assertEquals(clearance, if (next) triangle.right - frame.right else frame.left - triangle.left, 1f)
+                assertEquals(frame.center.y, triangle.center.y, 1f)
+                assertEquals(100.0, Math.toDegrees(2 * atan((triangle.height / (2 * triangle.width)).toDouble())), 3.0)
+            }
+        }
+        assertEquals(0, writes)
+    }
+
+    @Test fun rowsAreCompactChevronsMatchAboutAndOnlyChoiceLabelsGetSmaller() {
+        render()
+        val tags = listOf("settings_strip_layout", "settings_default_campus", "settings_strip_numbers",
+            "settings_room_marks", "settings_planning", "settings_about")
+        tags.forEach { tag ->
+            compose.onNodeWithTag("settings_list").performScrollToNode(hasTestTag(tag))
+            compose.onNodeWithTag(tag).assertHeightIsEqualTo(52.dp)
+        }
+        for (tag in listOf("settings_about", "settings_strip_layout", "settings_default_campus")) {
+            compose.onNodeWithTag("settings_list").performScrollToNode(hasTestTag(tag))
+            compose.onNodeWithTag("${tag}_arrow", true).assertWidthIsEqualTo(18.dp).assertHeightIsEqualTo(18.dp)
+        }
+        for (tag in listOf("settings_strip_layout", "settings_default_campus")) {
+            compose.onNodeWithTag(tag).performScrollTo()
+            val summary = mutableListOf<TextLayoutResult>()
+            compose.onNodeWithTag("${tag}_summary", true)
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(summary) }
+            assertEquals(11.sp, summary.single().layoutInput.style.fontSize)
+            compose.onNodeWithTag(tag).performClick()
+        }
+        for ((tag, title) in listOf("settings_strip_EQUAL" to "等间距", "settings_strip_TIME_PROPORTIONAL" to "等比例",
+            "settings_default_01" to "西土城", "settings_default_04" to "沙河")) {
+            val text = mutableListOf<TextLayoutResult>()
+            compose.onNode(hasText(title) and hasAnyAncestor(hasTestTag(tag)), true).performScrollTo()
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(text) }
+            compose.onNodeWithTag(tag).assertHeightIsAtLeast(48.dp)
+            assertEquals(12.sp, text.single().layoutInput.style.fontSize)
+        }
+        assertEquals(0, writes)
     }
 
     @Test fun groupsStartCollapsedAreOrderedBeforeNumbersAndAllSettingTitlesUseTheSameFont() {
@@ -110,7 +176,7 @@ class AppearanceSettingChoicesUiTest {
         assertEquals(Campus.XITUCHENG, campus)
         compose.onNodeWithTag("settings_default_campus_summary", true).assertTextEquals("沙河")
         assertEquals(2, writes)
-        shot("settings-compact-expanded-1.20.2")
+        shot("settings-compact-expanded-1.20.4")
     }
 
     @Test fun bothChevronButtonsRotateCounterclockwise90DegreesSmoothlyAndReverseInPlace() {
@@ -157,6 +223,6 @@ class AppearanceSettingChoicesUiTest {
         assertTrue(strip.showNumbers)
         compose.onNodeWithTag("settings_list").performScrollToNode(hasTestTag("settings_logout"))
         compose.onNodeWithTag("settings_logout").assertIsDisplayed()
-        shot("settings-compact-large-text-1.20.2")
+        shot("settings-compact-large-text-1.20.4")
     }
 }
