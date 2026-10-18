@@ -27,7 +27,7 @@ private class TagGeometry {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun TagEditor(state: YouRoomState, onFilters: (SearchFilters) -> Unit, onAdd: (String) -> Unit,
+fun TagEditor(state: YOURoomState, onFilters: (SearchFilters) -> Unit, onAdd: (String) -> Unit,
     onRemove: (String) -> Unit, onOrder: (List<String>) -> Unit,
     showFavorite: Boolean = true, manageCatalog: Boolean = true,
     editing: Boolean = false) {

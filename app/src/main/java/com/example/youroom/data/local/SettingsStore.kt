@@ -13,6 +13,8 @@ import kotlinx.serialization.json.*
 import java.io.IOException
 
 interface FilterSettings {
+    val planningPreferences: Flow<PlanningPreferences> get() = kotlinx.coroutines.flow.flowOf(PlanningPreferences())
+    suspend fun savePlanningPreferences(value: PlanningPreferences) { error("Planning preference storage is unavailable") }
     val appearance: Flow<AppearancePreferences> get() = kotlinx.coroutines.flow.flowOf(AppearancePreferences())
     suspend fun saveAppearance(value: AppearancePreferences) { error("Appearance storage is unavailable") }
     val periodStrip: Flow<PeriodStripPreferences>
@@ -60,15 +62,19 @@ class SharedFilterMigration : DataMigration<Preferences> {
     override suspend fun cleanUp() = Unit
 }
 
-private val Context.youRoomSettings by preferencesDataStore(name = "youroom_settings",
+private val Context.yourRoomSettings by preferencesDataStore(name = "youroom_settings",
     produceMigrations = { listOf(CampusFilterMigration(), SharedFilterMigration(), TagCatalogMigration()) })
 
 class SettingsStore internal constructor(private val store: androidx.datastore.core.DataStore<Preferences>) : FilterSettings {
-    constructor(context: Context) : this(context.youRoomSettings)
+    constructor(context: Context) : this(context.yourRoomSettings)
     private val values = store.data.catch { error ->
         if (error is IOException) emit(emptyPreferences()) else throw error
     }
     override val filters = values.map(SharedFilterPreferences::read).distinctUntilChanged()
+    override val planningPreferences = values.map(PlanningPreferenceKeys::read).distinctUntilChanged()
+    override suspend fun savePlanningPreferences(value: PlanningPreferences) {
+        store.edit { PlanningPreferenceKeys.write(it, value) }
+    }
     override val appearance = values.map(AppearancePreferenceKeys::read).distinctUntilChanged()
     override suspend fun saveAppearance(value: AppearancePreferences) {
         store.edit { AppearancePreferenceKeys.write(it, value) }

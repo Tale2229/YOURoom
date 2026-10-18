@@ -22,7 +22,7 @@ class ControlRefinementUiTest {
     private val snapshot=DemoData.snapshot()
     private val room=snapshot.classrooms.first()
     private var profile by mutableStateOf(room.emptyProfile())
-    private var state by mutableStateOf(YouRoomState(initializing=false,demo=true,snapshot=snapshot,today=snapshot.queryDate))
+    private var state by mutableStateOf(YOURoomState(initializing=false,demo=true,snapshot=snapshot,today=snapshot.queryDate))
     private var closed=false
     private fun shot(name: String) {
         compose.waitForIdle()
@@ -35,7 +35,7 @@ class ControlRefinementUiTest {
     }
 
     @Test fun filterButtonUsesTheSameOpenCornerGeometryAsAPeriod() {
-        compose.setContent { YouRoomTheme { Surface {
+        compose.setContent { YOURoomTheme { Surface {
             SlotPicker(Campus.XITUCHENG,snapshot.queryDate,true,SearchFilters(),snapshot.slots,{})
         } } }
         val period=compose.onNodeWithTag("slot_face_1",true).captureToImage().toPixelMap()
@@ -50,7 +50,7 @@ class ControlRefinementUiTest {
     }
 
     @Test fun filterFooterHasOneCenteredPlusAndKeepsAddingEditingAndDeletion() {
-        compose.setContent { YouRoomTheme {
+        compose.setContent { YOURoomTheme {
             FilterDialog(state, {closed=true},{state=state.copy(filters=it)},
                 { name -> state=state.copy(tagCatalog=state.tagCatalog.added(name)) },
                 {name -> state=state.copy(tagCatalog=state.tagCatalog.deleted(name))},{})
@@ -69,7 +69,7 @@ class ControlRefinementUiTest {
     }
 
     @Test fun roomTagFooterCentersPlusAndKeepsTogglingAndResettingTags() {
-        compose.setContent { YouRoomTheme {
+        compose.setContent { YOURoomTheme {
             RoomTagsDialog(RoomMatch(room,profile,emptySet()),state,{closed=true},{profile=it},{},{},{})
         } }
         assertFooter("reset_room_tags","close_room_tags")
@@ -84,7 +84,7 @@ class ControlRefinementUiTest {
     }
 
     @Test fun noteLabelFloatsOnFocusAndTrashAndCountStayInsideTheFrame() {
-        compose.setContent { YouRoomTheme { RoomNoteDialog(RoomMatch(room,profile,emptySet()),{closed=true},{profile=it}) } }
+        compose.setContent { YOURoomTheme { RoomNoteDialog(RoomMatch(room,profile,emptySet()),{closed=true},{profile=it}) } }
         val field=compose.onNodeWithTag("room_note_frame").fetchSemanticsNode().boundsInRoot
         val label=compose.onNodeWithTag("room_note_label",true).assertTextEquals("个人备注").fetchSemanticsNode().boundsInRoot
         val count=compose.onNodeWithTag("room_note_count",true).assertTextEquals("0/20").fetchSemanticsNode().boundsInRoot
@@ -113,7 +113,7 @@ class ControlRefinementUiTest {
     }
 
     @Test fun stopGlyphGrowsButAllFourVisibleFacesRemainSquare() {
-        compose.setContent { YouRoomTheme { Surface {
+        compose.setContent { YOURoomTheme { Surface {
             PlanningTimeControls(PlanningDraft(),true,true,true,true,0,true,{},{},{},{},{},{},{},{},true,{})
         } } }
         for(tag in listOf("planner_add_period","planner_expected","planner_adjust","planner_generate"))

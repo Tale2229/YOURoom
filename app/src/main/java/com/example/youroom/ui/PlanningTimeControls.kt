@@ -3,11 +3,15 @@ package com.example.youroom.ui
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.keyframes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
@@ -15,6 +19,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,7 +37,10 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.example.youroom.domain.PlanningDraft
+import com.example.youroom.ui.theme.themeRoles
 import kotlin.math.roundToInt
+
+internal const val PlanningWheelScale = .85f
 
 /** One measured editor: scale the entire wheels (including titles), not just the digits.
  * Compact 40dp targets stay separate; the last face ends 5 physical pixels below the wheels. */
@@ -44,7 +52,7 @@ internal fun PlanningTimeControls(goal: PlanningDraft, addEnabled: Boolean, expe
     onAdd: () -> Unit, onExpected: () -> Unit, onFlexible: () -> Unit, onGenerate: () -> Unit,
     cancelEnabled: Boolean, onCancel: () -> Unit,
     addAccepted: Boolean = false, addRejection: Int = 0, expectedAccepted: Boolean = false,
-    onFullAdd: (() -> Unit)? = null) {
+    onFullAdd: (() -> Unit)? = null, onImport: (() -> Unit)? = null, importing: Boolean = false) {
     val density = LocalDensity.current
     val shake = remember { Animatable(0f) }
     LaunchedEffect(addRejection) {
@@ -55,7 +63,7 @@ internal fun PlanningTimeControls(goal: PlanningDraft, addEnabled: Boolean, expe
         })
     }
     Layout(modifier = Modifier.fillMaxWidth().testTag("planner_time_controls"), content = {
-        CompositionLocalProvider(LocalDensity provides Density(density.density * .85f, density.fontScale)) {
+        CompositionLocalProvider(LocalDensity provides Density(density.density * PlanningWheelScale, density.fontScale)) {
             Row(Modifier.testTag("planner_wheels"), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 WheelTimePicker("开始时间", goal.start, "planner_start", Modifier.weight(1f),
                     onMoving = onStartMoving, viewportRows = 3.5f, onTime = onStart)
@@ -67,8 +75,11 @@ internal fun PlanningTimeControls(goal: PlanningDraft, addEnabled: Boolean, expe
             PlanningRailAction("添加时段", "planner_add_period", addEnabled && !addAccepted,
                 confirmation = if(addAccepted) "已添加" else null, briefFeedback = true, onClick = onAdd,
                 onDisabledClick=if(!addAccepted) onFullAdd else null,
+                onLongClick = onImport,
                 modifier = Modifier.graphicsLayer { translationX = shake.value * 4.dp.toPx() }) {
-                Icon(Icons.Outlined.Add, null, Modifier.size(22.dp))
+                Crossfade(importing, animationSpec = tween(120), label = "add import icon") { active ->
+                    Icon(if (active) Icons.Outlined.FileDownload else Icons.Outlined.Add, null, Modifier.size(22.dp))
+                }
             }
             Box {
                 PlanningRailAction("期望教室", "planner_expected", expectedEnabled && !expectedAccepted,
@@ -77,7 +88,7 @@ internal fun PlanningTimeControls(goal: PlanningDraft, addEnabled: Boolean, expe
                 }
                 if (expectedCount > 0) Badge(Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-3).dp)
                     .testTag("planner_expected_badge").semantics(mergeDescendants = true) {},
-                    containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) {
+                    containerColor = themeRoles().favorite, contentColor = MaterialTheme.colorScheme.onPrimary) {
                     Text(expectedCount.toString())
                 }
             }
@@ -110,28 +121,35 @@ internal fun PlanningTimeControls(goal: PlanningDraft, addEnabled: Boolean, expe
 }
 
 @Composable
-private fun PlanningRailAction(label: String, tag: String, enabled: Boolean, selected: Boolean = false,
+internal fun PlanningRailAction(label: String, tag: String, enabled: Boolean, selected: Boolean = false,
     toggle: Boolean = false, primary: Boolean = false, pending: Boolean = false, confirmation: String? = null,
     briefFeedback: Boolean = false,
     onClick: () -> Unit, modifier: Modifier = Modifier, onDisabledClick: (() -> Unit)?=null,
+    onLongClick: (() -> Unit)? = null,
     icon: @Composable () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(if (onLongClick != null && pressed) .9f else 1f, tween(100), label = "import press")
     val colors = MaterialTheme.colorScheme
-    val background by animateColorAsState(if (primary) colors.primary.copy(alpha = if (enabled || pending) 1f else .38f)
-        else if (selected || confirmation!=null) colors.primaryContainer else colors.surface,
+    val roles = themeRoles()
+    val background by animateColorAsState(if (primary) roles.launch.copy(alpha = if (enabled || pending) 1f else .38f)
+        else if (selected || confirmation!=null) roles.enabledOption else roles.planningControl,
         tween(if(briefFeedback) { if(confirmation!=null) 16 else 24 } else 100), label = "planning action state")
     val action = if (toggle) Modifier.toggleable(selected, enabled = enabled, role = Role.Checkbox,
         interactionSource = interaction, indication = null, onValueChange = { onClick() })
-    else Modifier.clickable(enabled = enabled || onDisabledClick!=null, role = Role.Button, interactionSource = interaction,
+    else Modifier.combinedClickable(enabled = enabled || onDisabledClick!=null || onLongClick!=null,
+        onLongClick = onLongClick, onLongClickLabel = if (onLongClick != null) "导入时段组合" else null,
+        role = Role.Button, interactionSource = interaction,
         indication = null, onClick = { if(enabled) onClick() else onDisabledClick?.invoke() })
     Box(modifier.size(40.dp).testTag(tag).then(action).semantics {
         contentDescription = label
-        if(!enabled) disabled()
+        if(!enabled && onLongClick == null) disabled()
+        if(!enabled && onLongClick != null) stateDescription = "无法继续添加，可长按导入时段组合"
         if (confirmation!=null) stateDescription = confirmation else if (pending) stateDescription = "计算中"
     }, contentAlignment = Alignment.Center) {
-        Surface(Modifier.size(36.dp)
+        Surface(Modifier.size(36.dp).graphicsLayer { scaleX = pressScale; scaleY = pressScale }
             .testTag("${tag}_face"), shape = MaterialTheme.shapes.small,
-            color = background, contentColor = if (primary) colors.onPrimary else if (enabled || confirmation!=null) colors.primary
+            color = background, contentColor = if (primary) roles.onLaunch else if ((selected || confirmation!=null) && (enabled || confirmation!=null)) roles.onEnabledOption else if (enabled) colors.primary
                 else colors.onSurface.copy(alpha = .38f),
             border = if (primary || selected || confirmation!=null) null else BorderStroke(1.dp, colors.outlineVariant)) {
             Box(contentAlignment = Alignment.Center) { icon() }

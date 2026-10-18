@@ -12,7 +12,8 @@ data class PlanningInput(val snapshot: ClassroomSnapshot, val campus: Campus, va
     val profiles: Map<String,RoomProfile>, val goal: PlanningGoal)
 
 data class PlanningExecution(val id: Long, val input: PlanningInput, val result: PlanningResult? = null,
-    val selectedOption: Int = 0, val cancelled: Boolean = false) {
+    val selectedOption: Int = 0, val cancelled: Boolean = false,
+    val defaultDirection: PlanningDirection = PlanningDirection.BALANCED) {
     val pending get() = result == null && !cancelled
 }
 
@@ -29,7 +30,7 @@ class PlanningSession(private val scope: CoroutineScope,
     private var generation = 0L
 
     /** This method is called only by the explicit Generate button, never by a state observer. */
-    fun generate(state: YouRoomState, draft: PlanningDraft): Boolean {
+    fun generate(state: YOURoomState, draft: PlanningDraft): Boolean {
         val snapshot = state.campusSnapshot?.takeIf { it.isCurrentOn(state.today) } ?: return false
         val goal = PlanningSchedule.confirmedGoal(draft) ?: return false
         val frozen = snapshot.copy(slots = snapshot.slots.map { it.copy(classrooms = it.classrooms.toList()) })
@@ -37,8 +38,9 @@ class PlanningSession(private val scope: CoroutineScope,
         val input = PlanningInput(frozen,state.campus,state.today,profiles,
             goal.copy(savedWindows = goal.savedWindows.toList(),expectedRooms = goal.expectedRooms.toSet()))
         val id = ++generation
+        val defaultDirection = state.planningPreferences.forCampus(state.campus).direction
         jobs.remove(state.campus)?.cancel()
-        mutableExecutions.update { it + (input.campus to PlanningExecution(id,input)) }
+        mutableExecutions.update { it + (input.campus to PlanningExecution(id,input, defaultDirection = defaultDirection)) }
         jobs[input.campus] = scope.launch {
             val result = try { withContext(dispatcher) { calculate(input) } }
             catch (error: CancellationException) { throw error }
@@ -46,7 +48,9 @@ class PlanningSession(private val scope: CoroutineScope,
             withContext(Dispatchers.Main.immediate) {
                 mutableExecutions.update { current ->
                     if (current[input.campus]?.let { it.id == id && it.pending } == true)
-                        current + (input.campus to PlanningExecution(id,input,result)) else current
+                        current + (input.campus to result.defaultSelection(defaultDirection).let {
+                            PlanningExecution(id,input,result, selectedOption = it.index, defaultDirection = it.direction)
+                        }) else current
                 }
             }
         }

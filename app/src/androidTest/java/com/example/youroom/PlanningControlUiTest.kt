@@ -9,7 +9,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.example.youroom.data.DemoData
 import com.example.youroom.domain.*
 import com.example.youroom.ui.*
-import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.ui.theme.YOURoomTheme
 import java.io.File
 import java.time.Clock
 import java.time.Instant
@@ -39,8 +39,8 @@ class PlanningControlUiTest {
         SideEffect { session=holder }
         val executions by holder.executions.collectAsState()
         val snapshot=if (campus==Campus.XITUCHENG) data else DemoData.snapshot(campus,clock).copy(isDemo=false)
-        val state=YouRoomState(initializing=false,loggedIn=true,campus=campus,snapshot=snapshot,today=data.queryDate)
-        YouRoomTheme(campus=campus) { StudyPlanningScreen(state,goal,executions,{goal=it},{holder.generate(state,goal)},
+        val state=YOURoomState(initializing=false,loggedIn=true,campus=campus,snapshot=snapshot,today=data.queryDate)
+        YOURoomTheme(campus=campus) { StudyPlanningScreen(state,goal,executions,{goal=it},{holder.generate(state,goal)},
             {campus=it},{},{},clock=clock,onCancel={ holder.cancel(campus) }) }
     }
     private fun shot(name: String) {
@@ -92,8 +92,8 @@ class PlanningControlUiTest {
     @Test fun allFourDialogHeadingsAndTheirCampusLabelsUseTheSmallerTypeSizes() {
         var dialog by mutableIntStateOf(0)
         val room=RoomMatch(data.classrooms.first(),data.classrooms.first().emptyProfile(),emptySet())
-        val state=YouRoomState(initializing=false,snapshot=data,today=data.queryDate)
-        compose.setContent { YouRoomTheme {
+        val state=YOURoomState(initializing=false,snapshot=data,today=data.queryDate)
+        compose.setContent { YOURoomTheme {
             when (dialog) {
                 0 -> FilterDialog(state,{},{},{},{},{})
                 1 -> RoomTagsDialog(room,state,{},{},{},{},{})

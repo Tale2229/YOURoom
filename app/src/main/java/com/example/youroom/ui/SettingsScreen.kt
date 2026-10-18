@@ -7,12 +7,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.outlined.KeyboardReturn
-import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material.icons.outlined.Tune
@@ -22,21 +18,26 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.youroom.domain.*
+import com.example.youroom.ui.theme.themeRoles
 
 @Composable
-fun SettingsScreen(state: YouRoomState, onRoom: (String?) -> Unit,
+fun SettingsScreen(state: YOURoomState, onRoom: (String?) -> Unit,
     onClear: (String) -> Unit, onLogout: () -> Unit, onCampus: (Campus) -> Unit = {},
     showHeader: Boolean = true, sharedHeaderMoving: Boolean = false, interactive: Boolean = true,
     onPeriodStrip: (PeriodStripPreferences) -> Unit = {},
-    onTone: (Campus, CampusTone) -> Unit = { _, _ -> }, onDefaultCampus: (Campus) -> Unit = {}) {
+    onTone: (Campus, CampusTone) -> Unit = { _, _ -> }, onDefaultCampus: (Campus) -> Unit = {},
+    onPlanningPreferences: (Campus, CampusPlanningPreferences) -> Unit = { _, _ -> }) {
     val westList = rememberLazyListState()
     val shaheList = rememberLazyListState()
     CampusFrame(state, onCampus, showHeader, sharedHeaderMoving, interactive,
@@ -44,15 +45,16 @@ fun SettingsScreen(state: YouRoomState, onRoom: (String?) -> Unit,
         SettingsContent(page, { if (active) onRoom(it) }, { if (active) onClear(it) },
             { if (active) onLogout() }, if (page.campus == Campus.XITUCHENG) westList else shaheList, active,
             { if (active) onPeriodStrip(it) }, { campus, tone -> if (active) onTone(campus, tone) },
-            { if (active) onDefaultCampus(it) })
+            { if (active) onDefaultCampus(it) },
+            { if (active) onPlanningPreferences(page.campus, it) })
     }
 }
 
 @Composable
-private fun SettingsContent(state: YouRoomState, onRoom: (String?) -> Unit,
+private fun SettingsContent(state: YOURoomState, onRoom: (String?) -> Unit,
     onClear: (String) -> Unit, onLogout: () -> Unit, listState: LazyListState, interactive: Boolean,
     onPeriodStrip: (PeriodStripPreferences) -> Unit, onTone: (Campus, CampusTone) -> Unit,
-    onDefaultCampus: (Campus) -> Unit) {
+    onDefaultCampus: (Campus) -> Unit, onPlanningPreferences: (CampusPlanningPreferences) -> Unit) {
     var sheet by remember(state.campus) { mutableStateOf<String?>(null) }
     var confirmExit by remember(state.campus) { mutableStateOf(false) }
     val context = LocalContext.current
@@ -69,7 +71,6 @@ private fun SettingsContent(state: YouRoomState, onRoom: (String?) -> Unit,
         if (state.demo) item { Text("演示模式", Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp),
             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         item { AppearanceSettingChoices(state, interactive, onPeriodStrip, onDefaultCampus) }
-        item { HorizontalDivider(Modifier.padding(horizontal = 24.dp, vertical = 6.dp)) }
         item { SettingsEntry("教室标记", Icons.Outlined.StarBorder, "settings_room_marks", interactive,
             value = profiles.size.toString()) { sheet = "marks" } }
         item { SettingsEntry("规划偏好", Icons.Outlined.Tune, "settings_planning", interactive) { sheet = "planning" } }
@@ -82,29 +83,19 @@ private fun SettingsContent(state: YouRoomState, onRoom: (String?) -> Unit,
                     modifier = Modifier.heightIn(min = 48.dp).testTag("settings_logout")) {
                     Text(if (state.demo) "结束演示" else if (state.viewingCache) "返回登录" else "退出登录")
                 }
-                Text("YouRoom $version", style = MaterialTheme.typography.labelSmall,
+                Text("YOURoom $version", style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
     when (sheet) {
         "marks" -> RoomMarksSheet(state, profiles, onRoom, onClear) { sheet = null }
-        "planning" -> SettingsSheet("规划偏好", state.campus, { sheet = null }) {
-            Text("生成后可在方案页切换规划导向", style = MaterialTheme.typography.bodyMedium)
-            Text("更多默认偏好待开放", style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        "about" -> SettingsSheet("关于", state.campus, { sheet = null }) {
-            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text("YouRoom $version · 非学校官方应用", style = MaterialTheme.typography.bodyMedium)
-                Text("空闲信息来自学校课表，不代表实时空座。收藏、排除、标签与备注仅保存在本机。",
-                    style = MaterialTheme.typography.bodySmall)
-                Text("查询需要网络；时段条样式与配色可离线调整。账号密码仅在勾选记住密码后加密保存。",
-                    style = MaterialTheme.typography.bodySmall)
-                Text("退出登录会清除登录状态和账号密码，不清除教室标记与外观设置。",
-                    style = MaterialTheme.typography.bodySmall)
-            }
+        "planning" -> PlanningPreferencesSheet(state.campus, state.planningPreferences.forCampus(state.campus),
+            onPlanningPreferences, { sheet = "templates" }, { sheet = null })
+        "templates" -> TimeTemplateManager(state.campus, state.planningPreferences.forCampus(state.campus),
+            onPlanningPreferences, { sheet = "planning" })
+        "about" -> SettingsSheet("关于", null, { sheet = null }, showTitle = false) {
+            AboutContent(version)
         }
     }
     if (confirmExit) AlertDialog(onDismissRequest = { confirmExit = false },
@@ -125,7 +116,7 @@ private fun SettingsEntry(title: String, icon: ImageVector, tag: String, enabled
         .clickable(enabled = enabled, role = Role.Button, interactionSource = remember { MutableInteractionSource() },
             indication = null, onClick = onClick).padding(horizontal = 24.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        Icon(icon, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+        Icon(icon, null, Modifier.size(20.dp).testTag("${tag}_icon"), tint = themeRoles().settingsIcon)
         Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
         if (value != null) Text(value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
         Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, Modifier.size(18.dp).testTag("${tag}_arrow"),
@@ -134,25 +125,37 @@ private fun SettingsEntry(title: String, icon: ImageVector, tag: String, enabled
 }
 
 @Composable
-private fun SettingsSheet(title: String, campus: Campus, onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+internal fun SettingsSheet(title: String, campus: Campus?, onDismiss: () -> Unit, avoidIme: Boolean = false,
+    footer: (@Composable ColumnScope.() -> Unit)? = null,
+    titleStyle: TextStyle? = null,
+    showTitle: Boolean = true,
+    content: @Composable ColumnScope.() -> Unit) {
+    val density = LocalDensity.current
+    val browser = LocalUriHandler.current
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.widthIn(max = 420.dp).fillMaxWidth(.9f).heightIn(max = 560.dp), shape = MaterialTheme.shapes.small) {
+        // Dialog creates a new Android owner: keep the page's text scale and link handler.
+        CompositionLocalProvider(LocalDensity provides density, LocalUriHandler provides browser) {
+        Surface(Modifier.then(if (avoidIme) Modifier.imePadding() else Modifier)
+            .widthIn(max = 420.dp).fillMaxWidth(.9f).heightIn(max = 560.dp), shape = MaterialTheme.shapes.small) {
             Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleSmall.copy(fontSize = 13.sp))
-                    Text(campus.label, style = MaterialTheme.typography.bodySmall)
+                if (showTitle) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(title, Modifier.weight(1f).testTag("settings_sheet_title"), style = titleStyle ?: MaterialTheme.typography.titleSmall.copy(fontSize = 13.sp))
+                    if (campus != null) Text(campus.label, Modifier.testTag("settings_sheet_campus"), style = MaterialTheme.typography.bodySmall)
                 }
                 content()
-                IconAction(onClick = onDismiss, modifier = Modifier.align(Alignment.End).testTag("settings_sheet_close")) {
-                    Icon(Icons.AutoMirrored.Outlined.KeyboardReturn, "关闭")
+                if (footer != null) footer() else {
+                    IconAction(onClick = onDismiss, modifier = Modifier.align(Alignment.End).testTag("settings_sheet_close")) {
+                        DialogExitIcon(description = "关闭")
+                    }
                 }
             }
+        }
         }
     }
 }
 
 @Composable
-private fun RoomMarksSheet(state: YouRoomState, profiles: List<RoomProfile>, onRoom: (String?) -> Unit,
+private fun RoomMarksSheet(state: YOURoomState, profiles: List<RoomProfile>, onRoom: (String?) -> Unit,
     onClear: (String) -> Unit, onDismiss: () -> Unit) {
     var clearId by remember { mutableStateOf<String?>(null) }
     SettingsSheet("教室标记", state.campus, onDismiss) {
@@ -175,8 +178,10 @@ private fun RoomMarksSheet(state: YouRoomState, profiles: List<RoomProfile>, onR
                             if (profile.note.isNotBlank()) Text(profile.note, style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
-                        IconAction(onClick = { clearId = profile.roomId }) {
-                            Icon(Icons.Outlined.DeleteOutline, "清除 ${profile.name} 的个人标记")
+                        IconAction(onClick = { clearId = profile.roomId }, modifier = Modifier.semantics {
+                            contentDescription = "清除 ${profile.name} 的个人标记"
+                        }) {
+                            AnimatedTrashIcon(clearId == profile.roomId, Modifier.size(24.dp))
                         }
                     }
                     HorizontalDivider()

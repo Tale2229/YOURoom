@@ -13,7 +13,7 @@ import androidx.compose.ui.unit.dp
 import com.example.youroom.data.DemoData
 import com.example.youroom.domain.*
 import com.example.youroom.ui.PlanningTargetStrip
-import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.ui.theme.YOURoomTheme
 import com.example.youroom.ui.theme.campusColorScheme
 import java.time.*
 import kotlin.math.abs
@@ -32,7 +32,7 @@ class PlanningTimeMarkerUiTest {
     private var minute by mutableIntStateOf(803)
     private fun render()=compose.setContent {
         CompositionLocalProvider(LocalLayoutDirection provides if(rtl) LayoutDirection.Rtl else LayoutDirection.Ltr) {
-            YouRoomTheme(campus=campus,darkTheme=dark) {
+            YOURoomTheme(campus=campus,darkTheme=dark) {
                 Surface { Column(Modifier.fillMaxWidth().padding(top=40.dp)) {
                     val clock=Clock.fixed(LocalDateTime.of(2026,10,16,minute/60,minute%60).atZone(SchoolZone).toInstant(),SchoolZone)
                     PlanningTargetStrip(data.slots,emptyList(),clock)

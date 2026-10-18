@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModelStore
 import com.example.youroom.data.*
 import com.example.youroom.data.local.FilterSettings
 import com.example.youroom.domain.*
-import com.example.youroom.ui.YouRoomViewModel
+import com.example.youroom.ui.YOURoomViewModel
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.*
@@ -17,7 +17,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class YouRoomViewModelTest {
+class YOURoomViewModelTest {
     private val instant = Instant.parse("2026-10-12T00:10:00Z")
     private val clock = Clock.fixed(instant, SchoolZone)
     private fun snapshot(campus: Campus) = DemoData.snapshot(campus).copy(isDemo = false,
@@ -27,11 +27,12 @@ class YouRoomViewModelTest {
         setupSource: FakeSource.() -> Unit = {},
         testClock: Clock = clock,
         initialAppearance: AppearancePreferences = AppearancePreferences(),
-        block: suspend TestScope.(YouRoomViewModel, FakeSource, FakeSettings) -> Unit) = runTest {
+        initialPlanning: PlanningPreferences = PlanningPreferences(),
+        block: suspend TestScope.(YOURoomViewModel, FakeSource, FakeSettings) -> Unit) = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val source = FakeSource(authenticated).apply(setupSource)
-        val settings = FakeSettings().apply { appearance.value = initialAppearance }
-        val model = YouRoomViewModel(source, settings, testClock,StandardTestDispatcher(testScheduler))
+        val settings = FakeSettings().apply { appearance.value = initialAppearance; planningPreferences.value = initialPlanning }
+        val model = YOURoomViewModel(source, settings, testClock,StandardTestDispatcher(testScheduler))
         val store = ViewModelStore().apply { put("test", model) }
         try { runCurrent(); block(model, source, settings) }
         finally { store.clear(); Dispatchers.resetMain() }
@@ -260,7 +261,7 @@ class YouRoomViewModelTest {
 
     @Test fun anExcludedSavedRoomOutsideTodaysSnapshotStillHasAManagementEntry() {
         val profile = RoomProfile("01:2-999", "2-999", "2", excluded = true, favorite = true, note = "旧记录")
-        val state = com.example.youroom.ui.YouRoomState(snapshot = snapshot(Campus.XITUCHENG),
+        val state = com.example.youroom.ui.YOURoomState(snapshot = snapshot(Campus.XITUCHENG),
             today = LocalDate.of(2026, 10, 12), profiles = mapOf(profile.roomId to profile), selectedRoomId = profile.roomId)
         assertEquals(profile, state.selectedRoom!!.profile)
         assertTrue(state.selectedRoom!!.freeSlots.isEmpty())
@@ -581,6 +582,15 @@ class YouRoomViewModelTest {
     }
 
     private class FakeSettings : FilterSettings {
+        override val planningPreferences = MutableStateFlow(PlanningPreferences())
+        var planningGate: CompletableDeferred<Unit>? = null
+        var planningFailure = false
+        val planningSaved = mutableListOf<PlanningPreferences>()
+        override suspend fun savePlanningPreferences(value: PlanningPreferences) {
+            planningGate?.await()
+            if (planningFailure) throw java.io.IOException("test")
+            planningSaved += value; planningPreferences.value = value
+        }
         override val appearance = MutableStateFlow(AppearancePreferences())
         var appearanceGate: CompletableDeferred<Unit>? = null
         var appearanceFailure = false
@@ -727,5 +737,49 @@ class YouRoomViewModelTest {
         assertTrue(model.state.value.error!!.contains("时段条设置保存失败"))
         settings.stripFailure=false;model.setPeriodStrip(pref);runCurrent()
         assertEquals(pref,model.state.value.periodStrip)
+    }
+
+    @Test fun planningPreferencesDoNotRequestDataOrClearAnExistingPlan() = checkModel { model, source, settings ->
+        model.generatePlanning(PlanningDraft(flexible=false,savedWindows=listOf(StudyWindow(480,720)))); runCurrent()
+        val before=model.planning.executions.value
+        val requests=source.requests.toList()
+        val preferences=CampusPlanningPreferences(PlanningDirection.FAVORITES,false,
+            listOf(TimeTemplate("morning","上午",listOf(StudyWindow(480,720)))))
+        model.setPlanningPreferences(Campus.XITUCHENG,preferences); runCurrent()
+        assertEquals(preferences,settings.planningPreferences.value.forCampus(Campus.XITUCHENG))
+        assertEquals(CampusPlanningPreferences(),settings.planningPreferences.value.forCampus(Campus.SHAHE))
+        assertEquals(before,model.planning.executions.value); assertEquals(requests,source.requests)
+    }
+
+    @Test fun storedPlanningDefaultsAreReadyBeforeInitializationFinishes() = checkModel(
+        initialPlanning=PlanningPreferences().withCampus(Campus.XITUCHENG,
+            CampusPlanningPreferences(PlanningDirection.BUILDINGS,false))) { model, _, settings ->
+        assertFalse(model.state.value.initializing)
+        assertEquals(PlanningDirection.BUILDINGS,model.state.value.planningPreferences.forCampus(Campus.XITUCHENG).direction)
+        assertFalse(model.state.value.planningPreferences.forCampus(Campus.XITUCHENG).flexible)
+        assertTrue(settings.planningSaved.isEmpty())
+    }
+
+    @Test fun rapidPlanningPreferenceChangesRetainBothCampusesAndIgnoreOlderEmissions() = checkModel { model, _, settings ->
+        settings.planningGate=CompletableDeferred()
+        model.setPlanningPreferences(Campus.XITUCHENG,CampusPlanningPreferences(flexible=false)); runCurrent()
+        val first=model.state.value.planningPreferences
+        model.setPlanningPreferences(Campus.SHAHE,CampusPlanningPreferences(PlanningDirection.BUILDINGS)); runCurrent()
+        val latest=model.state.value.planningPreferences
+        settings.planningPreferences.value=first; runCurrent()
+        assertEquals(latest,model.state.value.planningPreferences)
+        settings.planningGate!!.complete(Unit); runCurrent()
+        assertEquals(listOf(first,latest),settings.planningSaved)
+        assertEquals(latest,settings.planningPreferences.value)
+    }
+
+    @Test fun failedPlanningPreferenceSaveRollsBackAndCanBeRetried() = checkModel { model, _, settings ->
+        settings.planningFailure=true
+        model.setPlanningPreferences(Campus.XITUCHENG,CampusPlanningPreferences(flexible=false)); runCurrent()
+        assertEquals(CampusPlanningPreferences(),model.state.value.planningPreferences.forCampus(Campus.XITUCHENG))
+        assertTrue(model.state.value.error!!.contains("规划偏好保存失败"))
+        settings.planningFailure=false
+        model.setPlanningPreferences(Campus.XITUCHENG,CampusPlanningPreferences(flexible=false)); runCurrent()
+        assertFalse(model.state.value.planningPreferences.forCampus(Campus.XITUCHENG).flexible)
     }
 }

@@ -21,7 +21,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.example.youroom.data.DemoData
 import com.example.youroom.domain.*
 import com.example.youroom.ui.*
-import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.ui.theme.YOURoomTheme
 import java.io.File
 import org.junit.Assert.*
 import org.junit.Rule
@@ -30,7 +30,7 @@ import org.junit.Test
 class PlanningAlternativesUiTest {
     @get:Rule val compose=createComposeRule()
     private val data=DemoData.snapshot()
-    private var state by mutableStateOf(YouRoomState(initializing=false,demo=true,snapshot=data,today=data.queryDate))
+    private var state by mutableStateOf(YOURoomState(initializing=false,demo=true,snapshot=data,today=data.queryDate))
     private val goal=PlanningDraft(flexible=false,savedWindows=listOf(StudyWindow(480,600)))
     private val options=data.classrooms.take(6).mapIndexed { i,room ->
         PlanningOption("方案$i",StudyPlan(StudyWindow(480,600),listOf(PlanningStep.Study(480,600,room,i==0)),
@@ -50,7 +50,7 @@ class PlanningAlternativesUiTest {
             option.copy(plan=option.plan.copy(steps=listOf(PlanningStep.Study(480,600,shahe.classrooms[index],false))))
         })))
     private fun render(rtl: Boolean=false)=compose.setContent {
-        CompositionLocalProvider(LocalLayoutDirection provides if(rtl) LayoutDirection.Rtl else LayoutDirection.Ltr) { YouRoomTheme {
+        CompositionLocalProvider(LocalLayoutDirection provides if(rtl) LayoutDirection.Rtl else LayoutDirection.Ltr) { YOURoomTheme {
         StudyPlanningScreen(state,draft,mapOf(Campus.XITUCHENG to execution,Campus.SHAHE to shaheExecution),{draft=it},{generates++},{},{},{},
             { campus,id,index -> if (campus==Campus.XITUCHENG && id==execution.id) execution=execution.copy(selectedOption=index)
                 else if (campus==Campus.SHAHE && id==shaheExecution.id) shaheExecution=shaheExecution.copy(selectedOption=index) })
@@ -75,7 +75,7 @@ class PlanningAlternativesUiTest {
         var nightMode by mutableStateOf(false)
         // Test the workspace directly: CampusFrame deliberately follows the
         // system appearance rather than an outer test theme's dark override.
-        compose.setContent { YouRoomTheme(campus=paletteCampus,darkTheme=nightMode) { Surface {
+        compose.setContent { YOURoomTheme(campus=paletteCampus,darkTheme=nightMode) { Surface {
             PlanningWorkspace(execution,paletteCampus,true,{_,_->}) { Spacer(Modifier.fillMaxSize()) }
         } } }
         for(campus in Campus.entries) for(night in listOf(false,true)) {
@@ -138,7 +138,7 @@ class PlanningAlternativesUiTest {
             val density=LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density,scale),
                 LocalLayoutDirection provides if(reverse) LayoutDirection.Rtl else LayoutDirection.Ltr) {
-                YouRoomTheme { Surface { Box(Modifier.width(width).height(360.dp)) {
+                YOURoomTheme { Surface { Box(Modifier.width(width).height(360.dp)) {
                     PlanningWorkspace(execution,Campus.XITUCHENG,true,{_,index->execution=execution.copy(selectedOption=index)}) {
                         Spacer(Modifier.fillMaxSize())
                     }
@@ -213,7 +213,7 @@ class PlanningAlternativesUiTest {
         compose.onNodeWithTag("planner_list").performScrollToNode(hasTestTag("planner_step_0"))
         compose.waitForIdle()
         assertEquals(header,compose.onNodeWithTag("campus_header").fetchSemanticsNode().boundsInRoot)
-        compose.onNodeWithText("YouRoom").assertIsDisplayed()
+        compose.onNodeWithText("YOURoom").assertIsDisplayed()
         shot("planner-route")
     }
 

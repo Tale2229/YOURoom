@@ -28,13 +28,15 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.example.youroom.ui.theme.themeRoles
 
 @Composable
 fun AppMark(modifier: Modifier = Modifier) {
     val accent = MaterialTheme.colorScheme.primary
-    Canvas(modifier.size(48.dp).semantics { contentDescription = "YouRoom" }) {
+    val onAccent = MaterialTheme.colorScheme.onPrimary
+    Canvas(modifier.size(48.dp).semantics { contentDescription = "YOURoom" }) {
         drawRoundRect(accent, cornerRadius = CornerRadius(4.dp.toPx()))
-        drawRect(Color.White, topLeft = Offset(size.width * .24f, size.height * .2f),
+        drawRect(onAccent, topLeft = Offset(size.width * .24f, size.height * .2f),
             size = Size(size.width * .52f, size.height * .6f))
         drawRect(accent, topLeft = Offset(size.width * .38f, size.height * .42f),
             size = Size(size.width * .38f, size.height * .38f))
@@ -47,14 +49,15 @@ fun IconAction(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Bool
     Surface(onClick = onClick, enabled = enabled, modifier = modifier.size(48.dp),
         shape = MaterialTheme.shapes.small,
         color = if (filled) MaterialTheme.colorScheme.surfaceContainer else Color.Transparent,
-        contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else .38f)) {
+        contentColor = MaterialTheme.colorScheme.primary.copy(alpha = if (enabled) 1f else .38f)) {
         Box(contentAlignment = Alignment.Center) { content() }
     }
 }
 
 @Composable
 fun WorkspaceNavigation(tab: Int, onTab: (Int) -> Unit) {
-    Surface(color = MaterialTheme.colorScheme.surface) {
+    val roles = themeRoles()
+    Surface(color = roles.navigation) {
         Column(Modifier.navigationBarsPadding()) {
             HorizontalDivider()
             Row(Modifier.fillMaxWidth().selectableGroup()) {
@@ -62,9 +65,8 @@ fun WorkspaceNavigation(tab: Int, onTab: (Int) -> Unit) {
                     Triple("自习规划","tab_planner",NavigationIcons.route),
                     Triple("设置","tab_settings",Icons.Outlined.Settings)).forEachIndexed { index, (label, tag, icon) ->
                     val selected = index == tab
-                    val colors=MaterialTheme.colorScheme
-                    val background by animateColorAsState(if(selected) colors.primary else colors.surface,tween(140),label="navigation face")
-                    val foreground by animateColorAsState(if(selected) colors.surface else colors.primary,tween(140),label="navigation icon")
+                    val background by animateColorAsState(if(selected) roles.navigationSelected else roles.navigation,tween(140),label="navigation face")
+                    val foreground by animateColorAsState(if(selected) roles.onNavigationSelected else roles.navigationIdle,tween(140),label="navigation icon")
                     Box(Modifier.weight(1f).height(56.dp).testTag(tag)
                         .selectable(selected, role = Role.Tab, interactionSource=remember { MutableInteractionSource() },
                             indication=null,onClick = { onTab(index) }).semantics { contentDescription=label },

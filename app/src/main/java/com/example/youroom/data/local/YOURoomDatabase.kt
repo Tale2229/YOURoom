@@ -38,7 +38,7 @@ fun RoomProfile.toEntity() = ProfileEntity(roomId, name, building, favorite, exc
     outlets, note, JsonArray(tags.sorted().map(::JsonPrimitive)).toString())
 
 @Dao
-interface YouRoomDao {
+interface YOURoomDao {
     @Query("SELECT * FROM classroom_snapshots WHERE campusId = :campusId")
     suspend fun snapshot(campusId: String): SnapshotEntity?
 
@@ -56,8 +56,8 @@ interface YouRoomDao {
 }
 
 @Database(entities = [SnapshotEntity::class, ProfileEntity::class], version = 2, exportSchema = true)
-abstract class YouRoomDatabase : RoomDatabase() {
-    abstract fun dao(): YouRoomDao
+abstract class YOURoomDatabase : RoomDatabase() {
+    abstract fun dao(): YOURoomDao
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {

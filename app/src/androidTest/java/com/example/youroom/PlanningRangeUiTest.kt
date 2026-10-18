@@ -18,7 +18,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.example.youroom.data.DemoData
 import com.example.youroom.domain.*
 import com.example.youroom.ui.PlanningRoomStrip
-import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.ui.theme.YOURoomTheme
 import com.example.youroom.ui.theme.campusColorScheme
 import java.io.File
 import kotlin.math.abs
@@ -44,7 +44,7 @@ class PlanningRangeUiTest {
         val base = LocalDensity.current
         CompositionLocalProvider(LocalDensity provides Density(base.density, fontScale),
             LocalLayoutDirection provides if (rtl) LayoutDirection.Rtl else LayoutDirection.Ltr) {
-            YouRoomTheme(campus = campus, darkTheme = dark) {
+            YOURoomTheme(campus = campus, darkTheme = dark) {
                 Surface { Column(Modifier.fillMaxWidth().padding(top = 40.dp)) {
                     PlanningRoomStrip(PlanningRoomUse(room, false, windows), data.slots,
                         setOf(1, 2, 4, 5, 7, 14), true, 1)

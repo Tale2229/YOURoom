@@ -13,6 +13,12 @@ import org.junit.Test
 import kotlin.math.pow
 
 class CampusThemeTest {
+    @Test fun sandInkIsWarmAndDarkerThanItsAccentInsteadOfNeutralBlack() {
+        val colors=campusColorScheme(Campus.XITUCHENG,false)
+        assertTrue(colors.onSurface.red>colors.onSurface.green && colors.onSurface.green>colors.onSurface.blue)
+        assertTrue(colors.onSurface.luminance()<colors.primary.luminance())
+        assertEquals(0xFF352D20.toInt(),colors.onSurface.toArgb())
+    }
     @Test fun everySelectableToneKeepsReadableButtonsTextAndBadges() {
         for (tone in CampusTone.entries) for (dark in listOf(false, true)) for (campus in Campus.entries) {
             val c = campusColorScheme(campus, dark, tone)
@@ -42,13 +48,13 @@ class CampusThemeTest {
             val all = CampusTone.entries.map { campusColorScheme(Campus.XITUCHENG, dark, it) }
             listOf<(androidx.compose.material3.ColorScheme) -> Color>({ it.background }, { it.surface },
                 { it.onSurface }, { it.onSurfaceVariant }, { it.outlineVariant }, { it.surfaceContainer }).forEach { role ->
-                assertEquals(4, all.map(role).distinct().size)
+                assertEquals(CampusTone.entries.size, all.map(role).distinct().size)
             }
             all.forEach { c ->
                 assertTrue(contrast(c.inverseSurface, c.inverseOnSurface) >= 4.5)
                 assertTrue(contrast(c.errorContainer, c.onErrorContainer) >= 4.5)
                 assertTrue(contrast(c.primaryFixed, c.onPrimaryFixed) >= 4.5)
-                assertEquals(c.primary, c.onTertiaryContainer)
+                assertTrue(contrast(c.tertiaryContainer, c.onTertiaryContainer) >= 4.5)
             }
         }
     }

@@ -8,9 +8,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import com.example.youroom.domain.*
-import com.example.youroom.ui.YouRoomState
+import com.example.youroom.ui.YOURoomState
 import com.example.youroom.ui.rememberClassroomSearch
-import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.ui.theme.YOURoomTheme
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -42,7 +42,7 @@ class ClassroomSearchUiTest {
         }
         var filters by mutableStateOf(SearchFilters())
         compose.setContent {
-            val presentation = rememberClassroomSearch(YouRoomState(snapshot = snapshot, today = date,
+            val presentation = rememberClassroomSearch(YOURoomState(snapshot = snapshot, today = date,
                 filters = filters, profiles = profiles), enabled = true)
             Text("${presentation.pending}|${presentation.result.rooms.joinToString { it.classroom.name }}",
                 Modifier.testTag("search_state"))
@@ -69,7 +69,7 @@ class ClassroomSearchUiTest {
         val room = Classroom("01:2-201", "2-201", "2", 60)
         val snapshot = ClassroomSnapshot("01", date, Instant.EPOCH,
             listOf(LessonSlot(1, LocalTime.of(8, 0), LocalTime.of(8, 45), listOf(room))))
-        var state by mutableStateOf(YouRoomState(snapshot = snapshot, today = date))
+        var state by mutableStateOf(YOURoomState(snapshot = snapshot, today = date))
         var enabled by mutableStateOf(true)
         compose.setContent {
             val presentation = rememberClassroomSearch(state, enabled)
@@ -95,8 +95,8 @@ class ClassroomSearchUiTest {
             LessonSlot(2, LocalTime.of(8, 50), LocalTime.of(9, 35), listOf(second))))
         var today by mutableStateOf(date)
         compose.setContent {
-            YouRoomTheme(campus = Campus.SHAHE) {
-                val presentation = rememberClassroomSearch(YouRoomState(campus = Campus.SHAHE,
+            YOURoomTheme(campus = Campus.SHAHE) {
+                val presentation = rememberClassroomSearch(YOURoomState(campus = Campus.SHAHE,
                     snapshot = snapshot, today = today, filters = SearchFilters()), enabled = true)
                 Text(if (presentation.pending) "等待筛选" else "${presentation.result.rooms.size}",
                     Modifier.testTag("search_state"))
@@ -123,8 +123,8 @@ class ClassroomSearchUiTest {
             listOf(LessonSlot(1, LocalTime.of(8, 0), LocalTime.of(8, 45), rooms)))
         var enabled by mutableStateOf(false)
         compose.setContent {
-            YouRoomTheme {
-                val presentation = rememberClassroomSearch(YouRoomState(snapshot = snapshot, today = date,
+            YOURoomTheme {
+                val presentation = rememberClassroomSearch(YOURoomState(snapshot = snapshot, today = date,
                     filters = SearchFilters(setOf(1))), enabled)
                 Text(if (presentation.pending) "等待筛选" else "${presentation.result.rooms.size}",
                     Modifier.testTag("search_state"))

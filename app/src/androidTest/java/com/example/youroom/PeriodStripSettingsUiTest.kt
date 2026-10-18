@@ -17,7 +17,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.example.youroom.data.DemoData
 import com.example.youroom.domain.*
 import com.example.youroom.ui.*
-import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.ui.theme.YOURoomTheme
 import com.example.youroom.data.local.*
 import androidx.datastore.preferences.core.*
 import kotlinx.coroutines.*
@@ -46,8 +46,8 @@ class PeriodStripSettingsUiTest {
         CompositionLocalProvider(LocalPeriodStripPreferences provides preference,
             LocalLayoutDirection provides if(rtl) LayoutDirection.Rtl else LayoutDirection.Ltr,
             LocalDensity provides Density(density.density,fontScale)) {
-            YouRoomTheme(campus=campus,darkTheme=dark) { Surface {
-                if(settings) SettingsScreen(YouRoomState(initializing=false,campus=campus,
+            YOURoomTheme(campus=campus,darkTheme=dark) { Surface {
+                if(settings) SettingsScreen(YOURoomState(initializing=false,campus=campus,
                     snapshot=data.copy(campusId=campus.dataKey),periodStrip=preference),{},{},{},
                     onPeriodStrip={preference=it},interactive=settingsInteractive)
                 else Column(Modifier.fillMaxWidth().padding(top=44.dp)) {

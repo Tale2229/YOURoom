@@ -32,12 +32,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.youroom.domain.*
+import com.example.youroom.ui.theme.themeRoles
 
 /** A top-aligned comparison panel. The detail list scrolls beneath fixed input
  * controls; no bottom sheet or competing vertical list. */
 @Composable
 internal fun PlanningWorkspace(execution: PlanningExecution?, campus: Campus, interactive: Boolean,
     onOption: (Long,Int) -> Unit, content: @Composable () -> Unit) {
+    val roles = themeRoles()
     val result=execution?.result
     val groups=result?.groups?.ifEmpty {
         listOf(PlanningGroup(PlanningDirection.BALANCED,result.options.indices.toList()))
@@ -50,7 +52,7 @@ internal fun PlanningWorkspace(execution: PlanningExecution?, campus: Campus, in
     var westSelected by rememberSaveable { mutableStateOf("") }
     var shaheSelected by rememberSaveable { mutableStateOf("") }
     val prefix="${execution?.id}:"
-    fun decode(value: String)=value.takeIf { it.startsWith(prefix) }?.substringAfter(':') ?: PlanningDirection.BALANCED.name
+    fun decode(value: String)=value.takeIf { it.startsWith(prefix) }?.substringAfter(':') ?: (execution?.defaultDirection ?: PlanningDirection.BALANCED).name
     val browsing=decode(if (campus==Campus.XITUCHENG) westBrowse else shaheBrowse)
     val selectedGroup=decode(if (campus==Campus.XITUCHENG) westSelected else shaheSelected)
     fun browse(direction: PlanningDirection) {
@@ -81,10 +83,10 @@ internal fun PlanningWorkspace(execution: PlanningExecution?, campus: Campus, in
                         stateDescription=if (expanded) "已展开" else "已收起"
                     },contentAlignment=Alignment.Center) {
                     Box(Modifier.matchParentSize().padding(horizontal=16.dp)
-                        .background(MaterialTheme.colorScheme.surfaceContainerLow).testTag("planner_alternatives_face"))
+                        .background(roles.planningHeading).testTag("planner_alternatives_face"))
                     Row(Modifier.fillMaxWidth().heightIn(min=48.dp).padding(horizontal=24.dp),
                         verticalAlignment=Alignment.CenterVertically) {
-                        Box(Modifier.width(3.dp).height(22.dp).background(MaterialTheme.colorScheme.primary)
+                        Box(Modifier.width(3.dp).height(22.dp).background(roles.planningHeadingKey)
                             .testTag("planner_alternatives_key"))
                         Spacer(Modifier.width(9.dp))
                         Row(Modifier.weight(1f),verticalAlignment=Alignment.CenterVertically) {
@@ -92,7 +94,7 @@ internal fun PlanningWorkspace(execution: PlanningExecution?, campus: Campus, in
                                 Modifier.weight(1f,fill=false).testTag("planner_alternatives_title"),
                                 style=MaterialTheme.typography.labelMedium.copy(fontSize=13.sp,lineHeight=20.sp,
                                     fontWeight=FontWeight.SemiBold,letterSpacing=0.sp),
-                                color=MaterialTheme.colorScheme.primary,maxLines=1,overflow=TextOverflow.Ellipsis)
+                                color=roles.onPlanningHeading,maxLines=1,overflow=TextOverflow.Ellipsis)
                             Spacer(Modifier.width(9.dp))
                             Box(Modifier.width(1.dp).height(12.dp).background(MaterialTheme.colorScheme.outlineVariant)
                                 .testTag("planner_alternatives_separator"))
@@ -101,17 +103,17 @@ internal fun PlanningWorkspace(execution: PlanningExecution?, campus: Campus, in
                                 Modifier.testTag("planner_alternatives_count").semantics {
                                     contentDescription="方案 $rank/${selectedIndices.size.coerceAtLeast(1)}"
                                 },style=MaterialTheme.typography.labelSmall.copy(fontSize=10.sp,lineHeight=14.sp,letterSpacing=0.sp),
-                                color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1)
+                                color=roles.planningHeadingMuted,maxLines=1)
                         }
                         Spacer(Modifier.width(9.dp))
                         Text("其他方案",Modifier.testTag("planner_alternatives_entry"),
                             style=MaterialTheme.typography.labelSmall.copy(letterSpacing=0.sp),
-                            color=MaterialTheme.colorScheme.primary,maxLines=1)
+                            color=roles.onPlanningHeading,maxLines=1)
                         // Reflect vertically through a flat midpoint, without a planar spin.
                         Spacer(Modifier.width(4.dp))
                         Icon(Icons.Outlined.KeyboardArrowDown,null,Modifier.size(15.dp)
                             .graphicsLayer { scaleY=arrowFlip.value }.testTag("planner_alternatives_arrow"),
-                            tint=MaterialTheme.colorScheme.primary)
+                            tint=roles.onPlanningHeading)
                     }
                 }
                 AnimatedVisibility(expanded) {

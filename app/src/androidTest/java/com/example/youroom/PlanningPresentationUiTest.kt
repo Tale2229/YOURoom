@@ -11,7 +11,7 @@ import androidx.compose.ui.unit.dp
 import com.example.youroom.data.DemoData
 import com.example.youroom.domain.*
 import com.example.youroom.ui.*
-import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.ui.theme.YOURoomTheme
 import com.example.youroom.ui.theme.campusColorScheme
 import java.time.*
 import org.junit.Assert.*
@@ -22,7 +22,7 @@ class PlanningPresentationUiTest {
     @get:Rule val compose=createComposeRule()
     private var clock by mutableStateOf<Clock>(Clock.fixed(Instant.parse("2026-10-15T03:00:00Z"),SchoolZone))
     private val data=DemoData.snapshot(clock=clock)
-    private var state by mutableStateOf(YouRoomState(initializing=false,demo=true,snapshot=data,today=data.queryDate))
+    private var state by mutableStateOf(YOURoomState(initializing=false,demo=true,snapshot=data,today=data.queryDate))
     private val a=data.classrooms[0]; private val b=data.classrooms[1]
     private var draft by mutableStateOf(PlanningDraft(flexible=false,savedWindows=listOf(StudyWindow(480,575),StudyWindow(780,825))))
     private val plan=StudyPlan(StudyWindow(480,825),listOf(PlanningStep.Study(480,525,a,true),
@@ -32,7 +32,7 @@ class PlanningPresentationUiTest {
     private var shownPlan=plan
     private var generations=0
     private var showResult=true
-    private fun render()=compose.setContent { YouRoomTheme {
+    private fun render()=compose.setContent { YOURoomTheme {
         val goal=PlanningGoal(780,825,false,savedWindows=listOf(StudyWindow(480,575)),expectedRooms=setOf(a.id))
         val execution=PlanningExecution(1,PlanningInput(data,Campus.XITUCHENG,data.queryDate,emptyMap(),goal),
             PlanningResult(options=listOf(PlanningOption("综合",shownPlan))))

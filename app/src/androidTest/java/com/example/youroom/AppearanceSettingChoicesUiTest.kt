@@ -37,9 +37,9 @@ class AppearanceSettingChoicesUiTest {
     private fun render() = compose.setContent {
         val density = LocalDensity.current
         CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
-            YouRoomTheme(campus = campus, appearance = appearance) { Surface {
+            YOURoomTheme(campus = campus, appearance = appearance) { Surface {
                 Box(Modifier.widthIn(max = 320.dp).fillMaxHeight()) {
-                    SettingsScreen(YouRoomState(initializing = false, campus = campus, snapshot = DemoData.snapshot(campus),
+                    SettingsScreen(YOURoomState(initializing = false, campus = campus, snapshot = DemoData.snapshot(campus),
                         periodStrip = strip, appearance = appearance), {}, {}, {}, showHeader = false, interactive = enabled,
                         onPeriodStrip = { strip = it; writes++ }, onDefaultCampus = { appearance = appearance.copy(defaultCampus = it); writes++ })
                 }

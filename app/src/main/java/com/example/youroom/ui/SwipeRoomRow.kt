@@ -35,6 +35,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.example.youroom.domain.*
+import com.example.youroom.ui.theme.themeRoles
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.job
@@ -50,7 +51,7 @@ private class RowSwipeAnimation { var job: Job? = null; var openingSpeed = 0f }
 
 @Composable
 private fun FavoriteCornerMarker(roomId: String, modifier: Modifier = Modifier) {
-    val color = MaterialTheme.colorScheme.primary
+    val color = themeRoles().favorite
     Canvas(modifier.size(22.dp).testTag("room_favorite_$roomId").clearAndSetSemantics {}) {
         drawPath(Path().apply {
             moveTo(0f, 0f); lineTo(size.width, 0f); lineTo(size.width, size.height); close()
@@ -61,8 +62,9 @@ private fun FavoriteCornerMarker(roomId: String, modifier: Modifier = Modifier) 
 @Composable
 internal fun RoomActionButtons(profile: RoomProfile, onFavorite: () -> Unit, onTags: () -> Unit,
     onNote: () -> Unit, onExcluded: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true,
-    compact: Boolean = false, flip: RoomActionFlipMotion? = null) {
+    compact: Boolean = false, flip: RoomActionFlipMotion? = null, onRail: Boolean = false) {
     val density = LocalDensity.current.density
+    val roles = themeRoles()
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         val buttons = listOf(
             Triple(if (profile.favorite) Icons.Outlined.Star else Icons.Outlined.StarBorder,
@@ -84,7 +86,8 @@ internal fun RoomActionButtons(profile: RoomProfile, onFavorite: () -> Unit, onT
                         rotationY = flip?.angles?.get(index)?.value ?: 0f
                         cameraDistance = 12f * density
                     },
-                    tint = MaterialTheme.colorScheme.primary)
+                    tint = if (!onRail) MaterialTheme.colorScheme.primary
+                        else if (index == 0 && profile.favorite) roles.selectedRoomAction else roles.onRoomActions)
             }
         }
     }
@@ -99,7 +102,7 @@ private fun RoomActionRail(profile: RoomProfile, onFavorite: () -> Unit, onTags:
         HorizontalDivider(Modifier.fillMaxWidth()
             .testTag("room_action_line_${profile.roomId}_top_thin"), color = colors.outlineVariant)
         Spacer(Modifier.height(2.dp))
-        RoomActionButtons(profile, onFavorite, onTags, onNote, onExcluded, enabled = enabled, compact = true, flip = flip)
+        RoomActionButtons(profile, onFavorite, onTags, onNote, onExcluded, enabled = enabled, compact = true, flip = flip, onRail = true)
         Spacer(Modifier.height(2.dp))
         // The rail and its decoration stay entirely above the fixed period strip.
         HorizontalDivider(Modifier.fillMaxWidth()
@@ -220,7 +223,7 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
             }
         }
     }) {
-        if (revealed && active) Box(Modifier.matchParentSize().background(colors.surfaceContainer)) {
+        if (revealed && active) Box(Modifier.matchParentSize().background(themeRoles().roomActions)) {
             val actionsReady = expanded && !dragging && settledOpen && interactionEnabled && !pendingAction
             fun closeThenApply(action: () -> Unit) {
                 if (pendingAction) return
@@ -268,7 +271,7 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
                         Text(metadata.note.ifBlank { " " },
                             Modifier.testTag("room_note_text_${profile.roomId}").graphicsLayer { alpha = metadata.noteAlpha.value },
                             minLines = 1, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                            style = MaterialTheme.typography.bodySmall, color = themeRoles().note)
                     }
                 }
             if (profile.favorite) FavoriteCornerMarker(profile.roomId,

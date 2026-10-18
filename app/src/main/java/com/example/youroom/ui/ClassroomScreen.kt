@@ -16,10 +16,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.youroom.data.DemoData
 import com.example.youroom.domain.*
-import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.ui.theme.YOURoomTheme
 
 @Composable
-fun ClassroomScreen(state: YouRoomState, onFilters: (SearchFilters) -> Unit,
+fun ClassroomScreen(state: YOURoomState, onFilters: (SearchFilters) -> Unit,
     onRefresh: () -> Unit, onRoomEditor: (String, RoomEditor) -> Unit, onFavorite: (Classroom) -> Unit,
     onCampus: (Campus) -> Unit = {}, onAddTag: (String) -> Unit = {},
     onRemoveTag: (String) -> Unit = {}, onTagOrder: (List<String>) -> Unit = {},
@@ -52,7 +52,7 @@ fun ClassroomScreen(state: YouRoomState, onFilters: (SearchFilters) -> Unit,
 }
 
 @Composable
-private fun ClassroomPage(state: YouRoomState, listState: LazyListState, active: Boolean, moving: Boolean, searchEnabled: Boolean,
+private fun ClassroomPage(state: YOURoomState, listState: LazyListState, active: Boolean, moving: Boolean, searchEnabled: Boolean,
     onFilters: (SearchFilters) -> Unit,
     onRefresh: () -> Unit, onRoomEditor: (String, RoomEditor) -> Unit, onFavorite: (Classroom) -> Unit,
     onAddTag: (String) -> Unit,
@@ -160,14 +160,14 @@ private fun ClassroomPage(state: YouRoomState, listState: LazyListState, active:
 @Preview(name = "夜间", showBackground = true, widthDp = 390, heightDp = 844, uiMode = Configuration.UI_MODE_NIGHT_YES)
 @Composable
 private fun RoomsPreview() {
-    YouRoomTheme { ClassroomScreen(YouRoomState(initializing = false, demo = true,
+    YOURoomTheme { ClassroomScreen(YOURoomState(initializing = false, demo = true,
         snapshot = DemoData.snapshot(), filters = SearchFilters(setOf(1, 2))), {}, {}, { _, _ -> }, {}) }
 }
 
 @Preview(name = "沙河演示", showBackground = true, widthDp = 390, heightDp = 844)
 @Composable
 private fun ShahePreview() {
-    YouRoomTheme(campus = Campus.SHAHE) { ClassroomScreen(YouRoomState(initializing = false,
+    YOURoomTheme(campus = Campus.SHAHE) { ClassroomScreen(YOURoomState(initializing = false,
         campus = Campus.SHAHE, demo = true, snapshot = DemoData.snapshot(Campus.SHAHE),
         filters = SearchFilters(setOf(1, 2))), {}, {}, { _, _ -> }, {}) }
 }

@@ -1,5 +1,7 @@
 package com.example.youroom.ui
 
+import com.example.youroom.ui.theme.themeRoles
+
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -43,12 +45,13 @@ val PlanningGoalSaver = listSaver<PlanningDraft, Any>(
         else emptyList())) })
 
 @Composable
-fun StudyPlanningScreen(state: YouRoomState, goal: PlanningDraft, plans: Map<Campus,PlanningExecution>,
+fun StudyPlanningScreen(state: YOURoomState, goal: PlanningDraft, plans: Map<Campus,PlanningExecution>,
     onGoal: (PlanningDraft) -> Unit, onGenerate: () -> Unit, onCampus: (Campus) -> Unit,
     onRefresh: () -> Unit, onRoom: (String?) -> Unit,
     onOption: (Campus,Long,Int) -> Unit = { _,_,_ -> },
     clock: Clock = Clock.system(SchoolZone), showHeader: Boolean = true,
-    sharedHeaderMoving: Boolean = false, interactive: Boolean = true, onCancel: () -> Unit = {}) {
+    sharedHeaderMoving: Boolean = false, interactive: Boolean = true, onCancel: () -> Unit = {},
+    onPlanningPreferences: (Campus, CampusPlanningPreferences) -> Unit = { _, _ -> }) {
     val westList = rememberLazyListState()
     val shaheList = rememberLazyListState()
     var heldGoal by remember { mutableStateOf(goal) }
@@ -60,20 +63,24 @@ fun StudyPlanningScreen(state: YouRoomState, goal: PlanningDraft, plans: Map<Cam
             { if (active) onGoal(it) }, { if (active) onGenerate() },
             { if (active) onRefresh() }, { if (active) onCancel() },
             { id,index -> if (active) onOption(page.campus,id,index) },clock,
-            if (page.campus == Campus.XITUCHENG) westList else shaheList, active)
+            if (page.campus == Campus.XITUCHENG) westList else shaheList, active,
+            { if (active) onPlanningPreferences(page.campus, it) })
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun StudyPlanningContent(state: YouRoomState, goal: PlanningDraft, execution: PlanningExecution?,
+private fun StudyPlanningContent(state: YOURoomState, goal: PlanningDraft, execution: PlanningExecution?,
     onGoal: (PlanningDraft) -> Unit, onGenerate: () -> Unit, onRefresh: () -> Unit,
     onCancel: () -> Unit, onOption: (Long,Int) -> Unit,clock: Clock, listState: LazyListState,
-    interactive: Boolean) {
+    interactive: Boolean, onPlanningPreferences: (CampusPlanningPreferences) -> Unit) {
     var startMoving by remember { mutableStateOf(false) }
     var endMoving by remember { mutableStateOf(false) }
     var wheelGoal by remember(goal) { mutableStateOf(goal) }
     var expectedDialog by remember(state.campus) { mutableStateOf(false) }
+    var importDialog by remember(state.campus) { mutableStateOf(false) }
+    var templateManager by remember(state.campus) { mutableStateOf(false) }
+    var templateSeed by remember(state.campus) { mutableStateOf<List<StudyWindow>?>(null) }
     var additionError by remember(goal, state.campus) { mutableStateOf<PlanningResult?>(null) }
     // Unlike validation errors, the toggle feedback must survive its own goal update.
     var modeFeedback by remember(state.campus) { mutableStateOf<PlanningResult?>(null) }
@@ -117,6 +124,23 @@ private fun StudyPlanningContent(state: YouRoomState, goal: PlanningDraft, execu
 
     if (expectedDialog) ExpectedRoomDialog(state, goal.expectedRooms,
         { onGoal(goal.copy(expectedRooms = it)) }, { expectedDialog = false })
+    if (templateSeed != null) TimeTemplateEditor(state.campus, null, templateSeed.orEmpty(),
+        "组合${state.planningPreferences.forCampus(state.campus).templates.size+1}", { template ->
+            val preferences=state.planningPreferences.forCampus(state.campus)
+            onPlanningPreferences(preferences.copy(templates=preferences.templates+template));templateSeed=null
+        }, { templateSeed=null })
+    else if (templateManager) TimeTemplateManager(state.campus, state.planningPreferences.forCampus(state.campus),
+        onPlanningPreferences, { templateManager = false })
+    else if (importDialog) TimeTemplateImportDialog(state.campus,
+        state.planningPreferences.forCampus(state.campus).templates, goal.savedWindows,
+        interactive && !pending && !startMoving && !endMoving,
+        notBefore = { if (state.demo) null else java.time.LocalTime.now(clock.withZone(SchoolZone))
+            .let { (it.toSecondOfDay() + 59) / 60 } }, onImport = { imported ->
+            if (interactive && !pending && !startMoving && !endMoving) {
+                onGoal(goal.copy(savedWindows = imported.windows)); additionError = null
+                modeFeedback = PlanningResult(message = imported.message); importDialog = false; addAccepted = true
+            }
+        }, onManage = { templateManager = true }, onDismiss = { importDialog = false })
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
     // Reserve a real detail viewport, including the target strip and comparison header.
@@ -169,7 +193,9 @@ private fun StudyPlanningContent(state: YouRoomState, goal: PlanningDraft, execu
                                     if(additionError===feedback) additionError=null
                                 }
                             }
-                        }) else null)
+                        }) else null,
+                        onImport = if (interactive && !pending && !startMoving && !endMoving) ({ importDialog = true }) else null,
+                        importing = importDialog || templateManager)
                     if (snapshot == null || stale) TextButton(onClick = onRefresh,
                         enabled = !state.refreshing && !state.demo, shape = MaterialTheme.shapes.small) { Text("获取今日数据") }
                 }
@@ -182,7 +208,8 @@ private fun StudyPlanningContent(state: YouRoomState, goal: PlanningDraft, execu
                 onEdit = { index ->
                     onGoal(PlanningSchedule.remove(goal,index))
                     scope.launch { editorScroll.animateScrollTo(0) }
-                }, onDelete = { index -> onGoal(PlanningSchedule.remove(goal,index)) }))
+                }, onDelete = { index -> onGoal(PlanningSchedule.remove(goal,index)) },
+                onSave = { templateSeed=goal.savedWindows.toList() }))
             // Keep feedback between the target strip and the plan heading, even
             // after a route exists or its details have been scrolled down.
             key(state.campus) {
@@ -229,7 +256,7 @@ private fun PlanningRoomRow(use: PlanningRoomUse, slots: List<LessonSlot>, free:
         Row(Modifier.fillMaxWidth().padding(horizontal=24.dp),verticalAlignment=Alignment.CenterVertically,
             horizontalArrangement=Arrangement.spacedBy(8.dp)) {
             Text(use.classroom.name,Modifier.weight(1f),style=MaterialTheme.typography.titleLarge)
-            if (use.favorite) Icon(Icons.Filled.Star,"已收藏",Modifier.size(16.dp),tint=MaterialTheme.colorScheme.primary)
+            if (use.favorite) Icon(Icons.Filled.Star,"已收藏",Modifier.size(16.dp),tint=themeRoles().favorite)
             if (expected) Icon(Icons.Filled.PushPin,"期望教室",Modifier.size(16.dp).graphicsLayer { rotationZ=ExpectedPinTilt },
                 tint=MaterialTheme.colorScheme.primary)
         }

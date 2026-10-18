@@ -7,8 +7,8 @@ import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.youroom.ui.LoginScreen
-import com.example.youroom.ui.YouRoomState
-import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.ui.YOURoomState
+import com.example.youroom.ui.theme.YOURoomTheme
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -18,7 +18,7 @@ class LoginUiTest {
     @get:Rule val compose = createComposeRule()
 
     @Test fun rememberIsOffByDefaultAndDisclosureFollowsConsent() {
-        compose.setContent { YouRoomTheme { LoginScreen(YouRoomState(initializing = false), { _, _ -> }, {}, {}) } }
+        compose.setContent { YOURoomTheme { LoginScreen(YOURoomState(initializing = false), { _, _ -> }, {}, {}) } }
         compose.onNodeWithTag("remember-password").performScrollTo().assertIsOff().performClick().assertIsOn()
         compose.onNodeWithText("密码加密保存在本机，仅用于登录过期后自动重登；退出登录时清除。").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("remember-password").performScrollTo().performClick().assertIsOff()
@@ -29,8 +29,8 @@ class LoginUiTest {
         var receivedAccount: String? = null
         var receivedPassword: String? = null
         var receivedRemember = false
-        compose.setContent { YouRoomTheme {
-            LoginScreen(YouRoomState(initializing = false), { _, _ -> error("Use consent callback") }, {}, {},
+        compose.setContent { YOURoomTheme {
+            LoginScreen(YOURoomState(initializing = false), { _, _ -> error("Use consent callback") }, {}, {},
                 onRememberedLogin = { a, p, r -> receivedAccount = a; receivedPassword = p; receivedRemember = r })
         } }
         compose.onNodeWithTag("account").performTextInput("dummy-account")
@@ -47,8 +47,8 @@ class LoginUiTest {
     }
 
     @Test fun rememberedAccountIsPrefilledButPasswordNeverIs() {
-        compose.setContent { YouRoomTheme {
-            LoginScreen(YouRoomState(initializing = false, rememberedAccount = "dummy-account"), { _, _ -> }, {}, {})
+        compose.setContent { YOURoomTheme {
+            LoginScreen(YOURoomState(initializing = false, rememberedAccount = "dummy-account"), { _, _ -> }, {}, {})
         } }
         compose.onNodeWithTag("account").assertTextContains("dummy-account")
         compose.onNodeWithTag("remember-password").performScrollTo().assertIsOn()
@@ -57,7 +57,7 @@ class LoginUiTest {
 
     @Test fun passwordIsNotRestoredAfterActivityStateRecreation() {
         val restoration = StateRestorationTester(compose)
-        restoration.setContent { YouRoomTheme { LoginScreen(YouRoomState(initializing = false), { _, _ -> }, {}, {}) } }
+        restoration.setContent { YOURoomTheme { LoginScreen(YOURoomState(initializing = false), { _, _ -> }, {}, {}) } }
         compose.onNodeWithTag("account").performTextInput("dummy-account")
         compose.onNodeWithTag("password").performTextInput("dummy-password")
         compose.onNodeWithTag("remember-password").performScrollTo().performClick()
@@ -68,8 +68,8 @@ class LoginUiTest {
     }
 
     @Test fun pendingLoginDisablesCredentialEditsAndRememberToggle() {
-        val state = mutableStateOf(YouRoomState(initializing = false))
-        compose.setContent { YouRoomTheme { LoginScreen(state.value, { _, _ -> }, {}, {}) } }
+        val state = mutableStateOf(YOURoomState(initializing = false))
+        compose.setContent { YOURoomTheme { LoginScreen(state.value, { _, _ -> }, {}, {}) } }
         compose.runOnIdle { state.value = state.value.copy(loggingIn = true) }
         compose.onNodeWithTag("account").assertIsNotEnabled()
         compose.onNodeWithTag("password").assertIsNotEnabled()
@@ -77,7 +77,7 @@ class LoginUiTest {
     }
 
     @Test fun loginScreenKeepsCompactThemeAndAccessibleConsent() {
-        compose.setContent { YouRoomTheme { LoginScreen(YouRoomState(initializing = false), { _, _ -> }, {}, {}) } }
+        compose.setContent { YOURoomTheme { LoginScreen(YOURoomState(initializing = false), { _, _ -> }, {}, {}) } }
         compose.onNodeWithTag("remember-password").performScrollTo().assertHasClickAction()
         val bounds = compose.onNodeWithTag("remember-password").fetchSemanticsNode().boundsInRoot
         assertTrue(bounds.height >= 48 * InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density)

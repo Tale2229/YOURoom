@@ -7,7 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -15,15 +15,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 
-/** Separate the compact painted surface from two adjacent, full-size hit areas. */
+/** Separate the compact painted surface from adjacent, full-size hit areas. */
 @Composable
 internal fun PlanningPeriodMenu(expanded: Boolean, enabled: Boolean, index: Int,
-    onDismiss: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit) {
+    onDismiss: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit, onSave: (() -> Unit)? = null) {
     val visibility=remember { MutableTransitionState(false) }
     visibility.targetState=expanded
     val density=LocalDensity.current
@@ -31,8 +33,8 @@ internal fun PlanningPeriodMenu(expanded: Boolean, enabled: Boolean, index: Int,
     if(visibility.currentState || visibility.targetState) Popup(position,onDismiss,
         properties=PopupProperties(focusable=true)) {
         AnimatedVisibility(visibility,enter=fadeIn(tween(100)),exit=fadeOut(tween(80))) {
-            Box(Modifier.size(96.dp,48.dp).testTag("planner_period_actions_$index"),contentAlignment=Alignment.Center) {
-                Surface(Modifier.fillMaxWidth().height(32.dp).testTag("planner_period_actions_face_$index"),
+            Box(Modifier.size(if (onSave != null) 144.dp else 96.dp,48.dp).testTag("planner_period_actions_$index"),contentAlignment=Alignment.Center) {
+                Surface(Modifier.fillMaxWidth().height(37.dp).testTag("planner_period_actions_face_$index"),
                     shape=MaterialTheme.shapes.small,color=MaterialTheme.colorScheme.surface,
                     shadowElevation=2.dp) {}
                 Row {
@@ -41,8 +43,12 @@ internal fun PlanningPeriodMenu(expanded: Boolean, enabled: Boolean, index: Int,
                         Icon(Icons.Outlined.Edit,"编辑时段",Modifier.size(22.dp),tint=MaterialTheme.colorScheme.primary)
                     }
                     IconButton(onClick=onDelete,enabled=enabled && expanded,
-                        modifier=Modifier.size(48.dp).testTag("planner_remove_period_$index")) {
-                        Icon(Icons.Outlined.DeleteOutline,"删除时段",Modifier.size(22.dp),tint=MaterialTheme.colorScheme.primary)
+                        modifier=Modifier.size(48.dp).testTag("planner_remove_period_$index").semantics { contentDescription="删除时段" }) {
+                        AnimatedTrashIcon(enabled && expanded,Modifier.size(22.dp))
+                    }
+                    if (onSave != null) IconButton(onClick=onSave,enabled=enabled && expanded,
+                        modifier=Modifier.size(48.dp).testTag("planner_save_periods_$index")) {
+                        Icon(Icons.Outlined.Save,"保存时段组合",Modifier.size(22.dp),tint=MaterialTheme.colorScheme.primary)
                     }
                 }
             }

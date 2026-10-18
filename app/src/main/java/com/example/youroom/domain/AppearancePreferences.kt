@@ -2,7 +2,8 @@ package com.example.youroom.domain
 
 /** Stable storage IDs; artwork and names may evolve without losing a campus choice. */
 enum class CampusTone(val id: String, val title: String) {
-    SAND("sand", "砂岩"), PINE("pine", "松绿"), SLATE("slate", "岩灰"), CLAY("clay", "陶土");
+    SAND("sand", "砂岩"), PINE("pine", "松绿"), SLATE("slate", "岩灰"), CLAY("clay", "陶土"),
+    MATISSE("matisse", "马蒂斯");
     fun step(direction: Int) = entries[Math.floorMod(ordinal + direction, entries.size)]
     companion object {
         fun default(campus: Campus) = if (campus == Campus.XITUCHENG) SAND else PINE

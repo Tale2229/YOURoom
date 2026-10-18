@@ -22,7 +22,7 @@ import com.example.youroom.data.DemoData
 import com.example.youroom.domain.*
 import com.example.youroom.ui.RoomAvailabilityStrip
 import com.example.youroom.ui.SwipeRoomRow
-import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.ui.theme.YOURoomTheme
 import com.example.youroom.ui.theme.campusColorScheme
 import org.junit.Assert.*
 import org.junit.Rule
@@ -53,7 +53,7 @@ class RoomAvailabilityUiTest {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale),
                 LocalLayoutDirection provides direction) {
-                YouRoomTheme(campus = campus, darkTheme = dark) {
+                YOURoomTheme(campus = campus, darkTheme = dark) {
                     if (!list) Surface {
                         RoomAvailabilityStrip(id, setOf(1, 2, 6), slots, enabled, inspectionKey = revision)
                     } else Surface(Modifier.fillMaxSize()) {

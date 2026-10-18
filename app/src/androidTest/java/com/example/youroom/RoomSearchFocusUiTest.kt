@@ -15,7 +15,7 @@ import com.example.youroom.data.DemoData
 import com.example.youroom.domain.*
 import com.example.youroom.ui.RoomSearchFocusBoundary
 import com.example.youroom.ui.SlotPicker
-import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.ui.theme.YOURoomTheme
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -26,7 +26,7 @@ class RoomSearchFocusUiTest {
     private var taps = 0
     private fun render() {
         compose.setContent {
-            YouRoomTheme {
+            YOURoomTheme {
                 RoomSearchFocusBoundary(Modifier.fillMaxSize()) {
                     Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
                         SlotPicker(Campus.XITUCHENG, DemoData.snapshot().queryDate, true, filters,

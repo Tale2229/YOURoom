@@ -24,12 +24,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.example.youroom.domain.*
-import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.ui.theme.YOURoomTheme
 import kotlinx.coroutines.*
 
 internal val ThemePageWaveProgress = SemanticsPropertyKey<Float>("ThemePageWaveProgress")
 internal val ThemePendingTone = SemanticsPropertyKey<String>("ThemePendingTone")
-internal data class ThemePreview(val appearance: AppearancePreferences, val busy: Boolean)
+internal data class ThemePreview(val appearance: AppearancePreferences, val busy: Boolean,
+    val onBrowsing: (Boolean) -> Unit = {})
 internal val LocalThemePreview = staticCompositionLocalOf<ThemePreview?> { null }
 private data class ToneRequest(val campus: Campus, val tone: CampusTone, val revision: Long)
 
@@ -54,13 +55,14 @@ internal fun ThemeTransitionHost(campus: Campus, appearance: AppearancePreferenc
     var oldFrame by remember { mutableStateOf<ImageBitmap?>(null) }
     var frames by remember { mutableStateOf<ThemeWaveFrames?>(null) }
     var waveJob by remember { mutableStateOf<Job?>(null) }
+    var browsing by remember { mutableStateOf(false) }
     val latestAppearance by rememberUpdatedState(appearance)
     val latestCampus by rememberUpdatedState(campus)
     val latestEnabled by rememberUpdatedState(enabled)
     val latestOnTone by rememberUpdatedState(onTone)
     fun reset() {
         val pending = request
-        request = null; waveJob?.cancel(); oldFrame = null; frames = null
+        request = null; waveJob?.cancel(); oldFrame = null; frames = null; browsing = false
         // Navigating away is not an implicit "cancel theme" action. Keep the final
         // choice, but don't carry a settings screenshot/wave into another page.
         if (pending != null && pending.revision != committedRevision && latestAppearance.tone(pending.campus) != pending.tone)
@@ -69,7 +71,8 @@ internal fun ThemeTransitionHost(campus: Campus, appearance: AppearancePreferenc
     // Leaving the page/campus, rotating, backgrounding or changing night mode never replays a wave.
     LaunchedEffect(campus, contextKey, enabled, darkTheme, rootSize) { reset() }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { reset() }
-    LaunchedEffect(request) {
+    LaunchedEffect(request, browsing) {
+        if (browsing) return@LaunchedEffect
         val selected = request ?: return@LaunchedEffect
         delay(ThemePageWave.debounceMillis)
         ensureActive()
@@ -112,8 +115,10 @@ internal fun ThemeTransitionHost(campus: Campus, appearance: AppearancePreferenc
     }
     val preview = request?.takeIf { it.campus == campus }?.let { appearance.withTone(campus, it.tone) } ?: appearance
     val moving by rememberUpdatedState(oldFrame != null)
-    YouRoomTheme(campus = campus, appearance = appearance, darkTheme = darkTheme) {
-        CompositionLocalProvider(LocalThemePreview provides ThemePreview(preview, oldFrame != null)) {
+    YOURoomTheme(campus = campus, appearance = appearance, darkTheme = darkTheme) {
+        CompositionLocalProvider(LocalThemePreview provides ThemePreview(preview, oldFrame != null) {
+            if (campus == latestCampus && oldFrame == null) browsing = it
+        }) {
             Box(Modifier.fillMaxSize().testTag("theme_transition_page").clipToBounds()
                 .onSizeChanged { rootSize = it }
                 .semantics {

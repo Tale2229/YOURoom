@@ -15,7 +15,7 @@ import androidx.compose.ui.unit.Density
 import com.example.youroom.domain.Campus
 import com.example.youroom.ui.WheelTimePicker
 import com.example.youroom.ui.timeWheelProjection
-import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.ui.theme.YOURoomTheme
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -37,7 +37,7 @@ class TimeWheelUiTest {
         compose.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale), LocalHapticFeedback provides haptic) {
-                YouRoomTheme(campus = campus) {
+                YOURoomTheme(campus = campus) {
                     WheelTimePicker("开始时间", time, "test_time", onMoving = { moving = it }) {
                         time = it; committed += it
                     }

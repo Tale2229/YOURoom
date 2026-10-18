@@ -14,7 +14,7 @@ import org.junit.Test
 class PlanningSessionTest {
     private val dispatcher = StandardTestDispatcher()
     private val data = DemoData.snapshot()
-    private val state = YouRoomState(initializing=false,demo=true,snapshot=data,today=data.queryDate)
+    private val state = YOURoomState(initializing=false,demo=true,snapshot=data,today=data.queryDate)
     private val draft = PlanningDraft(savedWindows=listOf(StudyWindow(480,720)))
     @Before fun setMain() = Dispatchers.setMain(dispatcher)
     @After fun resetMain() = Dispatchers.resetMain()
@@ -23,6 +23,32 @@ class PlanningSessionTest {
         options=listOf(PlanningOption("推荐",StudyPlan(StudyWindow(input.goal.start,input.goal.end),emptyList(),
             240,0,0,0,0,0,0,0,0)),PlanningOption("原时段",StudyPlan(StudyWindow(input.goal.start,input.goal.end),
             emptyList(),240,60,0,0,0,0,0,0,-60))))
+
+    @Test fun defaultDirectionIsFrozenAndChoosesAnExistingOptionWithoutMoreSearches() = runTest {
+        var calls = 0
+        val gate = CompletableDeferred<Unit>()
+        val session = PlanningSession(backgroundScope,dispatcher) { input ->
+            calls++; gate.await(); result(input).copy(groups = listOf(
+                PlanningGroup(PlanningDirection.BALANCED,listOf(0)), PlanningGroup(PlanningDirection.FAVORITES,listOf(1))))
+        }
+        val preferred = state.copy(planningPreferences = PlanningPreferences().withCampus(state.campus,
+            CampusPlanningPreferences(direction=PlanningDirection.FAVORITES)))
+        session.generate(preferred,draft); runCurrent()
+        assertEquals(PlanningDirection.FAVORITES,session.executions.value.getValue(state.campus).defaultDirection)
+        gate.complete(Unit); runCurrent()
+        val execution = session.executions.value.getValue(state.campus)
+        assertEquals(1,execution.selectedOption); assertEquals(1,calls)
+        assertEquals(PlanningDirection.FAVORITES,execution.defaultDirection)
+    }
+
+    @Test fun unavailableDefaultDirectionFallsBackToBalancedInsteadOfAnEmptyGroup() = runTest {
+        val session = PlanningSession(backgroundScope,dispatcher) { input -> result(input).copy(groups=listOf(
+            PlanningGroup(PlanningDirection.BALANCED,listOf(1)), PlanningGroup(PlanningDirection.EXPECTED,emptyList()))) }
+        session.generate(state.copy(planningPreferences=PlanningPreferences().withCampus(state.campus,
+            CampusPlanningPreferences(direction=PlanningDirection.EXPECTED))),draft); runCurrent()
+        val execution=session.executions.value.getValue(state.campus)
+        assertEquals(PlanningDirection.BALANCED,execution.defaultDirection); assertEquals(1,execution.selectedOption)
+    }
 
     @Test fun noRequestExistsUntilGenerateAndIdenticalExplicitClicksStillRunTwice() = runTest {
         var calls=0

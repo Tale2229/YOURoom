@@ -9,7 +9,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import com.example.youroom.domain.*
 import com.example.youroom.ui.*
-import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.ui.theme.YOURoomTheme
 import com.example.youroom.ui.theme.campusColorScheme
 import org.junit.Assert.*
 import org.junit.Rule
@@ -29,7 +29,7 @@ class RoomActionMotionUiTest {
     private fun renderFlip() {
         compose.setContent {
             SideEffect { compositions++ }
-            YouRoomTheme {
+            YOURoomTheme {
                 motionScope=rememberCoroutineScope()
                 flip.Observe({offset},{2200f},{true},enabled)
                 slow.Observe({offset},{100f},{true},enabled)

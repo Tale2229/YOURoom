@@ -18,10 +18,11 @@ class AppearancePreferencesTest {
     }
 
     @Test fun previousAndNextWrapWithoutChangingTheStableStorageIds() {
-        assertEquals(CampusTone.CLAY, CampusTone.SAND.step(-1))
-        assertEquals(CampusTone.SAND, CampusTone.CLAY.step(1))
+        assertEquals(CampusTone.MATISSE, CampusTone.SAND.step(-1))
+        assertEquals(CampusTone.MATISSE, CampusTone.CLAY.step(1))
+        assertEquals(CampusTone.SAND, CampusTone.MATISSE.step(1))
         CampusTone.entries.forEach { assertEquals(it, it.step(1).step(-1)) }
-        assertEquals(listOf("sand", "pine", "slate", "clay"), CampusTone.entries.map { it.id })
+        assertEquals(listOf("sand", "pine", "slate", "clay", "matisse"), CampusTone.entries.map { it.id })
     }
 
     @Test fun storageRoundTripKeepsFiltersTagsAndStripPreferencesUntouched() {

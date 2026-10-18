@@ -25,14 +25,14 @@ class PlanningFeedbackUiTest {
     @get:Rule val compose=createComposeRule()
     private var clock by mutableStateOf<Clock>(Clock.fixed(Instant.parse("2026-10-15T23:00:00Z"),SchoolZone))
     private val snapshot=DemoData.snapshot(clock=clock).copy(isDemo=false)
-    private var state by mutableStateOf(YouRoomState(initializing=false,loggedIn=true,snapshot=snapshot,today=snapshot.queryDate))
+    private var state by mutableStateOf(YOURoomState(initializing=false,loggedIn=true,snapshot=snapshot,today=snapshot.queryDate))
     private var goal by mutableStateOf(PlanningDraft())
     private var fontScale by mutableFloatStateOf(1f)
     private var generated=0
     private fun render()=compose.setContent {
         val density=LocalDensity.current
         CompositionLocalProvider(LocalDensity provides Density(density.density,fontScale)) {
-            YouRoomTheme(campus=state.campus) {
+            YOURoomTheme(campus=state.campus) {
                 StudyPlanningScreen(state,goal,emptyMap(),{goal=it},{generated++},{},{},{},clock=clock)
             }
         }

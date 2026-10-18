@@ -1,5 +1,7 @@
 package com.example.youroom.ui
 
+import com.example.youroom.ui.theme.themeRoles
+
 import androidx.compose.animation.SplineBasedFloatDecayAnimationSpec
 import androidx.compose.animation.core.generateDecayAnimationSpec
 import androidx.compose.animation.core.spring
@@ -34,6 +36,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -75,6 +78,19 @@ internal fun timeWheelProjection(distance: Float): WheelProjection {
         facing.pow(2.2f) * .9f + if (abs(distance) < .5f) .1f * (1f - abs(distance) * 2f) else 0f)
 }
 
+/** Top of the outer clearly visible tick, including its projected line box.
+ * The third tick is the faint curved rim; keep it painted, but don't let its
+ * mostly empty viewport determine the apparent gap below the title. */
+internal fun timeWheelVisibleEdge(viewportRows: Float, rowHeight: Float, lineHeight: Float): Float {
+    val outer=timeWheelProjection(2f)
+    val facing=cos(Math.toRadians(outer.rotation.toDouble())).toFloat()
+    return rowHeight*(viewportRows/2f-outer.y)-lineHeight*outer.scale*facing/2f
+}
+
+internal fun timeWheelPlanningTitleSpacing(viewportRows: Float, rowHeight: Float, lineHeight: Float): Float =
+    8f*PlanningWheelScale + timeWheelVisibleEdge(3.5f,rowHeight,lineHeight)*PlanningWheelScale -
+        timeWheelVisibleEdge(viewportRows,rowHeight,lineHeight)
+
 internal fun timeWheelTappedOffset(yInRows: Float): Int = (-3..3)
     .minBy { abs(timeWheelProjection(it.toFloat()).y - yInRows) }
 
@@ -89,7 +105,8 @@ private fun LazyListLayoutInfo.centerPosition(fallback: Int): Float {
 internal fun WheelTimePicker(title: String, minuteOfDay: Int, tag: String,
     modifier: Modifier = Modifier, onMoving: (Boolean) -> Unit = {},
     titleHeight: Dp? = null, titleAction: (@Composable () -> Unit)? = null,
-    viewportRows: Float = 4.5f, onTime: (Int) -> Unit) {
+    viewportRows: Float = 4.5f, titleSpacing: Dp = 8.dp,
+    matchPlanningTitleGap: Boolean = false, bottomInset: Dp = 0.dp, onTime: (Int) -> Unit) {
     var settledHour by remember { mutableIntStateOf(minuteOfDay / 60) }
     var settledMinute by remember { mutableIntStateOf(minuteOfDay % 60) }
     var lastExternal by remember { mutableIntStateOf(minuteOfDay) }
@@ -97,6 +114,10 @@ internal fun WheelTimePicker(title: String, minuteOfDay: Int, tag: String,
     var minuteMoving by remember { mutableStateOf(false) }
     val currentOnTime by rememberUpdatedState(onTime)
     val currentOnMoving by rememberUpdatedState(onMoving)
+    val lineHeight=with(LocalDensity.current) { MaterialTheme.typography.headlineMedium.lineHeight.toDp() }
+    val rowHeight=(lineHeight+12.dp).coerceAtLeast(48.dp)
+    val visualTitleSpacing=if(matchPlanningTitleGap)
+        timeWheelPlanningTitleSpacing(viewportRows,rowHeight.value,lineHeight.value).dp else titleSpacing
     // Shortcuts/restoration update both wheels. Independent settlements combine synchronously
     // against local values, avoiding a stale callback overwriting the other column.
     SideEffect {
@@ -113,11 +134,17 @@ internal fun WheelTimePicker(title: String, minuteOfDay: Int, tag: String,
     }, horizontalAlignment = Alignment.CenterHorizontally) {
         Row(if (titleHeight != null) Modifier.height(titleHeight) else Modifier,
             verticalAlignment = Alignment.CenterVertically) {
-            Text(title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(title, Modifier.testTag("${tag}_title"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             titleAction?.invoke()
         }
-        Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        // Share the cylinder's empty caps with the title/footer without cropping
+        // its face, changing the hit list, or scaling any projected digit.
+        Row(Modifier.fillMaxWidth().layout { measurable,constraints ->
+            val wheel=measurable.measure(constraints)
+            val top=visualTitleSpacing.roundToPx()
+            val bottom=bottomInset.roundToPx().coerceAtLeast(0)
+            layout(wheel.width,(wheel.height+top-bottom).coerceAtLeast(0)) { wheel.placeRelative(0,top) }
+        }, verticalAlignment = Alignment.CenterVertically) {
             TimeWheel("小时", 24, minuteOfDay / 60, "${tag}_hour_wheel", Modifier.weight(1f), {
                 settledHour = it
                 currentOnTime(settledHour * 60 + settledMinute)
@@ -284,7 +311,7 @@ internal fun CylinderWheel(unit: String, labels: List<String>, value: Int, tag: 
             list.scrollToItem(target)
         }
     }
-    BoxWithConstraints(modifier.widthIn(min = 48.dp).height(rowHeight * viewportRows).clipToBounds()) {
+    BoxWithConstraints(modifier.widthIn(min = 48.dp).height(rowHeight * viewportRows).clipToBounds().testTag("${tag}_face")) {
         val measurer = rememberTextMeasurer()
         val available = with(LocalDensity.current) { (maxWidth - 8.dp).toPx() }
         val fittedStyle = remember(fittingLabels, textStyle, available, density) {
@@ -296,7 +323,7 @@ internal fun CylinderWheel(unit: String, labels: List<String>, value: Int, tag: 
                 lineHeight = if (textStyle.lineHeight == TextUnit.Unspecified) textStyle.lineHeight else textStyle.lineHeight*scale)
         }
         Box(Modifier.align(Alignment.Center).fillMaxWidth().height(rowHeight)
-            .background(colors.primary.copy(alpha = .045f), MaterialTheme.shapes.small))
+            .background(themeRoles().wheelCenter, MaterialTheme.shapes.small).testTag("${tag}_center_band"))
         // Invisible list owns touch/velocity and accessibility. Visible digits are separately
         // projected, so outer rows remain on the curved face throughout the gesture.
         LazyColumn(state = list, flingBehavior = fling,

@@ -20,19 +20,31 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.youroom.domain.PlanningDraft
 
 @Composable
-fun YouRoomApp(model: YouRoomViewModel) {
+fun YOURoomApp(model: YOURoomViewModel) {
     val state by model.state.collectAsStateWithLifecycle()
     val plans by model.planning.executions.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var goal by rememberSaveable(stateSaver = PlanningGoalSaver) { mutableStateOf(PlanningDraft()) }
     var planningDate by rememberSaveable { mutableStateOf(state.today.toString()) }
     var planningDemo by rememberSaveable { mutableStateOf(state.demo) }
+    var planningDefaultsApplied by rememberSaveable { mutableStateOf(false) }
+    var planningDefaultsCampus by rememberSaveable { mutableStateOf(state.campus.dataKey) }
     var roomEditor by rememberSaveable { mutableStateOf(RoomEditor.ACTIONS) }
     fun editRoom(id: String, editor: RoomEditor) { roomEditor = editor; model.selectRoom(id) }
     fun manageRoom(id: String?) { roomEditor = RoomEditor.ACTIONS; model.selectRoom(id) }
-    LaunchedEffect(state.today, state.demo) {
+    LaunchedEffect(state.today, state.demo, state.initializing, state.campus) {
+        if (state.initializing) return@LaunchedEffect
+        if (!planningDefaultsApplied) {
+            goal = goal.copy(flexible = state.planningPreferences.forCampus(state.campus).flexible)
+            planningDefaultsApplied = true
+        }
+        if (planningDefaultsCampus != state.campus.dataKey && goal.savedWindows.isEmpty() && plans[state.campus] == null) {
+            goal = goal.copy(flexible = state.planningPreferences.forCampus(state.campus).flexible)
+        }
+        planningDefaultsCampus = state.campus.dataKey
         if (planningDate != state.today.toString() || planningDemo != state.demo) {
-            goal = goal.copy(savedWindows = emptyList(), expectedRooms = if (planningDemo != state.demo) emptySet() else goal.expectedRooms)
+            goal = goal.copy(savedWindows = emptyList(), flexible = state.planningPreferences.forCampus(state.campus).flexible,
+                expectedRooms = if (planningDemo != state.demo) emptySet() else goal.expectedRooms)
         }
         planningDate = state.today.toString(); planningDemo = state.demo
     }
@@ -88,7 +100,7 @@ fun YouRoomApp(model: YouRoomViewModel) {
 }
 
 @Composable
-private fun WorkspacePages(state: YouRoomState, tab: Int, model: YouRoomViewModel,
+private fun WorkspacePages(state: YOURoomState, tab: Int, model: YOURoomViewModel,
     goal: PlanningDraft, plans: Map<com.example.youroom.domain.Campus,PlanningExecution>,
     onGoal: (PlanningDraft) -> Unit, onGenerate: () -> Unit,
     editRoom: (String, RoomEditor) -> Unit, manageRoom: (String?) -> Unit,
@@ -121,11 +133,13 @@ private fun WorkspacePages(state: YouRoomState, tab: Int, model: YouRoomViewMode
                             showHeader = false, sharedHeaderMoving = headerMoving, interactive = active)
                         1 -> StudyPlanningScreen(state, goal, plans, onGoal, onGenerate, model::setCampus,
                             model::refresh, manageRoom, { campus,id,index -> model.planning.select(campus,id,index) },showHeader = false,
-                            sharedHeaderMoving = headerMoving, interactive = active, onCancel = model::cancelPlanning)
+                            sharedHeaderMoving = headerMoving, interactive = active, onCancel = model::cancelPlanning,
+                            onPlanningPreferences = model::setPlanningPreferences)
                         else -> SettingsScreen(state, manageRoom, model::clearProfile, model::logout,
                             model::setCampus, showHeader = false, sharedHeaderMoving = headerMoving, interactive = active,
                             onPeriodStrip = model::setPeriodStrip,
-                            onTone = onTone, onDefaultCampus = model::setDefaultCampus)
+                            onTone = onTone, onDefaultCampus = model::setDefaultCampus,
+                            onPlanningPreferences = model::setPlanningPreferences)
                     }
                 }
             }

@@ -2,7 +2,7 @@ package com.example.youroom
 
 import com.example.youroom.data.DemoData
 import com.example.youroom.domain.*
-import com.example.youroom.ui.YouRoomState
+import com.example.youroom.ui.YOURoomState
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -16,7 +16,7 @@ class CampusStateTest {
 
     @Test fun shaheNeverExposesWestCampusRoomsOrFreshnessLabels() {
         val snapshot = DemoData.snapshot().copy(isDemo = false)
-        val state = YouRoomState(campus = Campus.SHAHE, snapshot = snapshot,
+        val state = YOURoomState(campus = Campus.SHAHE, snapshot = snapshot,
             loggedIn = true, selectedRoomId = "01:2-201")
         assertNull(state.campusSnapshot)
         assertTrue(state.result.rooms.isEmpty())
@@ -34,7 +34,7 @@ class CampusStateTest {
     }
 
     @Test fun shaheThemeDemoIsFilterableWithoutClaimingRealDataAccess() {
-        val state = YouRoomState(campus = Campus.SHAHE, demo = true,
+        val state = YOURoomState(campus = Campus.SHAHE, demo = true,
             snapshot = DemoData.snapshot(Campus.SHAHE), filters = SearchFilters((1..2).toSet()))
         assertTrue(state.result.rooms.isNotEmpty())
         assertTrue(state.result.rooms.all { it.classroom.id.startsWith("04:") })
@@ -44,14 +44,14 @@ class CampusStateTest {
     @Test fun personalProfilesAreScopedToTheVisibleCampus() {
         val west = RoomProfile("01:2-201", "2-201", "2", favorite = true)
         val shahe = RoomProfile("04:演示楼-A101", "演示楼-A101", "演示楼", favorite = true)
-        val state = YouRoomState(profiles = mapOf(west.roomId to west, shahe.roomId to shahe))
+        val state = YOURoomState(profiles = mapOf(west.roomId to west, shahe.roomId to shahe))
         assertEquals(listOf(west), state.campusProfiles)
         assertEquals(listOf(shahe), state.copy(campus = Campus.SHAHE).campusProfiles)
     }
 
     @Test fun aShaheDemoSnapshotCannotBeAccidentallyPresentedOutsideDemoMode() {
         val snapshot = DemoData.snapshot(Campus.SHAHE)
-        val state = YouRoomState(campus = Campus.SHAHE, demo = false, snapshot = snapshot,
+        val state = YOURoomState(campus = Campus.SHAHE, demo = false, snapshot = snapshot,
             selectedRoomId = snapshot.classrooms.first().id)
         assertNull(state.campusSnapshot)
         assertNull(state.selectedRoom)

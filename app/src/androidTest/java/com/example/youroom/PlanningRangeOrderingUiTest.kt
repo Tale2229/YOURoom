@@ -15,7 +15,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.example.youroom.data.DemoData
 import com.example.youroom.domain.*
 import com.example.youroom.ui.*
-import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.ui.theme.YOURoomTheme
 import java.time.Clock
 import java.io.File
 import org.junit.Assert.*
@@ -38,7 +38,7 @@ class PlanningRangeOrderingUiTest {
         val density=LocalDensity.current
         CompositionLocalProvider(LocalDensity provides Density(density.density,fontScale),
             LocalLayoutDirection provides if(rtl) LayoutDirection.Rtl else LayoutDirection.Ltr) {
-            YouRoomTheme(campus=campus,darkTheme=dark) {
+            YOURoomTheme(campus=campus,darkTheme=dark) {
                 Surface { Column(Modifier.fillMaxWidth().padding(top=40.dp)) {
                     PlanningTargetStrip(data.slots,windows,Clock.system(SchoolZone),
                         actions=PlanningRangeActions(true,{edited=it},{}))

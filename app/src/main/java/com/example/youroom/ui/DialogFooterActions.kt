@@ -4,11 +4,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.KeyboardReturn
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,8 +33,9 @@ internal fun DialogFooterActions(hasSelection: Boolean, resetTag: String, closeT
             Icon(Icons.Outlined.Add, null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary)
         }
         FooterIcon("关闭", closeTag, onClose) {
-            Icon(Icons.AutoMirrored.Outlined.KeyboardReturn, null, Modifier.size(24.dp),
-                tint = MaterialTheme.colorScheme.primary)
+            CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.primary) {
+                DialogExitIcon()
+            }
         }
     }
 }

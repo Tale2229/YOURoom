@@ -18,8 +18,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.youroom.data.ClassroomDataSource
 import com.example.youroom.data.local.FilterSettings
 import com.example.youroom.domain.*
-import com.example.youroom.ui.YouRoomApp
-import com.example.youroom.ui.YouRoomViewModel
+import com.example.youroom.ui.YOURoomApp
+import com.example.youroom.ui.YOURoomViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -27,9 +27,34 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 
-class YouRoomUiTest {
+class YOURoomUiTest {
+
+    @Test fun savedPlanningDefaultsInitializeANewDraftAndOnlyANewGenerationChangesTheDisplayedDirection() {
+        compose.waitUntil(10_000) { !capturedModel.state.value.initializing }
+        compose.runOnIdle { capturedModel.setPlanningPreferences(Campus.XITUCHENG,
+            CampusPlanningPreferences(PlanningDirection.FAVORITES,false)) }
+        enterDemo()
+        compose.onNodeWithTag("tab_planner").performClick()
+        compose.onNodeWithTag("planner_adjust").assertIsOff()
+        compose.onNodeWithTag("planner_add_period").performClick(); compose.waitForIdle()
+        compose.onNodeWithTag("planner_generate").performClick()
+        compose.waitUntil(20_000) { capturedModel.planning.executions.value[Campus.XITUCHENG]?.pending == false }
+        compose.onNodeWithTag("planner_alternatives_title",true).assertTextEquals("收藏教室覆盖最多")
+        val previous = capturedModel.planning.executions.value.getValue(Campus.XITUCHENG)
+        compose.runOnIdle { capturedModel.setPlanningPreferences(Campus.XITUCHENG,
+            CampusPlanningPreferences(PlanningDirection.CHANGES,true)) }
+        compose.waitForIdle()
+        assertEquals(previous,capturedModel.planning.executions.value.getValue(Campus.XITUCHENG))
+        compose.onNodeWithTag("planner_adjust").assertIsOff()
+        compose.onNodeWithTag("planner_alternatives_title",true).assertTextEquals("收藏教室覆盖最多")
+        compose.onNodeWithTag("planner_generate").performClick()
+        compose.waitUntil(20_000) {
+            capturedModel.planning.executions.value[Campus.XITUCHENG]?.let { it.id>previous.id && !it.pending } == true
+        }
+        compose.onNodeWithTag("planner_alternatives_title",true).assertTextEquals("换教室最少")
+    }
     @get:Rule val compose = createComposeRule()
-    private lateinit var capturedModel: YouRoomViewModel
+    private lateinit var capturedModel: YOURoomViewModel
 
     @Before fun renderIsolatedApp() {
         // Never read a real user's Token, database or preferences during instrumentation.
@@ -44,6 +69,8 @@ class YouRoomUiTest {
             override suspend fun deleteProfile(roomId: String) = error("Real persistence disabled in UI tests")
         }
         val settings = object : FilterSettings {
+            override val planningPreferences=MutableStateFlow(PlanningPreferences())
+            override suspend fun savePlanningPreferences(value: PlanningPreferences) { planningPreferences.value=value }
             override val appearance=MutableStateFlow(AppearancePreferences())
             override suspend fun saveAppearance(value: AppearancePreferences) { appearance.value=value }
             override val periodStrip=MutableStateFlow(PeriodStripPreferences())
@@ -59,12 +86,12 @@ class YouRoomUiTest {
         }
         val factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T = YouRoomViewModel(source, settings) as T
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = YOURoomViewModel(source, settings) as T
         }
         compose.setContent {
-            val model: YouRoomViewModel = viewModel(factory = factory)
+            val model: YOURoomViewModel = viewModel(factory = factory)
             androidx.compose.runtime.SideEffect { capturedModel = model }
-            YouRoomApp(model)
+            YOURoomApp(model)
         }
     }
 

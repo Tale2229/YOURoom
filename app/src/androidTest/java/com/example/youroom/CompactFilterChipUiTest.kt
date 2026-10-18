@@ -12,7 +12,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.example.youroom.domain.Campus
 import com.example.youroom.ui.CompactFilterChip
-import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.ui.theme.YOURoomTheme
 import com.example.youroom.ui.theme.campusColorScheme
 import org.junit.Assert.*
 import org.junit.Rule
@@ -32,7 +32,7 @@ class CompactFilterChipUiTest {
         compose.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, scale)) {
-                YouRoomTheme(campus = campus, darkTheme = night) {
+                YOURoomTheme(campus = campus, darkTheme = night) {
                     FlowRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                         horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         labels.forEach { label -> CompactFilterChip(label, selected,

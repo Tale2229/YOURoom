@@ -101,7 +101,8 @@ internal fun PlanningTargetStrip(slots: List<LessonSlot>, windows: List<StudyWin
     }
 }
 
-internal data class PlanningRangeActions(val enabled: Boolean, val onEdit: (Int) -> Unit, val onDelete: (Int) -> Unit)
+internal data class PlanningRangeActions(val enabled: Boolean, val onEdit: (Int) -> Unit, val onDelete: (Int) -> Unit,
+    val onSave: (() -> Unit)? = null)
 
 @Composable
 internal fun PlanningRoomStrip(use: PlanningRoomUse, slots: List<LessonSlot>, free: Set<Int>, enabled: Boolean,
@@ -141,7 +142,7 @@ private fun PlanningRangeStrip(windows: List<StudyWindow>, slots: List<LessonSlo
                 LaunchedEffect(actions?.enabled) { if (actions?.enabled != true) menu=false }
                 val action = if (actions != null) Modifier.clickable(enabled = actions.enabled, role = Role.Button,
                     interactionSource = remember { MutableInteractionSource() }, indication = null,
-                    onClickLabel = "编辑或删除时段") { menu=true } else Modifier
+                    onClickLabel = "编辑、删除或保存时段组合") { menu=true } else Modifier
                 Box(Modifier.background(paper)) {
                     Text("${planningTime(window.start)}–${planningTime(window.end)}",
                         Modifier.width(IntrinsicSize.Max).testTag("${labelPrefix}_$index").then(action).semantics {
@@ -156,10 +157,14 @@ private fun PlanningRangeStrip(windows: List<StudyWindow>, slots: List<LessonSlo
                         }
                         if (actions != null) customActions=listOf(
                             CustomAccessibilityAction("编辑时段") { if (actions.enabled) { actions.onEdit(index); true } else false },
-                            CustomAccessibilityAction("删除时段") { if (actions.enabled) { actions.onDelete(index); true } else false })
+                            CustomAccessibilityAction("删除时段") { if (actions.enabled) { actions.onDelete(index); true } else false }) +
+                            if (actions.onSave != null) listOf(CustomAccessibilityAction("保存时段组合") {
+                                if (actions.enabled) { actions.onSave.invoke(); true } else false
+                            }) else emptyList()
                     }, style=textStyle,color=color,maxLines=1,softWrap=false)
                     if (actions != null) PlanningPeriodMenu(menu,actions.enabled,index,{ menu=false },
-                        { menu=false;actions.onEdit(index) },{ menu=false;actions.onDelete(index) })
+                        { menu=false;actions.onEdit(index) },{ menu=false;actions.onDelete(index) },
+                        actions.onSave?.let { save -> { menu=false;save() } })
                 }
             }
         }.map { it.measure(labelConstraints) }

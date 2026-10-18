@@ -19,7 +19,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.example.youroom.domain.Campus
-import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.ui.theme.YOURoomTheme
 import kotlinx.coroutines.flow.first
 
 internal class CampusHeaderMotion(val pager: PagerState, private val desired: State<Int>) {
@@ -38,13 +38,13 @@ internal fun rememberCampusHeaderMotion(campus: Campus): CampusHeaderMotion {
 }
 
 @Composable
-internal fun CampusHeaderPager(state: YouRoomState, motion: CampusHeaderMotion, onCampus: (Campus) -> Unit) {
+internal fun CampusHeaderPager(state: YOURoomState, motion: CampusHeaderMotion, onCampus: (Campus) -> Unit) {
     HorizontalPager(state = motion.pager, beyondViewportPageCount = 1, userScrollEnabled = false,
         modifier = Modifier.fillMaxWidth().wrapContentHeight().clipToBounds().testTag("campus_pager"),
         key = { Campus.entries[it].dataKey }) { index ->
         val displayed = Campus.entries[index]
         val visibleSemantics = if (motion.pager.currentPage == index) Modifier else Modifier.clearAndSetSemantics {}
-        YouRoomTheme(campus = displayed, appearance = state.appearance) {
+        YOURoomTheme(campus = displayed, appearance = state.appearance) {
             Surface(Modifier.fillMaxWidth().then(visibleSemantics)) {
                 CampusHeader(state.copy(campus = displayed), onCampus)
             }
@@ -56,13 +56,13 @@ internal fun CampusHeaderPager(state: YouRoomState, motion: CampusHeaderMotion, 
  * planner/settings reuse a single body so switching campus never duplicates time wheels.
  */
 @Composable
-internal fun CampusFrame(state: YouRoomState, onCampus: (Campus) -> Unit, showHeader: Boolean = true,
+internal fun CampusFrame(state: YOURoomState, onCampus: (Campus) -> Unit, showHeader: Boolean = true,
     sharedHeaderMoving: Boolean = false, interactive: Boolean = true, keepBothCampuses: Boolean = false,
-    bodyTag: String, content: @Composable (YouRoomState, Boolean, Boolean, Boolean) -> Unit) {
+    bodyTag: String, content: @Composable (YOURoomState, Boolean, Boolean, Boolean) -> Unit) {
     val localHeader = if (showHeader) rememberCampusHeaderMotion(state.campus) else null
     val headerMoving = localHeader?.moving ?: sharedHeaderMoving
     val latestHeaderMoving by rememberUpdatedState(headerMoving)
-    val pages = remember(state.demo) { mutableMapOf<Campus, YouRoomState>() }
+    val pages = remember(state.demo) { mutableMapOf<Campus, YOURoomState>() }
     pages[state.campus] = state
     var bodyCampus by remember { mutableStateOf(state.campus) }
     val alpha = remember { Animatable(1f) }
@@ -102,7 +102,7 @@ internal fun CampusFrame(state: YouRoomState, onCampus: (Campus) -> Unit, showHe
                     val page = if (ready) observed else held
                     SideEffect { if (ready) held = observed }
                     val active = ready && !moving && interactive
-                    YouRoomTheme(campus = displayed, appearance = state.appearance) {
+                    YOURoomTheme(campus = displayed, appearance = state.appearance) {
                         Surface(Modifier.fillMaxSize().testTag(if (bodyTag == "campus_body")
                             "campus_content_${displayed.dataKey}" else "${bodyTag}_content_${displayed.dataKey}")
                             .zIndex(if (visible) 1f else 0f)

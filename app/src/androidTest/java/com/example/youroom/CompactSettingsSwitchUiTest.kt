@@ -31,7 +31,7 @@ class CompactSettingsSwitchUiTest {
     private var changes=0
     private fun render()=compose.setContent {
         CompositionLocalProvider(LocalLayoutDirection provides if(rtl) LayoutDirection.Rtl else LayoutDirection.Ltr) {
-            YouRoomTheme(campus=campus,darkTheme=dark) { Surface {
+            YOURoomTheme(campus=campus,darkTheme=dark) { Surface {
                 Box(Modifier.padding(32.dp)) {
                     CompactSettingsSwitch(checked,enabled,{checked=it;changes++},Modifier.testTag("switch"))
                 }

@@ -20,7 +20,7 @@ import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalTime
 
-data class YouRoomState(
+data class YOURoomState(
     val initializing: Boolean = true,
     val loggedIn: Boolean = false,
     val loggingIn: Boolean = false,
@@ -41,6 +41,7 @@ data class YouRoomState(
     val selectedRoomId: String? = null,
     val periodStrip: PeriodStripPreferences = PeriodStripPreferences(),
     val appearance: AppearancePreferences = AppearancePreferences(),
+    val planningPreferences: PlanningPreferences = PlanningPreferences(),
 ) {
     val tagOrder: List<String> by lazy(LazyThreadSafetyMode.PUBLICATION) {
         tagCatalog.available(profiles.values.flatMap { it.allTags })
@@ -78,14 +79,14 @@ private data class CampusWorkspace(
 private data class ProfileChange(val id: String, val profile: RoomProfile?, val campus: Campus,
     val revision: Long, val persisted: Boolean = false)
 
-class YouRoomViewModel(
+class YOURoomViewModel(
     private val repository: ClassroomDataSource,
     private val settings: FilterSettings,
     private val clock: Clock = Clock.system(SchoolZone),
     planningDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
-    private val mutableState = MutableStateFlow(YouRoomState(today = today()))
-    val state: StateFlow<YouRoomState> = mutableState.asStateFlow()
+    private val mutableState = MutableStateFlow(YOURoomState(today = today()))
+    val state: StateFlow<YOURoomState> = mutableState.asStateFlow()
     val planning = PlanningSession(viewModelScope,planningDispatcher)
 
     fun cancelPlanning() { planning.cancel(state.value.campus) }
@@ -122,6 +123,20 @@ class YouRoomViewModel(
     private var persistedAppearance = AppearancePreferences()
     private var pendingAppearance: AppearancePreferences? = null
     private val appearanceWrites = Channel<AppearancePreferences>(Channel.CONFLATED)
+    private val planningPreferencesReady = kotlinx.coroutines.CompletableDeferred<Unit>()
+    private var persistedPlanning = PlanningPreferences()
+    private var pendingPlanning: PlanningPreferences? = null
+    private val planningWrites = Channel<PlanningPreferences>(Channel.CONFLATED)
+
+    fun setPlanningPreferences(campus: Campus, value: CampusPlanningPreferences) {
+        if (state.value.initializing) return
+        val updated = state.value.planningPreferences.withCampus(campus, value.copy(
+            templates = value.templates.map { it.copy(windows = it.windows.toList()) }.toList()))
+        if (updated == state.value.planningPreferences) return
+        pendingPlanning = updated
+        mutableState.update { it.copy(planningPreferences = updated) }
+        planningWrites.trySend(updated)
+    }
 
     fun setCampusTone(campus: Campus, tone: CampusTone) {
         if(state.value.initializing) return
@@ -148,6 +163,27 @@ class YouRoomViewModel(
     }
 
     init {
+        viewModelScope.launch {
+            settings.planningPreferences.catch { showError("无法读取规划偏好"); emit(PlanningPreferences()) }.collect { value ->
+                persistedPlanning = value
+                if (pendingPlanning == null || pendingPlanning == value) {
+                    pendingPlanning = null
+                    mutableState.update { it.copy(planningPreferences = value) }
+                }
+                planningPreferencesReady.complete(Unit)
+            }
+        }
+        viewModelScope.launch {
+            for (value in planningWrites) try { settings.savePlanningPreferences(value) }
+            catch (error: Exception) {
+                if (error is CancellationException) throw error
+                if (pendingPlanning == value) {
+                    pendingPlanning = null
+                    mutableState.update { it.copy(planningPreferences = persistedPlanning) }
+                }
+                showError("规划偏好保存失败，请重试")
+            }
+        }
         viewModelScope.launch {
             settings.appearance.catch { showError("无法读取外观设置。"); emit(AppearancePreferences()) }.collect { value ->
                 persistedAppearance=value
@@ -241,6 +277,7 @@ class YouRoomViewModel(
                 val remembered = repository.rememberedAccount()
                 val authenticated = repository.hasSession()
                 appearanceReady.await()
+                planningPreferencesReady.await()
                 restoreWorkspace(state.value.appearance.defaultCampus)
                 mutableState.update { it.copy(initializing = false, loggedIn = authenticated, rememberedAccount = remembered,
                     cachedCampuses = realWorkspaces.filterValues { workspace -> workspace.snapshot != null }.keys) }
@@ -620,7 +657,7 @@ class YouRoomViewModel(
         fun factory(container: AppContainer) = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                YouRoomViewModel(container.repository, container.settings) as T
+                YOURoomViewModel(container.repository, container.settings) as T
         }
     }
 }

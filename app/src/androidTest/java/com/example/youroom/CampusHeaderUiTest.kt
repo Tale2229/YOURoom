@@ -15,8 +15,8 @@ import androidx.compose.ui.unit.sp
 import com.example.youroom.data.DemoData
 import com.example.youroom.domain.Campus
 import com.example.youroom.ui.CampusHeader
-import com.example.youroom.ui.YouRoomState
-import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.ui.YOURoomState
+import com.example.youroom.ui.theme.YOURoomTheme
 import java.time.LocalDate
 import org.junit.Assert.*
 import org.junit.Rule
@@ -24,14 +24,14 @@ import org.junit.Test
 
 class CampusHeaderUiTest {
     @get:Rule val compose = createComposeRule()
-    private var state by mutableStateOf(YouRoomState(initializing = false, today = LocalDate.of(2026, 10, 13)))
+    private var state by mutableStateOf(YOURoomState(initializing = false, today = LocalDate.of(2026, 10, 13)))
     private var scale by mutableFloatStateOf(1f)
     private var switches = 0
     private fun render() {
         compose.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, scale)) {
-                YouRoomTheme(campus = state.campus) {
+                YOURoomTheme(campus = state.campus) {
                     Box(Modifier.widthIn(max = 320.dp)) {
                         CampusHeader(state) { state = state.copy(campus = it); switches++ }
                     }

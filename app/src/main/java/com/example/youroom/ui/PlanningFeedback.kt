@@ -15,27 +15,28 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import com.example.youroom.domain.*
 import java.time.Clock
 
 /** Keep the nullable host mounted so clearing feedback also plays its leftward exit. */
 @Composable
 internal fun PlanningFeedbackHost(feedback: PlanningResult?, goal: PlanningDraft, clock: Clock,
-    onGoal: (PlanningDraft) -> Unit) {
+    onGoal: (PlanningDraft) -> Unit, tagPrefix: String = "planner", horizontalPadding: Dp = 24.dp) {
     var retained by remember { mutableStateOf(feedback) }
     SideEffect { if (feedback!=null) retained=feedback }
     val shown=feedback ?: retained
-    AnimatedVisibility(feedback!=null, Modifier.fillMaxWidth().clipToBounds().testTag("planner_feedback_host"),
+    AnimatedVisibility(feedback!=null, Modifier.fillMaxWidth().clipToBounds().testTag("${tagPrefix}_feedback_host"),
         enter=slideInHorizontally(tween(240)) { -it } + fadeIn(tween(180)) + expandVertically(tween(240),Alignment.Top),
         exit=slideOutHorizontally(tween(200)) { -it } + fadeOut(tween(140)) + shrinkVertically(tween(200),Alignment.Top),
         label="planning feedback") {
-        if (shown!=null) PlanningFeedback(shown,goal,clock,feedback!=null,onGoal)
+        if (shown!=null) PlanningFeedback(shown,goal,clock,feedback!=null,onGoal,tagPrefix,horizontalPadding)
     }
 }
 
 @Composable
 private fun PlanningFeedback(feedback: PlanningResult, goal: PlanningDraft, clock: Clock, active: Boolean,
-    onGoal: (PlanningDraft) -> Unit) {
+    onGoal: (PlanningDraft) -> Unit, tagPrefix: String, horizontalPadding: Dp) {
     val message=when(feedback.problem) {
         PlanningProblem.INVALID_TIME -> "结束时间必须晚于开始时间\n暂不支持跨日规划"
         PlanningProblem.PAST_TIME -> "目标时段已早于当前时间\n请选择今天尚未开始的时段"
@@ -55,14 +56,14 @@ private fun PlanningFeedback(feedback: PlanningResult, goal: PlanningDraft, cloc
     }
     val actions: @Composable () -> Unit = {
         when(feedback.problem) {
-            PlanningProblem.PAST_TIME -> PlanningFeedbackAction("从现在起","planner_from_now",88.dp,
+            PlanningProblem.PAST_TIME -> PlanningFeedbackAction("从现在起","${tagPrefix}_from_now",88.dp,
                 active && PlanningTimeActions.startFromNow(goal,clock)!=null) {
                 PlanningTimeActions.startFromNow(goal,clock)?.let(onGoal)
             }
-            PlanningProblem.INVALID_TIME, PlanningProblem.TOO_SHORT -> Row(Modifier.testTag("planner_duration_buttons"),
+            PlanningProblem.INVALID_TIME, PlanningProblem.TOO_SHORT -> Row(Modifier.testTag("${tagPrefix}_duration_buttons"),
                 horizontalArrangement=Arrangement.spacedBy(4.dp)) {
                 listOf(1,2,4).forEach { hours ->
-                    PlanningFeedbackAction("${hours}h","planner_duration_${hours}h",40.dp,
+                    PlanningFeedbackAction("${hours}h","${tagPrefix}_duration_${hours}h",40.dp,
                         active && PlanningTimeActions.endAfterHours(goal,hours)!=null) {
                         PlanningTimeActions.endAfterHours(goal,hours)?.let(onGoal)
                     }
@@ -71,10 +72,10 @@ private fun PlanningFeedback(feedback: PlanningResult, goal: PlanningDraft, cloc
             else -> Unit
         }
     }
-    BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal=24.dp,vertical=12.dp).testTag("planner_feedback")) {
+    BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal=horizontalPadding,vertical=12.dp).testTag("${tagPrefix}_feedback")) {
         val stacked=actionsWidth>0.dp && with(density) { textWidth+actionsWidth.toPx()+8.dp.toPx()>maxWidth.toPx() }
         val text: @Composable (Modifier) -> Unit = { modifier ->
-            Text(message,modifier.testTag("planner_message"),style=style,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(message,modifier.testTag("${tagPrefix}_message"),style=style,color=MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (stacked) Column(verticalArrangement=Arrangement.spacedBy(4.dp)) {
             text(Modifier.fillMaxWidth())

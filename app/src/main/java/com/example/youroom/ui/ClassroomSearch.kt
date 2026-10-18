@@ -10,7 +10,7 @@ private data class CompletedSearch(val request: ClassroomSearchRequest, val resu
 private val EmptySearch = SearchResult(emptyList(), emptyList(), false)
 
 @Composable
-fun rememberClassroomSearch(state: YouRoomState, enabled: Boolean): ClassroomSearchPresentation {
+fun rememberClassroomSearch(state: YOURoomState, enabled: Boolean): ClassroomSearchPresentation {
     val snapshot = state.campusSnapshot
     val cache = remember { ClassroomSearchCache() }
     val request = remember(snapshot, state.filters, state.profiles, state.stale) {

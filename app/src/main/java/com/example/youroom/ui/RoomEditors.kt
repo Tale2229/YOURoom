@@ -5,8 +5,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.material.icons.automirrored.outlined.KeyboardReturn
-import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.Icons
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,7 +23,7 @@ import com.example.youroom.domain.*
 enum class RoomEditor { ACTIONS, TAGS, NOTE }
 
 @Composable
-fun RoomTagsDialog(room: RoomMatch, state: YouRoomState, onDismiss: () -> Unit,
+fun RoomTagsDialog(room: RoomMatch, state: YOURoomState, onDismiss: () -> Unit,
     onChange: (RoomProfile) -> Unit, onAddTag: (String) -> Unit,
     onRemoveTag: (String) -> Unit, onTagOrder: (List<String>) -> Unit) {
     var draft by remember(room.classroom.id) { mutableStateOf(room.profile) }
@@ -103,7 +101,7 @@ fun RoomNoteDialog(room: RoomMatch, onDismiss: () -> Unit, onChange: (RoomProfil
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     IconButton(onClick = onDismiss, modifier = Modifier.size(48.dp)
                         .testTag("close_room_note")) {
-                        Icon(Icons.AutoMirrored.Outlined.KeyboardReturn, "关闭", Modifier.size(22.dp))
+                        DialogExitIcon(description = "关闭", size = 22.dp)
                     }
                 }
             }

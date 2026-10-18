@@ -389,7 +389,7 @@ class ClassroomRepositoryTest {
         override fun saveLogin(token: String, credentials: RememberedCredentials?) { this.token = token; remembered = credentials }
     }
 
-    private class MemoryDao : YouRoomDao {
+    private class MemoryDao : YOURoomDao {
         val snapshots = mutableMapOf<String, SnapshotEntity>()
         var savedSnapshot: SnapshotEntity?
             get() = snapshots["01"]

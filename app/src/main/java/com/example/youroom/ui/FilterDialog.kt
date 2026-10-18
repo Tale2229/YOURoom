@@ -15,7 +15,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.youroom.domain.*
 
 @Composable
-fun FilterDialog(state: YouRoomState, onDismiss: () -> Unit, onFilters: (SearchFilters) -> Unit,
+fun FilterDialog(state: YOURoomState, onDismiss: () -> Unit, onFilters: (SearchFilters) -> Unit,
     onAddTag: (String) -> Unit, onRemoveTag: (String) -> Unit, onTagOrder: (List<String>) -> Unit) {
     val buildings = remember(state.campusSnapshot) {
         state.campusSnapshot?.classrooms.orEmpty().map { it.building }.distinct().sorted()
@@ -51,7 +51,7 @@ fun FilterDialog(state: YouRoomState, onDismiss: () -> Unit, onFilters: (SearchF
 }
 
 @Composable
-private fun BuildingFilterRows(state: YouRoomState, buildings: List<String>, onFilters: (SearchFilters) -> Unit) {
+private fun BuildingFilterRows(state: YOURoomState, buildings: List<String>, onFilters: (SearchFilters) -> Unit) {
     val names = listOf<String?>(null) + buildings
     val rows = if (state.campus == Campus.SHAHE) 1 else minOf(2, names.size)
     val perRow = (names.size + rows - 1) / rows

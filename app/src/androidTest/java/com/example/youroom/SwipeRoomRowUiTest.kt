@@ -17,7 +17,7 @@ import com.example.youroom.ui.SwipeRoomRow
 import com.example.youroom.ui.FavoriteMotionTiming
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Density
-import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.ui.theme.YOURoomTheme
 import com.example.youroom.ui.theme.campusColorScheme
 import org.junit.Assert.*
 import org.junit.Rule
@@ -42,7 +42,7 @@ class SwipeRoomRowUiTest {
 
     private fun renderRow() {
         compose.setContent {
-            YouRoomTheme(campus = campus, darkTheme = dark) {
+            YOURoomTheme(campus = campus, darkTheme = dark) {
                 val density = LocalDensity.current
                 CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
                 Surface { if (visible) SwipeRoomRow(RoomMatch(room, profile, setOf(1, 2, 6)), DemoData.snapshot().slots,
@@ -316,7 +316,7 @@ class SwipeRoomRowUiTest {
         profile = room.emptyProfile().copy(favorite = true, excluded = true, tags = setOf("靠窗"))
         val original = profile
         compose.setContent {
-            YouRoomTheme { RoomNoteDialog(RoomMatch(room, profile, emptySet()), {}, { profile = it }) }
+            YOURoomTheme { RoomNoteDialog(RoomMatch(room, profile, emptySet()), {}, { profile = it }) }
         }
         compose.onNodeWithTag("room_note").performTextInput("  保留空格  ")
         compose.runOnIdle { assertEquals("  保留空格  ", profile.note) }
@@ -478,7 +478,7 @@ class SwipeRoomRowUiTest {
         val original = profile
         var changes = 0
         compose.setContent {
-            YouRoomTheme { RoomNoteDialog(RoomMatch(room, profile, emptySet()), {}, { changes++; profile = it }) }
+            YOURoomTheme { RoomNoteDialog(RoomMatch(room, profile, emptySet()), {}, { changes++; profile = it }) }
         }
         compose.onNodeWithTag("room_note").assertTextContains("旧".repeat(20))
         compose.onNodeWithTag("room_note_count", useUnmergedTree = true).assertTextEquals("20/20")

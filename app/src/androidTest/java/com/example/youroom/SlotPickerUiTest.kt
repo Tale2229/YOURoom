@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.Density
 import com.example.youroom.data.DemoData
 import com.example.youroom.domain.*
 import com.example.youroom.ui.SlotPicker
-import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.ui.theme.YOURoomTheme
 import com.example.youroom.ui.theme.campusColorScheme
 import org.junit.Assert.*
 import org.junit.Rule
@@ -45,7 +45,7 @@ class SlotPickerUiTest {
         compose.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
-                YouRoomTheme(darkTheme = appearanceDark, campus = campus) {
+                YOURoomTheme(darkTheme = appearanceDark, campus = campus) {
                     Surface {
                         Column(Modifier.fillMaxWidth().padding(6.dp)) {
                             SlotPicker(campus, snapshot.queryDate, true, filters, slots,

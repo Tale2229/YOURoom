@@ -41,7 +41,7 @@ class ThemeSettingsUiTest {
             }) { requestTone -> Surface {
                 Column {
                     Box(Modifier.weight(1f)) {
-                        SettingsScreen(YouRoomState(initializing = false, campus = campus,
+                        SettingsScreen(YOURoomState(initializing = false, campus = campus,
                             snapshot = DemoData.snapshot(campus), appearance = appearance), {}, {}, {}, { campus = it },
                             onTone = requestTone,
                             onDefaultCampus = { appearance = appearance.copy(defaultCampus = it) })
@@ -97,7 +97,7 @@ class ThemeSettingsUiTest {
     }
 
     @Test fun rapidSelectionsPreviewImmediatelyButOnlyTheLastQuietChoiceCommitsAndWavesTheWholePage() {
-        appearance = AppearancePreferences(westTone = CampusTone.CLAY)
+        appearance = AppearancePreferences(westTone = CampusTone.MATISSE)
         render()
         assertEquals(1f, progress())
         val header = compose.onNodeWithTag("campus_header").fetchSemanticsNode().id
@@ -105,7 +105,7 @@ class ThemeSettingsUiTest {
         compose.onNodeWithTag("settings_theme_next").performClick()
         compose.mainClock.advanceTimeBy(160)
         compose.onNodeWithTag("settings_theme_name").assertTextEquals("砂岩")
-        assertEquals(CampusTone.CLAY, appearance.westTone); assertTrue(changes.isEmpty())
+        assertEquals(CampusTone.MATISSE, appearance.westTone); assertTrue(changes.isEmpty())
         compose.onNodeWithTag("settings_theme_next").performClick()
         compose.mainClock.advanceTimeBy(160)
         compose.onNodeWithTag("settings_theme_name").assertTextEquals("松绿")
@@ -121,7 +121,7 @@ class ThemeSettingsUiTest {
         val middle = compose.onNodeWithTag("theme_transition_page").captureToImage().toPixelMap()
         val night = InstrumentationRegistry.getInstrumentation().targetContext.resources.configuration.uiMode and
             android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES
-        val before = campusColorScheme(Campus.XITUCHENG, night, CampusTone.CLAY).surface
+        val before = campusThemeRoles(campusColorScheme(Campus.XITUCHENG, night, CampusTone.MATISSE), CampusTone.MATISSE, night).navigation
         val after = campusColorScheme(Campus.XITUCHENG, night, CampusTone.SAND).surface
         assertEquals(after, middle[4,12])
         assertEquals(before, middle[middle.width-4,middle.height-20])
@@ -246,7 +246,7 @@ class ThemeSettingsUiTest {
             val store = SettingsStore(raw)
             assertEquals(AppearancePreferences(), store.appearance.first())
             raw.edit { it[SharedFilterPreferences.favorites] = true; it[PeriodStripPreferenceKeys.numbers] = true }
-            val choice = AppearancePreferences(CampusTone.CLAY, CampusTone.SLATE, Campus.SHAHE)
+            val choice = AppearancePreferences(CampusTone.MATISSE, CampusTone.SLATE, Campus.SHAHE)
             store.saveAppearance(choice)
             scope.coroutineContext[Job]!!.cancelAndJoin()
             val reopened = SettingsStore(PreferenceDataStoreFactory.create(scope = reopenedScope, produceFile = { path }))

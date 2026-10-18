@@ -12,7 +12,7 @@ import java.time.LocalDate
 
 class ClassroomRepository(
     private val api: SchoolApi,
-    private val dao: YouRoomDao,
+    private val dao: YOURoomDao,
     private val session: SessionStore,
     private val clock: Clock = Clock.system(SchoolZone),
 ) : ClassroomDataSource {

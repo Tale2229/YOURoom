@@ -7,7 +7,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.example.youroom.data.DemoData
 import com.example.youroom.domain.*
 import com.example.youroom.ui.*
-import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.ui.theme.YOURoomTheme
 import java.io.File
 import java.time.Clock
 import java.time.Instant
@@ -30,8 +30,8 @@ class PlanningTransferDisplayUiTest {
             295,256,2,0,6,0,6,0,-200)
         val execution=PlanningExecution(1,PlanningInput(data,Campus.XITUCHENG,data.queryDate,emptyMap(),
             PlanningSchedule.confirmedGoal(goal)!!),PlanningResult(options=listOf(PlanningOption("综合",plan))))
-        compose.setContent { YouRoomTheme { StudyPlanningScreen(
-            YouRoomState(initializing=false,loggedIn=true,snapshot=data,today=data.queryDate),
+        compose.setContent { YOURoomTheme { StudyPlanningScreen(
+            YOURoomState(initializing=false,loggedIn=true,snapshot=data,today=data.queryDate),
             goal,mapOf(Campus.XITUCHENG to execution),{},{},{},{},{},clock=clock) } }
         compose.onNodeWithTag("planner_range_${a.id}_0",true).assertTextEquals("09:00–11:30")
         compose.onNodeWithTag("planner_range_${a.id}_1",true).assertTextEquals("12:15–14:01")

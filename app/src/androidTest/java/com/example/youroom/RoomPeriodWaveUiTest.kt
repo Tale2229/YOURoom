@@ -16,7 +16,7 @@ import com.example.youroom.domain.Campus
 import com.example.youroom.domain.PeriodWave
 import com.example.youroom.ui.RoomAvailabilityStrip
 import com.example.youroom.ui.RoomPeriodWave
-import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.ui.theme.YOURoomTheme
 import com.example.youroom.ui.theme.campusColorScheme
 import org.junit.Assert.*
 import org.junit.Rule
@@ -43,7 +43,7 @@ class RoomPeriodWaveUiTest {
         compose.setContent {
             SideEffect { compositions++ }
             CompositionLocalProvider(LocalLayoutDirection provides direction) {
-                YouRoomTheme(campus = campus, darkTheme = dark) {
+                YOURoomTheme(campus = campus, darkTheme = dark) {
                     wave.Run()
                     Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.background) {
                         RoomAvailabilityStrip(id, free, slots, enabled, wave = wave)

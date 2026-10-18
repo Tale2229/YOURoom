@@ -16,7 +16,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.example.youroom.data.DemoData
 import com.example.youroom.domain.*
 import com.example.youroom.ui.*
-import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.ui.theme.YOURoomTheme
 import com.example.youroom.ui.theme.campusColorScheme
 import org.junit.Assert.*
 import org.junit.Rule
@@ -29,7 +29,7 @@ class StudyPlanningUiTest {
     private val demo = DemoData.snapshot()
     private var goal by mutableStateOf(PlanningDraft())
     private var requested by mutableStateOf(false)
-    private var state by mutableStateOf(YouRoomState(initializing=false,demo=true,snapshot=demo,today=demo.queryDate))
+    private var state by mutableStateOf(YOURoomState(initializing=false,demo=true,snapshot=demo,today=demo.queryDate))
     private var clock by mutableStateOf<Clock>(Clock.system(SchoolZone))
     private var generationClicks = 0
     private lateinit var session: PlanningSession
@@ -38,7 +38,7 @@ class StudyPlanningUiTest {
         goal=next
     }
     private fun render() {
-        compose.setContent { YouRoomTheme(campus=state.campus) {
+        compose.setContent { YOURoomTheme(campus=state.campus) {
             val scope=rememberCoroutineScope()
             val holder=remember { PlanningSession(scope) }
             SideEffect { session=holder }
@@ -107,7 +107,7 @@ class StudyPlanningUiTest {
             compose.onNodeWithTag("planner_saved_periods").assertDoesNotExist()
         }
         compose.onNodeWithTag("planner_current_period").assertDoesNotExist()
-        compose.onNodeWithTag("planner_add_period").assertIsNotEnabled()
+        compose.onNodeWithTag("planner_add_period").assertIsEnabled()
     }
 
     @Test fun threeConfirmedTimesStayCompleteWithoutPeriodBlocksOrCornerCrosses() {
@@ -199,7 +199,7 @@ class StudyPlanningUiTest {
     @Test fun deletingAConfirmedPeriodLoadsItsTimesAndAllowsReconfirmation() {
         goal=PlanningDraft(900,960,savedWindows=listOf(StudyWindow(480,720),StudyWindow(720,780),StudyWindow(780,840)))
         render()
-        compose.onNodeWithTag("planner_add_period").assertIsNotEnabled()
+        compose.onNodeWithTag("planner_add_period").assertIsEnabled()
         removePeriod(1)
         assertEquals(listOf(StudyWindow(480,720),StudyWindow(780,840)),goal.savedWindows)
         assertEquals(720,goal.start)
@@ -449,7 +449,7 @@ class StudyPlanningUiTest {
         val restore=StateRestorationTester(compose)
         restore.setContent {
             var saved by rememberSaveable(stateSaver=PlanningGoalSaver) { mutableStateOf(PlanningDraft()) }
-            YouRoomTheme { StudyPlanningScreen(state,saved,emptyMap(),{saved=it},{},{},{},{},showHeader=false) }
+            YOURoomTheme { StudyPlanningScreen(state,saved,emptyMap(),{saved=it},{},{},{},{},showHeader=false) }
         }
         repeat(2) { add();compose.waitForIdle() }
         restore.emulateSavedInstanceStateRestore()
@@ -464,6 +464,6 @@ class StudyPlanningUiTest {
         restore.emulateSavedInstanceStateRestore()
         compose.onNodeWithTag("planner_target_range_2").assertTextContains("13:00–14:00")
         compose.onNodeWithTag("planner_current_period").assertDoesNotExist()
-        compose.onNodeWithTag("planner_add_period").assertIsNotEnabled()
+        compose.onNodeWithTag("planner_add_period").assertIsEnabled()
     }
 }

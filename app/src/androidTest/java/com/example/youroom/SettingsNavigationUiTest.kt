@@ -38,13 +38,13 @@ class SettingsNavigationUiTest {
         compose.setContent {
             val density=LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density,fontScale)) {
-                YouRoomTheme(campus=campus,darkTheme=dark) {
+                YOURoomTheme(campus=campus,darkTheme=dark) {
                     Surface {
                         Column {
                             if(!navigationOnly) {
                                 val data=DemoData.snapshot(campus)
                                 Box(Modifier.weight(1f)) {
-                                    SettingsScreen(YouRoomState(initializing=false,campus=campus,snapshot=data,
+                                    SettingsScreen(YOURoomState(initializing=false,campus=campus,snapshot=data,
                                         today=data.queryDate,profiles=profiles),{ opened+=it },{
                                         cleared+=it;profiles=profiles-it
                                     },{logouts++},{campus=it})
@@ -68,6 +68,37 @@ class SettingsNavigationUiTest {
                 .assertHeightIsAtLeast(48.dp).performClick().assertIsSelected()
             tabs.filter { it.first!=tag }.forEach { compose.onNodeWithTag(it.first).assertIsNotSelected() }
         }
+    }
+
+    @Test fun appearanceRowsHaveAlignedThemeIconsAndNoDividerBelowNumbers() {
+        render()
+        val tags=listOf("settings_strip_layout","settings_default_campus","settings_strip_numbers")
+        val icons=tags.map { tag -> compose.onNodeWithTag("${tag}_icon",true)
+            .assertWidthIsEqualTo(20.dp).assertHeightIsEqualTo(20.dp).fetchSemanticsNode().boundsInRoot }
+        icons.forEach { assertEquals(icons.first().left,it.left,1f) }
+        tags.zip(icons).forEach { (tag,icon) ->
+            val row=compose.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+            assertEquals(row.center.y,icon.center.y,1f)
+        }
+        val numbers=compose.onNodeWithTag("settings_strip_numbers").fetchSemanticsNode().boundsInRoot
+        val marks=compose.onNodeWithTag("settings_room_marks").fetchSemanticsNode().boundsInRoot
+        assertEquals(numbers.bottom,marks.top,1f)
+        compose.onNodeWithTag("settings_strip_layout").performClick()
+        compose.onNodeWithTag("settings_strip_EQUAL").assertExists()
+        compose.onNodeWithTag("settings_strip_layout").performClick()
+    }
+
+    @Test fun defaultPreferenceIsRenamedAndItsRowsAreContiguous() {
+        render()
+        compose.onNodeWithTag("settings_list").performScrollToNode(hasTestTag("settings_planning"))
+        compose.onNodeWithTag("settings_planning").performClick()
+        compose.onNodeWithText("默认偏好").assertIsDisplayed()
+        compose.onNodeWithText("默认导向").assertDoesNotExist()
+        val mode=compose.onNodeWithTag("planning_default_flexible_row").fetchSemanticsNode().boundsInRoot
+        val templates=compose.onNodeWithTag("planning_templates_entry").fetchSemanticsNode().boundsInRoot
+        assertEquals(mode.bottom,templates.top,1f)
+        compose.onNodeWithTag("planning_default_direction").performClick()
+        compose.onNodeWithTag("planning_default_BALANCED").assertIsSelected()
     }
 
     @Test fun selectionInvertsOnlyTheLocalBlockForBothCampusesAndAppearances() {
@@ -107,13 +138,16 @@ class SettingsNavigationUiTest {
         compose.onNodeWithTag("settings_theme_frame").assertWidthIsEqualTo(95.dp).assertHeightIsEqualTo(95.dp)
         compose.onNodeWithTag("settings_list").performScrollToNode(hasTestTag("settings_planning"))
         compose.onNodeWithTag("settings_planning").performClick()
-        compose.onNodeWithText("更多默认偏好待开放").assertIsDisplayed()
+        compose.onNodeWithTag("planning_default_direction").assertIsDisplayed()
+        compose.onNodeWithTag("planning_default_flexible").assertIsDisplayed()
         compose.onNodeWithTag("settings_sheet_close").performClick()
         compose.onNodeWithTag("settings_list").performScrollToNode(hasTestTag("settings_about"))
         compose.onNodeWithTag("settings_about").performClick()
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         val version=context.packageManager.getPackageInfo(context.packageName,0).versionName
-        compose.onNodeWithText("YouRoom $version · 非学校官方应用").assertIsDisplayed()
+        compose.onNodeWithTag("settings_about_version").assertTextEquals(version.orEmpty())
+        compose.onNodeWithText("非学校官方应用").assertIsDisplayed()
+        compose.onNodeWithText("开发者  23级 软工 小嚎猪").performScrollTo().assertIsDisplayed()
         assertEquals(Campus.XITUCHENG,campus)
         assertTrue(cleared.isEmpty());assertEquals(0,logouts)
     }

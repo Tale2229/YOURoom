@@ -5,17 +5,17 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.youroom.ui.YouRoomApp
-import com.example.youroom.ui.YouRoomViewModel
+import com.example.youroom.ui.YOURoomApp
+import com.example.youroom.ui.YOURoomViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            val model: YouRoomViewModel = viewModel(
-                factory = YouRoomViewModel.factory((application as YouRoomApplication).container))
-            YouRoomApp(model)
+            val model: YOURoomViewModel = viewModel(
+                factory = YOURoomViewModel.factory((application as YOURoomApplication).container))
+            YOURoomApp(model)
         }
     }
 }

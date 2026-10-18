@@ -13,7 +13,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.example.youroom.data.DemoData
 import com.example.youroom.domain.*
 import com.example.youroom.ui.*
-import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.ui.theme.YOURoomTheme
 import java.io.File
 import java.time.*
 import kotlin.math.roundToInt
@@ -25,7 +25,7 @@ class CompactPlanningUiTest {
     @get:Rule val compose=createComposeRule()
     private val clock=Clock.fixed(Instant.parse("2026-10-15T03:00:00Z"),SchoolZone)
     private val data=DemoData.snapshot(clock=clock).copy(isDemo=false)
-    private var state by mutableStateOf(YouRoomState(initializing=false,loggedIn=true,snapshot=data,today=data.queryDate))
+    private var state by mutableStateOf(YOURoomState(initializing=false,loggedIn=true,snapshot=data,today=data.queryDate))
     private var goal by mutableStateOf(PlanningDraft(1200,1320,true,
         savedWindows=listOf(StudyWindow(660,720),StudyWindow(840,1020)),expectedRooms=data.classrooms.take(2).map { it.id }.toSet()))
     private val a=data.classrooms[0]; private val b=data.classrooms[1]
@@ -40,7 +40,7 @@ class CompactPlanningUiTest {
     private fun render()=compose.setContent {
         val density=LocalDensity.current
         CompositionLocalProvider(LocalDensity provides Density(density.density,fontScale)) {
-            YouRoomTheme(campus=state.campus,darkTheme=night) {
+            YOURoomTheme(campus=state.campus,darkTheme=night) {
                 StudyPlanningScreen(state,goal,mapOf(Campus.XITUCHENG to execution),{goal=it},{generations++},{},{},{},clock=clock)
             }
         }
@@ -110,7 +110,7 @@ class CompactPlanningUiTest {
         assertOrder()
         compose.onNodeWithTag("planner_add_period").performClick()
         compose.waitForIdle()
-        compose.onNodeWithTag("planner_add_period").assertIsNotEnabled().performTouchInput { click() }
+        compose.onNodeWithTag("planner_add_period").assertIsEnabled().performTouchInput { click() }
         compose.onNodeWithTag("planner_message").assertTextEquals("最多添加三个时段")
         assertOrder()
         shot("planner-feedback-above-heading-1.17.3")
@@ -155,9 +155,9 @@ class CompactPlanningUiTest {
         edit.assertContentDescriptionEquals("编辑时段");remove.assertContentDescriptionEquals("删除时段")
         val e=edit.fetchSemanticsNode().boundsInRoot;val d=remove.fetchSemanticsNode().boundsInRoot
         val face=compose.onNodeWithTag("planner_period_actions_face_0",true)
-            .assertWidthIsEqualTo(96.dp).assertHeightIsEqualTo(32.dp).fetchSemanticsNode().boundsInRoot
+            .assertWidthIsEqualTo(144.dp).assertHeightIsEqualTo(37.dp).fetchSemanticsNode().boundsInRoot
         val popup=compose.onNodeWithTag("planner_period_actions_0",true)
-            .assertWidthIsEqualTo(96.dp).assertHeightIsEqualTo(48.dp).fetchSemanticsNode().boundsInRoot
+            .assertWidthIsEqualTo(144.dp).assertHeightIsEqualTo(48.dp).fetchSemanticsNode().boundsInRoot
         assertEquals(popup.center,face.center)
         assertEquals(e.top,d.top,1f);assertTrue(e.right<=d.left)
         compose.onNodeWithText("编辑").assertDoesNotExist();compose.onNodeWithText("删除").assertDoesNotExist()
@@ -213,7 +213,7 @@ class CompactPlanningUiTest {
         label(2).assertDoesNotExist()
         compose.onNodeWithTag("planner_add_period").performClick()
         label(2).assertTextEquals("13:00–14:00")
-        compose.onNodeWithTag("planner_add_period").assertIsNotEnabled()
+        compose.onNodeWithTag("planner_add_period").assertIsEnabled()
         assertEquals(0,generations)
     }
 

@@ -26,10 +26,10 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.ui.theme.YOURoomTheme
 
 @Composable
-fun LoginScreen(state: YouRoomState, onLogin: (String, String) -> Unit,
+fun LoginScreen(state: YOURoomState, onLogin: (String, String) -> Unit,
     onDemo: () -> Unit, onCache: () -> Unit,
     onRememberedLogin: (String, String, Boolean) -> Unit = { account, password, _ -> onLogin(account, password) }) {
     var account by rememberSaveable { mutableStateOf(state.rememberedAccount.orEmpty()) }
@@ -53,7 +53,7 @@ fun LoginScreen(state: YouRoomState, onLogin: (String, String) -> Unit,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("YouRoom", style = MaterialTheme.typography.headlineLarge)
+            Text("YOURoom", style = MaterialTheme.typography.headlineLarge)
             Text("北邮空闲教室", style = MaterialTheme.typography.titleLarge)
             Text("登录教务账号，按时段找到合适的自习教室。",
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -116,5 +116,5 @@ fun LoginScreen(state: YouRoomState, onLogin: (String, String) -> Unit,
 @Preview(showBackground = true, widthDp = 390, heightDp = 844)
 @Composable
 private fun LoginPreview() {
-    YouRoomTheme { LoginScreen(YouRoomState(initializing = false), { _, _ -> }, {}, {}) }
+    YOURoomTheme { LoginScreen(YOURoomState(initializing = false), { _, _ -> }, {}, {}) }
 }

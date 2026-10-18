@@ -9,7 +9,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.KeyboardReturn
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.filled.PushPin
@@ -45,7 +44,7 @@ private fun favoriteWheelLabel(room: Classroom, campus: Campus): String {
 }
 
 @Composable
-internal fun ExpectedRoomDialog(state: YouRoomState, selected: Set<String>,
+internal fun ExpectedRoomDialog(state: YOURoomState, selected: Set<String>,
     onSelected: (Set<String>) -> Unit, onDismiss: () -> Unit) {
     val rooms = remember(state.campusSnapshot) { state.campusSnapshot?.classrooms.orEmpty()
         .filter { it.id.startsWith("${state.campus.dataKey}:") }.sortedBy { it.name } }
@@ -139,8 +138,8 @@ internal fun ExpectedRoomDialog(state: YouRoomState, selected: Set<String>,
                             Icon(if (current?.id in selected) Icons.Filled.PushPin else Icons.Outlined.PushPin,null,
                                 Modifier.size(24.dp).graphicsLayer { rotationZ = ExpectedPinTilt }.testTag("expected_pin_icon"))
                         }
-                        ExpectedDialogAction("完成选择并关闭",Modifier.weight(ColumnWeight).testTag("expected_close"),onClick = onDismiss) {
-                            Icon(Icons.AutoMirrored.Outlined.KeyboardReturn,null,Modifier.size(24.dp))
+                        ExpectedDialogAction("关闭",Modifier.weight(ColumnWeight).testTag("expected_close"),onClick = onDismiss) {
+                            DialogExitIcon()
                         }
                     }
                 }

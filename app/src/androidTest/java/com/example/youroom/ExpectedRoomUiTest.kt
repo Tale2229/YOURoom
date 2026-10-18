@@ -15,7 +15,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.example.youroom.data.DemoData
 import com.example.youroom.domain.*
 import com.example.youroom.ui.*
-import com.example.youroom.ui.theme.YouRoomTheme
+import com.example.youroom.ui.theme.YOURoomTheme
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -27,9 +27,9 @@ class ExpectedRoomUiTest {
     private var campus by mutableStateOf(Campus.XITUCHENG)
     private var profiles by mutableStateOf<Map<String,RoomProfile>>(emptyMap())
     private fun render() {
-        compose.setContent { YouRoomTheme(campus = campus) {
+        compose.setContent { YOURoomTheme(campus = campus) {
             val data=DemoData.snapshot(campus)
-            val state=YouRoomState(initializing=false,demo=true,campus=campus,snapshot=data,today=data.queryDate,profiles=profiles)
+            val state=YOURoomState(initializing=false,demo=true,campus=campus,snapshot=data,today=data.queryDate,profiles=profiles)
             val scope=rememberCoroutineScope()
             val holder=remember { PlanningSession(scope) }
             val executions by holder.executions.collectAsState()
@@ -191,7 +191,7 @@ class ExpectedRoomUiTest {
         val restoration=StateRestorationTester(compose)
         restoration.setContent {
             var saved by rememberSaveable(stateSaver=PlanningGoalSaver) { mutableStateOf(PlanningDraft()) }
-            YouRoomTheme { StudyPlanningScreen(YouRoomState(initializing=false,demo=true,snapshot=data,today=data.queryDate),
+            YOURoomTheme { StudyPlanningScreen(YOURoomState(initializing=false,demo=true,snapshot=data,today=data.queryDate),
                 saved,emptyMap(),{saved=it},{},{},{},{},showHeader=false) }
         }
         open()
@@ -260,11 +260,11 @@ class ExpectedRoomUiTest {
         assertEquals(setOf("01:2-201"),goal.expectedRooms)
     }
 
-    @Test fun returnClosesWithoutPinningThePreviewAndFavoritesStayCampusSpecific() {
+    @Test fun closeClosesWithoutPinningThePreviewAndFavoritesStayCampusSpecific() {
         profiles=mapOf("01:2-201" to Classroom("01:2-201","2-201","2",60).emptyProfile().copy(favorite=true))
         render(); open()
         assertEquals(0,value("expected_building_wheel"))
-        compose.onNodeWithTag("expected_close").assertContentDescriptionEquals("完成选择并关闭").performClick()
+        compose.onNodeWithTag("expected_close").assertContentDescriptionEquals("关闭").performClick()
         assertTrue(goal.expectedRooms.isEmpty())
         compose.runOnIdle { campus=Campus.SHAHE }
         compose.waitForIdle(); open()

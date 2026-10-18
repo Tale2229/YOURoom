@@ -18,6 +18,7 @@ fun campusBadgeColor(campus: Campus, tone: CampusTone = CampusTone.default(campu
     CampusTone.PINE -> Color(0xFF203F34)
     CampusTone.SLATE -> Color(0xFF34474D)
     CampusTone.CLAY -> Color(0xFF5B3E34)
+    CampusTone.MATISSE -> Color(0xFF343E47)
 }
 
 fun campusColorScheme(campus: Campus, darkTheme: Boolean,
@@ -27,7 +28,7 @@ fun campusColorScheme(campus: Campus, darkTheme: Boolean,
     val night = tonePalette(tone, true)
     // Every Material role is owned by this palette, not inherited from Sand or M3 purple.
     // Errors deliberately remain red; fixed white controls remain neutral in every tone.
-    return lightColorScheme(
+    val colors = lightColorScheme(
         primary=p.primary, onPrimary=p.onPrimary, primaryContainer=p.container, onPrimaryContainer=p.primary,
         secondary=p.primary, onSecondary=p.onPrimary, secondaryContainer=p.container, onSecondaryContainer=p.primary,
         tertiary=p.primary, onTertiary=p.onPrimary, tertiaryContainer=p.container, onTertiaryContainer=p.primary,
@@ -52,6 +53,20 @@ fun campusColorScheme(campus: Campus, darkTheme: Boolean,
         onErrorContainer=if(darkTheme) Color(0xFFFFDAD3) else Color(0xFF3B0A06),
         scrim=Color.Black,
     )
+    return if (tone == CampusTone.MATISSE) colors.copy(
+        secondary=if(darkTheme) Color(0xFFD4AB86) else Color(0xFF8F603D),
+        onSecondary=if(darkTheme) Color(0xFF302015) else Color(0xFFFFF6EF),
+        secondaryContainer=if(darkTheme) Color(0xFF4A382C) else Color(0xFFE3D8CC),
+        onSecondaryContainer=if(darkTheme) Color(0xFFE9C9AC) else Color(0xFF5E492F),
+        tertiary=if(darkTheme) Color(0xFFDDE6A6) else Color(0xFFE3EAAB),
+        onTertiary=Color(0xFF243126),
+        tertiaryContainer=if(darkTheme) Color(0xFF42482E) else Color(0xFFEDF0CE),
+        onTertiaryContainer=if(darkTheme) Color(0xFFE3EAAB) else Color(0xFF343E47),
+        secondaryFixed=Color(0xFFE3D8CC), secondaryFixedDim=Color(0xFFD4AB86),
+        onSecondaryFixed=Color(0xFF302015), onSecondaryFixedVariant=Color(0xFF5E492F),
+        tertiaryFixed=Color(0xFFE3EAAB), tertiaryFixedDim=Color(0xFFDDE6A6),
+        onTertiaryFixed=Color(0xFF243126), onTertiaryFixedVariant=Color(0xFF343E47),
+    ) else colors
 }
 
 private data class TonePalette(val primary: Color, val onPrimary: Color, val container: Color,
@@ -65,7 +80,7 @@ private fun palette(vararg values: Long): TonePalette = values.map { Color(it) }
 private fun tonePalette(tone: CampusTone, dark: Boolean): TonePalette = when(tone) {
     CampusTone.SAND -> if(dark) palette(0xFFD7C4A1,0xFF241F16,0xFF453B28,0xFF181714,0xFF1D1B17,0xFFEEE9DF,0xFFBCB3A3,
         0xFF494132,0xFF978B75,0xFF13120F,0xFF232019,0xFF28241E,0xFF322C22,0xFF3D3528)
-        else palette(0xFF665637,0xFFFFFFFF,0xFFEFE8D9,0xFFF7F6F2,0xFFF7F6F2,0xFF252927,0xFF5D584F,
+        else palette(0xFF665637,0xFFFFFFFF,0xFFEFE8D9,0xFFF7F6F2,0xFFF7F6F2,0xFF352D20,0xFF5D584F,
             0xFFDED8CC,0xFF91856D,0xFFFFFEFA,0xFFF3EFE6,0xFFF4F0E7,0xFFE7DDCA,0xFFDED1B8)
     CampusTone.PINE -> if(dark) palette(0xFFA8D2BD,0xFF14211B,0xFF254639,0xFF121A16,0xFF17211B,0xFFE5EEE6,0xFFADBDAD,
         0xFF35473B,0xFF819780,0xFF0E1511,0xFF1A271F,0xFF203026,0xFF293C30,0xFF344A3B)
@@ -79,10 +94,14 @@ private fun tonePalette(tone: CampusTone, dark: Boolean): TonePalette = when(ton
         0xFF513C32,0xFFA38A79,0xFF19110E,0xFF30231D,0xFF392920,0xFF473227,0xFF553D30)
         else palette(0xFF785548,0xFFFFFFFF,0xFFF0DFD4,0xFFFAF1E9,0xFFFAF1E9,0xFF382C27,0xFF725B4E,
             0xFFE6D2C1,0xFFA38670,0xFFFFFAF5,0xFFF7EAE0,0xFFF4E6D9,0xFFEBD7C6,0xFFE0C7B2)
+    CampusTone.MATISSE -> if(dark) palette(0xFFBDCCD2,0xFF1D272B,0xFF46575C,0xFF25342D,0xFF25342D,0xFFE9EFE2,0xFFB4C6B8,
+        0xFF4E6256,0xFF91A797,0xFF1E2B25,0xFF2C3E32,0xFF34473A,0xFF3A4B40,0xFF465A49)
+        else palette(0xFF343E47,0xFFF3F6EF,0xFFC6D1D0,0xFFE9EFE4,0xFFE9EFE4,0xFF343E47,0xFF52635C,
+            0xFFBDCCBA,0xFF718677,0xFFF3F6EF,0xFFE0E8DA,0xFFD2DECD,0xFFC9D7C5,0xFFC0D0BC)
 }
 
 @Composable
-fun YouRoomTheme(
+fun YOURoomTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     campus: Campus = Campus.XITUCHENG,
     appearance: AppearancePreferences = LocalCampusAppearance.current,
@@ -92,12 +111,16 @@ fun YouRoomTheme(
     // interpolating colors would invalidate every consumer on every transition frame.
     val tone = appearance.tone(campus)
     val colors = remember(campus, darkTheme, tone) { campusColorScheme(campus, darkTheme, tone) }
-    CompositionLocalProvider(LocalCampusAppearance provides appearance) {
+    val roles = remember(colors, tone, darkTheme) { campusThemeRoles(colors, tone, darkTheme) }
+    CompositionLocalProvider(LocalCampusAppearance provides appearance, LocalThemeRoles provides roles) {
     MaterialTheme(
         colorScheme = colors,
         typography = Typography,
-        shapes = YouRoomShapes,
-        content = content
-    )
+        shapes = YOURoomShapes,
+    ) {
+        // Nested campus themes must not inherit a previous campus's content color
+        // (or Compose's neutral black when a screen isn't wrapped in Surface).
+        CompositionLocalProvider(LocalContentColor provides colors.onSurface, content = content)
+    }
     }
 }
