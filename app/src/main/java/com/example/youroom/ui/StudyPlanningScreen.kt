@@ -261,6 +261,6 @@ private fun PlanningRoomRow(use: PlanningRoomUse, slots: List<LessonSlot>, free:
                 tint=MaterialTheme.colorScheme.primary)
         }
         PlanningRoomStrip(use,slots,free,enabled,generation)
-        HorizontalDivider(Modifier.padding(horizontal=24.dp))
+        ListDivider(Modifier.padding(horizontal=24.dp))
     }
 }

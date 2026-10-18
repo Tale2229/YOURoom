@@ -198,11 +198,14 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                                 StudyGridCellKind.SLOT -> slots.firstOrNull { it.number == cell.number }?.let { slot ->
                                     val isSelected = slot.number in selection
                                     val colors = MaterialTheme.colorScheme
+                                    val roles = themeRoles()
+                                    val selectedBackground = roles.selectedSlot ?: colors.primary
+                                    val selectedForeground = roles.onSelectedSlot ?: colors.onPrimary
                                     val background by animateColorAsState(
-                                        if (isSelected) colors.primary else colors.surfaceContainer,
+                                        if (isSelected) selectedBackground else colors.surfaceContainer,
                                         tween(140), label = "slot_background")
                                     val stitch by animateColorAsState(
-                                        if (isSelected) colors.onPrimary.copy(alpha=.35f) else colors.outline.copy(alpha=.36f),
+                                        if (isSelected) selectedForeground.copy(alpha=.35f) else colors.outline.copy(alpha=.36f),
                                         tween(140), label = "slot_stitch")
                                     Box(modifier.height(48.dp).testTag("slot_${slot.number}")
                                         .onGloballyPositioned {
@@ -222,7 +225,7 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                                                 geometry.faces[slot.number] = SlotBounds(slot.number, rect.left, rect.top, rect.right, rect.bottom)
                                             },
                                             shape = RectangleShape, color = background,
-                                            contentColor = if (isSelected) colors.onPrimary else colors.onSurfaceVariant) {
+                                            contentColor = if (isSelected) selectedForeground else colors.onSurfaceVariant) {
                                             Box(Modifier.fillMaxSize().drawWithContent {
                                                 drawContent()
                                                 drawSlotStitches(stitch)

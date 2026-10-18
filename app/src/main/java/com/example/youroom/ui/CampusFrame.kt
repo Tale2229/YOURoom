@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -84,7 +83,7 @@ internal fun CampusFrame(state: YOURoomState, onCampus: (Campus) -> Unit, showHe
     Column(Modifier.fillMaxSize()) {
         if (localHeader != null) {
             CampusHeaderPager(state, localHeader, onCampus)
-            HorizontalDivider(Modifier.padding(horizontal = 24.dp).testTag("campus_divider"))
+            CampusHeaderDivider()
         }
         Box(Modifier.weight(1f).fillMaxWidth().clipToBounds().testTag(bodyTag)) {
             val campuses = if (keepBothCampuses) Campus.entries else listOf(bodyCampus)

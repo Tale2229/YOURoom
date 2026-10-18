@@ -35,6 +35,22 @@ class MatisseThemeTest {
         }
         assertEquals(Color(0xFFD8E0D6),roles(false).wheelCenter)
     }
+    @Test fun matisseHidesTheHeaderRuleAndSingleHueThemesKeepTheirOriginalDividers() {
+        for(dark in listOf(false,true)) {
+            val c=scheme(dark);val r=roles(dark)
+            assertTrue(r.hideHeaderDivider)
+            assertFalse(r.outlineExpectedSelection)
+            assertEquals(c.tertiary,r.selectedRoomAction)
+            assertNull(r.roomActionDivider)
+            assertEquals(c.outlineVariant,r.divider)
+            for(tone in listOf(CampusTone.SAND,CampusTone.PINE,CampusTone.SLATE,CampusTone.CLAY)) {
+                val old=campusColorScheme(Campus.XITUCHENG,dark,tone)
+                val role=campusThemeRoles(old,tone,dark)
+                assertFalse(role.hideHeaderDivider);assertEquals(old.outlineVariant,role.divider)
+                assertTrue(role.outlineExpectedSelection);assertNull(role.roomActionDivider)
+            }
+        }
+    }
     @Test fun everyFunctionalForegroundHasReadableContrastInBothModes() {
         for(dark in listOf(false,true)) {
             val c=scheme(dark);val r=roles(dark)
@@ -51,7 +67,7 @@ class MatisseThemeTest {
         }
     }
     @Test fun theFourExistingThemesKeepTheirOriginalFunctionalRoles() {
-        for(tone in CampusTone.entries.filter { it!=CampusTone.MATISSE }) for(dark in listOf(false,true)) {
+        for(tone in listOf(CampusTone.SAND,CampusTone.PINE,CampusTone.SLATE,CampusTone.CLAY)) for(dark in listOf(false,true)) {
             val c=campusColorScheme(Campus.XITUCHENG,dark,tone)
             val r=campusThemeRoles(c,tone,dark)
             assertEquals(c.surface,r.header);assertEquals(c.onSurface,r.onHeader)

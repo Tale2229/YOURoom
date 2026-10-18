@@ -52,11 +52,13 @@ class SecureSessionStoreTest {
         assertFalse(preferences.contains("credentials_iv"))
     }
 
-    @Test fun logoutErasesEverythingAndClearTokenCanRetainCredentials() {
+    @Test fun clearTokenKeepsEncryptedCredentialsAndExplicitClearErasesEverything() {
         store().saveLogin("dummy-token", dummy)
         store().clearToken()
         assertNull(store().read())
-        assertNotNull(store().credentials())
+        assertEquals(dummy.account,store().credentials()!!.account)
+        assertEquals(dummy.password,store().credentials()!!.password)
+        assertFalse(preferences.all.values.joinToString().contains(dummy.password))
         store().clear()
         assertTrue(preferences.all.isEmpty())
     }

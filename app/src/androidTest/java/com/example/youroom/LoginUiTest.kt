@@ -9,6 +9,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.example.youroom.ui.LoginScreen
 import com.example.youroom.ui.YOURoomState
 import com.example.youroom.ui.theme.YOURoomTheme
+import com.example.youroom.data.local.RememberedCredentials
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -20,7 +21,7 @@ class LoginUiTest {
     @Test fun rememberIsOffByDefaultAndDisclosureFollowsConsent() {
         compose.setContent { YOURoomTheme { LoginScreen(YOURoomState(initializing = false), { _, _ -> }, {}, {}) } }
         compose.onNodeWithTag("remember-password").performScrollTo().assertIsOff().performClick().assertIsOn()
-        compose.onNodeWithText("密码加密保存在本机，仅用于登录过期后自动重登；退出登录时清除。").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("账号密码加密保存在本机，用于自动填入和登录过期后重登；退出登录或结束演示后仍保留。").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("remember-password").performScrollTo().performClick().assertIsOff()
         compose.onNodeWithText("密码仅用于本次 HTTPS 登录，不会保存。登录状态加密保存在本机。").performScrollTo().assertIsDisplayed()
     }
@@ -46,13 +47,16 @@ class LoginUiTest {
         compose.onNodeWithTag("login").assertIsNotEnabled()
     }
 
-    @Test fun rememberedAccountIsPrefilledButPasswordNeverIs() {
+    @Test fun rememberedAccountAndPasswordArePrefilledAndCanBeSubmitted() {
+        var received: String? = null
         compose.setContent { YOURoomTheme {
-            LoginScreen(YOURoomState(initializing = false, rememberedAccount = "dummy-account"), { _, _ -> }, {}, {})
+            LoginScreen(YOURoomState(initializing = false, rememberedAccount = "dummy-account",
+                rememberedLogin=RememberedCredentials("dummy-account","dummy-password")), { _, p -> received=p }, {}, {})
         } }
         compose.onNodeWithTag("account").assertTextContains("dummy-account")
         compose.onNodeWithTag("remember-password").performScrollTo().assertIsOn()
-        compose.onNodeWithTag("login").assertIsNotEnabled()
+        compose.onNodeWithTag("login").performScrollTo().assertIsEnabled().performClick()
+        compose.runOnIdle { assertEquals("dummy-password",received) }
     }
 
     @Test fun passwordIsNotRestoredAfterActivityStateRecreation() {
@@ -66,6 +70,21 @@ class LoginUiTest {
         compose.onNodeWithTag("remember-password").assertIsOn()
         compose.onNodeWithTag("login").assertIsNotEnabled()
     }
+
+    @Test fun rememberedPasswordIsReloadedButAnUnsavedEditIsNotRestored() {
+        val restoration=StateRestorationTester(compose)
+        var received: String?=null
+        restoration.setContent { YOURoomTheme {
+            LoginScreen(YOURoomState(initializing=false,rememberedAccount="dummy-account",
+                rememberedLogin=remembered),{_,p->received=p},{},{})
+        } }
+        compose.onNodeWithTag("password").performTextReplacement("unsaved-edit")
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithTag("login").performScrollTo().assertIsEnabled().performClick()
+        compose.runOnIdle { assertEquals("dummy-password",received) }
+    }
+
+    private val remembered=RememberedCredentials("dummy-account","dummy-password")
 
     @Test fun pendingLoginDisablesCredentialEditsAndRememberToggle() {
         val state = mutableStateOf(YOURoomState(initializing = false))

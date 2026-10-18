@@ -133,7 +133,7 @@ internal fun PlanningRailAction(label: String, tag: String, enabled: Boolean, se
     val colors = MaterialTheme.colorScheme
     val roles = themeRoles()
     val background by animateColorAsState(if (primary) roles.launch.copy(alpha = if (enabled || pending) 1f else .38f)
-        else if (selected || confirmation!=null) roles.enabledOption else roles.planningControl,
+        else if (confirmation!=null) roles.confirmation else if (selected) roles.enabledOption else roles.planningControl,
         tween(if(briefFeedback) { if(confirmation!=null) 16 else 24 } else 100), label = "planning action state")
     val action = if (toggle) Modifier.toggleable(selected, enabled = enabled, role = Role.Checkbox,
         interactionSource = interaction, indication = null, onValueChange = { onClick() })
@@ -149,7 +149,7 @@ internal fun PlanningRailAction(label: String, tag: String, enabled: Boolean, se
     }, contentAlignment = Alignment.Center) {
         Surface(Modifier.size(36.dp).graphicsLayer { scaleX = pressScale; scaleY = pressScale }
             .testTag("${tag}_face"), shape = MaterialTheme.shapes.small,
-            color = background, contentColor = if (primary) roles.onLaunch else if ((selected || confirmation!=null) && (enabled || confirmation!=null)) roles.onEnabledOption else if (enabled) colors.primary
+            color = background, contentColor = if (primary) roles.onLaunch else if (confirmation!=null) roles.onConfirmation else if (selected && enabled) roles.onEnabledOption else if (enabled) colors.primary
                 else colors.onSurface.copy(alpha = .38f),
             border = if (primary || selected || confirmation!=null) null else BorderStroke(1.dp, colors.outlineVariant)) {
             Box(contentAlignment = Alignment.Center) { icon() }

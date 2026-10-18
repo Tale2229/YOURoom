@@ -108,12 +108,12 @@ internal fun PlanningWorkspace(execution: PlanningExecution?, campus: Campus, in
                         Spacer(Modifier.width(9.dp))
                         Text("其他方案",Modifier.testTag("planner_alternatives_entry"),
                             style=MaterialTheme.typography.labelSmall.copy(letterSpacing=0.sp),
-                            color=roles.onPlanningHeading,maxLines=1)
+                            color=roles.planningHeadingEntry,maxLines=1)
                         // Reflect vertically through a flat midpoint, without a planar spin.
                         Spacer(Modifier.width(4.dp))
                         Icon(Icons.Outlined.KeyboardArrowDown,null,Modifier.size(15.dp)
                             .graphicsLayer { scaleY=arrowFlip.value }.testTag("planner_alternatives_arrow"),
-                            tint=roles.onPlanningHeading)
+                            tint=roles.planningHeadingEntry)
                     }
                 }
                 AnimatedVisibility(expanded) {
@@ -187,7 +187,7 @@ private fun PlanningAlternativeScrollbar(state: LazyListState) {
     // A scroll cue replaces the divider, rather than stacking two long rules.
     // Preserve the former divider's height so results below never jump by 1dp.
     if(overflow) Spacer(Modifier.height(1.dp))
-    else HorizontalDivider(Modifier.padding(horizontal=24.dp).testTag("planner_alternative_divider"))
+    else ThemeDivider(Modifier.padding(horizontal=24.dp).testTag("planner_alternative_divider"))
     }
 }
 

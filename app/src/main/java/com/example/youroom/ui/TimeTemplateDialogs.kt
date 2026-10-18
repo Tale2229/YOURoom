@@ -7,7 +7,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.animate
@@ -26,9 +25,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import java.time.Clock
@@ -41,21 +38,24 @@ import java.util.UUID
 @Composable
 private fun TimeTemplateSummary(template: TimeTemplate, modifier: Modifier,
     trailing: (@Composable () -> Unit)? = null) {
-    Box(modifier.fillMaxWidth()) {
-        Column(Modifier.fillMaxWidth().padding(end=if(trailing != null) 48.dp else 0.dp)
+    BoxWithConstraints(modifier.fillMaxWidth().padding(horizontal=8.dp)) {
+        // Always reserve the trailing action column, including in the importer.
+        // Three fixed columns keep period #2 aligned for one/two/three-period rows.
+        val periodWidth=((maxWidth-48.dp-8.dp)/3).coerceAtLeast(0.dp)
+        Column(Modifier.fillMaxWidth().padding(end=48.dp)
             .padding(top=12.dp,bottom=4.dp),verticalArrangement=Arrangement.spacedBy(9.dp)) {
             Text(template.name,Modifier.testTag("template_summary_name_${template.id}"),style=MaterialTheme.typography.bodyMedium)
             Row(Modifier.fillMaxWidth().testTag("template_summary_times_${template.id}"),horizontalArrangement=Arrangement.spacedBy(4.dp)) {
                 template.windows.sortedBy { it.start }.forEachIndexed { index,window ->
                     WidthFittedText("${planningTime(window.start)}–${planningTime(window.end)}",
-                        Modifier.weight(1f).testTag("template_summary_period_${template.id}_$index").semantics(mergeDescendants=true) {},
+                        Modifier.width(periodWidth).testTag("template_summary_period_${template.id}_$index").semantics(mergeDescendants=true) {},
                         style=MaterialTheme.typography.bodySmall.copy(color=MaterialTheme.colorScheme.onSurfaceVariant))
                 }
             }
         }
         if(trailing != null) Box(Modifier.align(Alignment.CenterEnd)) { trailing() }
     }
-    HorizontalDivider(Modifier.testTag("template_summary_divider_${template.id}"))
+    ThemeDivider(Modifier.padding(horizontal=8.dp).testTag("template_summary_divider_${template.id}"))
 }
 
 @Composable
@@ -78,9 +78,7 @@ internal fun TimeTemplateManager(campus: Campus, preferences: CampusPlanningPref
                 IconAction({ editing = null; editor = true }, Modifier.testTag("template_create")) {
                     Icon(Icons.Outlined.Add, "新建时段组合")
                 }
-                IconAction(onDismiss, Modifier.testTag("settings_sheet_close")) {
-                    DialogExitIcon(description = "关闭")
-                }
+                DialogExitAction(false,onDismiss,Modifier.testTag("settings_sheet_close"))
             }
         }) {
         Column(Modifier.weight(1f, false).verticalScroll(rememberScrollState()).testTag("template_list")) {
@@ -127,7 +125,6 @@ internal fun TimeTemplateEditor(campus: Campus, original: TimeTemplate?, current
     val cooldown=remember { PlanningTapCooldown() }
     val scope=rememberCoroutineScope()
     val clock=remember { Clock.system(SchoolZone) }
-    val nameInteraction=remember { MutableInteractionSource() }
     val editorScroll=rememberScrollState()
     LaunchedEffect(feedback,rejection) {
         if(feedback!=null) {
@@ -146,12 +143,13 @@ internal fun TimeTemplateEditor(campus: Campus, original: TimeTemplate?, current
     // A prefilled new combination still needs saving even without further edits.
     val dirty = original == null && initialWindows.isNotEmpty() || name.trim() != initialName.trim() ||
         windows.sortedBy { it.start } != initialWindows.sortedBy { it.start }
-    fun save() {
-        when {
-            name.isBlank() -> feedback = PlanningResult(message="请填写组合名称")
-            !TimeTemplates.valid(windows) -> feedback = PlanningResult(message="请添加1至3个合法时段")
-            else -> onSave(TimeTemplate(original?.id ?: UUID.randomUUID().toString(), name.trim(), windows.sortedBy { it.start }))
+    fun validate(): Boolean {
+        feedback=when {
+            name.isBlank() -> PlanningResult(message="请填写组合名称")
+            !TimeTemplates.valid(windows) -> PlanningResult(message="请添加1至3个合法时段")
+            else -> null
         }
+        return feedback==null
     }
     SettingsSheet(if (original == null) "新建组合" else "修改组合", campus, onDismiss, avoidIme = true,
         titleStyle = MaterialTheme.typography.titleMedium, footer = {
@@ -163,31 +161,24 @@ internal fun TimeTemplateEditor(campus: Campus, original: TimeTemplate?, current
             }) {
                 AnimatedTrashIcon(windows.isNotEmpty(),Modifier.size(24.dp))
             }
-            IconAction({
+            DialogExitAction(dirty,{
                 focus.clearFocus(); keyboard?.hide()
-                if (dirty) save() else onDismiss()
+                if (dirty) {
+                    if(validate()) onSave(TimeTemplate(original?.id ?: UUID.randomUUID().toString(),name.trim(),windows.sortedBy { it.start }))
+                } else onDismiss()
             }, Modifier.testTag(if (dirty) "template_save" else "settings_sheet_close"),
-                enabled = !dirty || (!startMoving && !endMoving)) {
-                DialogExitIcon(dirty, if (dirty) "保存组合" else "关闭")
-            }
+                enabled = !dirty || (!startMoving && !endMoving),
+                description=if(dirty) "保存组合" else "关闭",canConfirm=::validate)
         }
     }) {
         val focus = LocalFocusManager.current
         val keyboard = LocalSoftwareKeyboardController.current
         Column(Modifier.weight(1f, false).verticalScroll(editorScroll).testTag("template_editor_content")) {
-            BasicTextField(name, { if (it.length <= 20) { name=it;feedback=null } }, singleLine = true,
+            CompactNameField(name, { if (it.length <= 20) { name=it;feedback=null } }, "组合名称",
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { focus.clearFocus(); keyboard?.hide() }),
-                interactionSource=nameInteraction,
-                textStyle=MaterialTheme.typography.bodyMedium.copy(color=MaterialTheme.colorScheme.onSurface),
-                cursorBrush=SolidColor(MaterialTheme.colorScheme.primary),
-                modifier = Modifier.padding(top=16.dp).fillMaxWidth().heightIn(min=38.dp).testTag("template_name"),
-                decorationBox={ inner -> OutlinedTextFieldDefaults.DecorationBox(name,inner,true,true,
-                    VisualTransformation.None,nameInteraction,label={ Text("组合名称",Modifier.testTag("template_name_label"),style=MaterialTheme.typography.bodySmall) },
-                    contentPadding=PaddingValues(horizontal=12.dp,vertical=8.dp),container={
-                        OutlinedTextFieldDefaults.Container(true,false,nameInteraction,
-                            colors=OutlinedTextFieldDefaults.colors(),shape=MaterialTheme.shapes.small)
-                    }) })
+                modifier = Modifier.padding(top=16.dp).fillMaxWidth().testTag("template_name"),
+                labelModifier=Modifier.testTag("template_name_label"))
             Spacer(Modifier.height(16.dp))
             Row(Modifier.fillMaxWidth().testTag("template_time_wheels"), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 WheelTimePicker("开始时间", start, "template_start", Modifier.weight(1f),

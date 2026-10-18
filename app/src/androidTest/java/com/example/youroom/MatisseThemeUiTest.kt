@@ -28,7 +28,7 @@ class MatisseThemeUiTest {
     private val data=DemoData.snapshot().copy(isDemo=false)
     private val appearance=AppearancePreferences(westTone=CampusTone.MATISSE)
     private val room=data.classrooms.first()
-    private val profile=room.emptyProfile().copy(favorite=true,note="窗边位置安静",outlets=true)
+    private val profile=room.emptyProfile().copy(favorite=true,note="窗边位置安静",outlets=true,excluded=true)
     private val state=YOURoomState(initializing=false,snapshot=data,today=data.queryDate,
         appearance=appearance,profiles=mapOf(room.id to profile))
     private val night get()=InstrumentationRegistry.getInstrumentation().targetContext.resources.configuration.uiMode and
@@ -117,9 +117,31 @@ class MatisseThemeUiTest {
         assertEquals(roles.note,textColor("room_note_text_${room.id}"))
         shot("room")
         compose.runOnIdle { expanded=true }
-        assertPaint("room_action_icon_${room.id}_0",roles.selectedRoomAction)
-        assertPaint("room_action_icon_${room.id}_1",roles.onRoomActions)
+        for (index in 0..3) assertPaint("room_action_icon_${room.id}_$index",roles.selectedRoomAction)
         compose.onNodeWithTag("room_action_${room.id}_0").assertHasClickAction()
         shot("room-actions")
+    }
+
+    @Test fun expectedSelectionHasNoGreyGreenOutlineAndStillRemovesOnClick() {
+        var selected by mutableStateOf(setOf(room.id))
+        compose.setContent { YOURoomTheme(appearance=appearance) { ExpectedRoomDialog(state,selected,{selected=it},{}) } }
+        val card=compose.onNodeWithTag("expected_selected_${room.id}")
+        val p=card.captureToImage().toPixelMap()
+        val border=colors.outlineVariant
+        val borderPixels=(0 until p.width).sumOf { x -> (0 until p.height).count { y ->
+            val c=p[x,y]
+            abs(c.red-border.red)+abs(c.green-border.green)+abs(c.blue-border.blue)<.008f
+        } }
+        assertEquals("No selected-room outline should remain",0,borderPixels)
+        shot("expected-rooms")
+        card.performClick()
+        compose.runOnIdle { assertTrue(selected.isEmpty()) }
+    }
+
+    @Test fun inactiveRailButtonsKeepTheirNeutralColor() {
+        compose.setContent { YOURoomTheme(appearance=appearance) { Surface(color=roles.roomActions) {
+            RoomActionButtons(room.emptyProfile(),{},{},{},{},onRail=true)
+        } } }
+        for (index in 0..3) assertPaint("room_action_icon_${room.id}_$index",roles.onRoomActions)
     }
 }

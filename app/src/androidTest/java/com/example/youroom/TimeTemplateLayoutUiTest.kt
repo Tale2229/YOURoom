@@ -94,7 +94,8 @@ class TimeTemplateLayoutUiTest {
         val name=compose.onNodeWithTag("template_name").fetchSemanticsNode().boundsInRoot
         val viewport=compose.onNodeWithTag("template_editor_content").fetchSemanticsNode().boundsInRoot
         assertEquals(viewport.width,name.width,1f)
-        assertTrue(name.height<with(compose.density) { 44.dp.toPx() })
+        shot("template-name-refinement")
+        assertTrue("Name height ${name.height}, density ${compose.density.density}",name.height<with(compose.density) { 44.dp.toPx() })
         val label=compose.onNodeWithTag("template_name_label",true).fetchSemanticsNode().boundsInRoot
         assertTrue("The compact field must not clip its floating label",label.top>=viewport.top)
         val title=compose.onNodeWithTag("settings_sheet_title",true).fetchSemanticsNode().boundsInRoot
@@ -137,13 +138,13 @@ class TimeTemplateLayoutUiTest {
         compose.onNodeWithTag("template_remove_period_1").performClick()
         compose.onNodeWithTag("template_period_1").assertTextEquals("20:00–22:00")
         compose.onNodeWithTag("template_save").performClick()
-        assertEquals(listOf(StudyWindow(480,540),StudyWindow(1200,1320)),saved!!.windows)
+        compose.waitForIdle();assertEquals(listOf(StudyWindow(480,540),StudyWindow(1200,1320)),saved!!.windows)
     }
 
     @Test fun saveMenuPrefillsAllPeriodsAndSavingDoesNotEditThePlanOrGenerate() {
         planner();val before=goal
         compose.onNodeWithTag("planner_target_range_1",true).performClick()
-        compose.onNodeWithTag("planner_period_actions_face_1",true).assertHeightIsEqualTo(37.dp).assertWidthIsEqualTo(144.dp)
+        compose.onNodeWithTag("planner_period_actions_face_1",true).assertHeightIsEqualTo(37.dp).assertWidthIsEqualTo(132.dp)
         compose.onNodeWithTag("planner_save_periods_1").assertContentDescriptionEquals("保存时段组合").performClick()
         compose.onNodeWithTag("template_name").assertTextContains("组合1")
         compose.onNodeWithTag("template_period_0").performScrollTo().assertTextEquals("08:00–09:00")
@@ -183,7 +184,7 @@ class TimeTemplateLayoutUiTest {
         add()
         compose.onAllNodesWithTag("template_message").assertCountEquals(1)
         compose.onNodeWithTag("template_save").performClick()
-        assertEquals(goal.savedWindows,saved!!.windows)
+        compose.waitForIdle();assertEquals(goal.savedWindows,saved!!.windows)
     }
 
     @Test fun largeTextKeepsThreePeriodsTogetherAndTheFixedSaveReachable() {
@@ -192,7 +193,7 @@ class TimeTemplateLayoutUiTest {
         bounds.forEach { assertEquals(bounds[0].top,it.top,1f) }
         compose.onNodeWithTag("template_save").assertIsDisplayed()
         shot("template-large-three-periods-1.22.1")
-        compose.onNodeWithTag("template_save").performClick();assertEquals(3,saved!!.windows.size)
+        compose.onNodeWithTag("template_save").performClick();compose.waitForIdle();assertEquals(3,saved!!.windows.size)
     }
 
     @Test fun managementAndImportUseIdenticalSpacingAndThreeSingleLineTimes() {

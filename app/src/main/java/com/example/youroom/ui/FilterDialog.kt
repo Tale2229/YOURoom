@@ -34,11 +34,11 @@ fun FilterDialog(state: YOURoomState, onDismiss: () -> Unit, onFilters: (SearchF
                         .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         BuildingFilterRows(state, buildings, onFilters)
-                        HorizontalDivider()
+                        ThemeDivider()
                         TagEditor(state, onFilters, onAddTag, onRemoveTag, onTagOrder,
-                            editing = editingTags)
+                            editing = editingTags, onCancelEdit = { editingTags=false })
                     }
-                    HorizontalDivider(Modifier.padding(top = 12.dp))
+                    ThemeDivider(Modifier.padding(top = 12.dp))
                     DialogFooterActions(state.filters.badgeCount > 0, "reset_filters", "close_filters",
                         { onFilters(SearchFilters(selectedSlots = state.filters.selectedSlots, query = state.filters.query)) }, onDismiss,
                         middleTag = "edit_tags", middleDescription = if (editingTags) "结束词条编辑" else "添加和整理词条",

@@ -165,6 +165,28 @@ class ClassroomRepositoryTest {
         assertNull(repository.rememberedAccount())
     }
 
+    @Test fun logoutKeepsExplicitlyRememberedCredentialsButNeverRestartsASession() = runBlocking {
+        remember()
+        repository.logout()
+        assertFalse(repository.hasSession())
+        assertEquals("dummy-user", repository.rememberedAccount())
+        assertEquals("dummy-password", repository.rememberedCredentials()!!.password)
+        try { repository.refresh(Campus.XITUCHENG); fail("Logout must require an explicit login") }
+        catch (_: AuthenticationRequired) { }
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test fun uncheckedLoginThenLogoutLeavesNoCredentialsToPrefill() = runBlocking {
+        remember()
+        server.enqueue(loginReply())
+        repository.login("other-user", "other-password", false)
+        repository.logout()
+        assertFalse(repository.hasSession())
+        assertNull(repository.rememberedCredentials())
+        assertNull(repository.rememberedAccount())
+        assertEquals(1, server.requestCount)
+    }
+
     @Test fun business401RelogsAndReplaysOriginalShaheQueryOnce() = runBlocking {
         remember()
         server.enqueue(expiredReply()); server.enqueue(loginReply()); server.enqueue(MockResponse().setBody(VALID_RESPONSE))
@@ -293,7 +315,7 @@ class ClassroomRepositoryTest {
         withTimeout(5_000) { started.await() }
         repository.logout()
         try { query.await(); fail("Expected cancellation") } catch (_: CancellationException) { }
-        assertNull(session.token); assertNull(session.remembered)
+        assertNull(session.token); assertEquals("dummy-user",session.remembered!!.account)
         assertEquals(oldSnapshot(), dao.savedSnapshot)
     }
 

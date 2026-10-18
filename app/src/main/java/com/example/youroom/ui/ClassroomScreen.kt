@@ -96,7 +96,7 @@ private fun ClassroomPage(state: YOURoomState, listState: LazyListState, active:
             }
         }
         item {
-            HorizontalDivider(Modifier.padding(horizontal = 24.dp))
+            ListDivider(Modifier.padding(horizontal = 24.dp))
             Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {

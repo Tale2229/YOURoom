@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.automirrored.filled.Label
-import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -51,7 +50,8 @@ private class RowSwipeAnimation { var job: Job? = null; var openingSpeed = 0f }
 
 @Composable
 private fun FavoriteCornerMarker(roomId: String, modifier: Modifier = Modifier) {
-    val color = themeRoles().favorite
+    val roles = themeRoles()
+    val color = roles.favoriteCorner ?: roles.favorite
     Canvas(modifier.size(22.dp).testTag("room_favorite_$roomId").clearAndSetSemantics {}) {
         drawPath(Path().apply {
             moveTo(0f, 0f); lineTo(size.width, 0f); lineTo(size.width, size.height); close()
@@ -65,6 +65,8 @@ internal fun RoomActionButtons(profile: RoomProfile, onFavorite: () -> Unit, onT
     compact: Boolean = false, flip: RoomActionFlipMotion? = null, onRail: Boolean = false) {
     val density = LocalDensity.current.density
     val roles = themeRoles()
+    val selected = listOf(profile.favorite,profile.outlets || profile.allTags.isNotEmpty(),
+        profile.note.isNotBlank(),profile.excluded)
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         val buttons = listOf(
             Triple(if (profile.favorite) Icons.Outlined.Star else Icons.Outlined.StarBorder,
@@ -72,7 +74,7 @@ internal fun RoomActionButtons(profile: RoomProfile, onFavorite: () -> Unit, onT
             Triple(if (profile.outlets || profile.allTags.isNotEmpty()) Icons.AutoMirrored.Filled.Label else Icons.AutoMirrored.Outlined.Label,
                 "修改标签 ${profile.name}", onTags),
             Triple(if (profile.note.isNotBlank()) Icons.Filled.Edit else Icons.Outlined.Edit, "修改备注 ${profile.name}", onNote),
-            Triple(if (profile.excluded) Icons.Filled.Cancel else Icons.Outlined.Block,
+            Triple(if (profile.excluded) Icons.Outlined.Refresh else Icons.Outlined.Block,
                 if (profile.excluded) "取消排除 ${profile.name}" else "排除 ${profile.name}", onExcluded))
         buttons.forEachIndexed { index, (icon, description, action) ->
             IconButton(onClick = action, enabled = enabled, modifier = Modifier.width(if (compact) 40.dp else 48.dp).heightIn(min = 48.dp)
@@ -87,7 +89,7 @@ internal fun RoomActionButtons(profile: RoomProfile, onFavorite: () -> Unit, onT
                         cameraDistance = 12f * density
                     },
                     tint = if (!onRail) MaterialTheme.colorScheme.primary
-                        else if (index == 0 && profile.favorite) roles.selectedRoomAction else roles.onRoomActions)
+                        else if (selected[index]) roles.selectedRoomAction else roles.onRoomActions)
             }
         }
     }
@@ -97,16 +99,17 @@ internal fun RoomActionButtons(profile: RoomProfile, onFavorite: () -> Unit, onT
 private fun RoomActionRail(profile: RoomProfile, onFavorite: () -> Unit, onTags: () -> Unit,
     onNote: () -> Unit, onExcluded: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true,
     flip: RoomActionFlipMotion? = null) {
-    val colors = MaterialTheme.colorScheme
+    val roles = themeRoles()
+    val lineColor = roles.roomActionDivider ?: roles.divider
     Column(modifier.fillMaxHeight().padding(horizontal = 12.dp), verticalArrangement = Arrangement.Center) {
-        HorizontalDivider(Modifier.fillMaxWidth()
-            .testTag("room_action_line_${profile.roomId}_top_thin"), color = colors.outlineVariant)
+        ThemeDivider(Modifier.fillMaxWidth()
+            .testTag("room_action_line_${profile.roomId}_top_thin"),color = lineColor)
         Spacer(Modifier.height(2.dp))
         RoomActionButtons(profile, onFavorite, onTags, onNote, onExcluded, enabled = enabled, compact = true, flip = flip, onRail = true)
         Spacer(Modifier.height(2.dp))
         // The rail and its decoration stay entirely above the fixed period strip.
-        HorizontalDivider(Modifier.fillMaxWidth()
-            .testTag("room_action_line_${profile.roomId}_bottom_thin"), color = colors.outlineVariant)
+        ThemeDivider(Modifier.fillMaxWidth()
+            .testTag("room_action_line_${profile.roomId}_bottom_thin"),color = lineColor)
     }
 }
 
@@ -280,7 +283,7 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
     }
         RoomAvailabilityStrip(profile.roomId, match.freeSlots, slots, active && interactionEnabled,
             inspectionKey = inspectionKey, wave = wave)
-        HorizontalDivider(Modifier.padding(horizontal = 24.dp).testTag("room_divider_${profile.roomId}"))
+        ListDivider(Modifier.padding(horizontal = 24.dp).testTag("room_divider_${profile.roomId}"))
         Spacer(Modifier.height(16.dp))
     }
 }

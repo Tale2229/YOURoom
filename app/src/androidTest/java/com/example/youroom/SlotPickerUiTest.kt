@@ -146,7 +146,11 @@ class SlotPickerUiTest {
                     val horizontal=(0 until pixels.width/3).first { !isInk(cornerX+dx*it,cornerY) }
                     val vertical=(0 until pixels.height/3).first { !isInk(cornerX,cornerY+dy*it) }
                     assertEquals("each L has equal complete arms",horizontal.toFloat(),vertical.toFloat(),1f)
-                    assertEquals(with(compose.density) { 6.dp.toPx() },horizontal.toFloat(),1f)
+                    // The integer sample origin and first background pixel each round
+                    // independently at fractional density (6dp = 15.75px here).
+                    // Exact 6dp geometry is asserted by SlotStitchTest; the raster
+                    // length may include up to two edge pixels. Keep arm symmetry strict.
+                    assertEquals(with(compose.density) { 6.dp.toPx() },horizontal.toFloat(),2f)
                 }
             }
             if(!dark) {

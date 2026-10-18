@@ -45,7 +45,7 @@ internal fun PlanningTargetStrip(slots: List<LessonSlot>, windows: List<StudyWin
         while (true) { now=LocalTime.now(clock.withZone(SchoolZone)); delay(60_000L-now.second*1000L-now.nano/1_000_000L) }
     } }
     val dark=MaterialTheme.colorScheme.primary
-    val light=MaterialTheme.colorScheme.outlineVariant
+    val light=availabilityColor(false)
     val rtl=LocalLayoutDirection.current==LayoutDirection.Rtl
     val preferences=LocalPeriodStripPreferences.current
     val numberHeight=with(LocalDensity.current) { 10.sp.toDp() }

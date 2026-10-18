@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toSize
 import com.example.youroom.domain.*
 import kotlin.math.roundToInt
@@ -30,7 +31,7 @@ private class TagGeometry {
 fun TagEditor(state: YOURoomState, onFilters: (SearchFilters) -> Unit, onAdd: (String) -> Unit,
     onRemove: (String) -> Unit, onOrder: (List<String>) -> Unit,
     showFavorite: Boolean = true, manageCatalog: Boolean = true,
-    editing: Boolean = false) {
+    editing: Boolean = false, onCancelEdit: () -> Unit = {}) {
     var name by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var removal by remember { mutableStateOf<String?>(null) }
@@ -121,16 +122,20 @@ fun TagEditor(state: YOURoomState, onFilters: (SearchFilters) -> Unit, onAdd: (S
             }
         }
         if (editing) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp),
+            Row(Modifier.fillMaxWidth().padding(top=8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(name, { name = it; error = null }, singleLine = true, label = { Text("词条名称") },
-                    modifier = Modifier.weight(1f).testTag("custom_tag_name"), isError = error != null,
-                    supportingText = if (error != null) ({ Text(error.orEmpty()) }) else null)
+                CompactNameField(name,{ name=it;error=null },"词条名称",
+                    Modifier.weight(1f).testTag("custom_tag_name"),isError=error!=null)
                 TextButton(onClick = {
                     error = PersonalTags.validate(name, state.tagOrder.toSet())
                     if (error == null) { onAdd(name.trim()); name = "" }
-                }, modifier = Modifier.testTag("add_tag")) { Text("添加") }
+                }, modifier = Modifier.width(40.dp).height(40.dp).testTag("add_tag"),
+                    contentPadding=PaddingValues(horizontal=4.dp)) { Text("添加",fontSize=12.sp) }
+                TextButton(onClick={ name="";error=null;onCancelEdit() },
+                    modifier=Modifier.width(40.dp).height(40.dp).testTag("cancel_add_tag"),
+                    contentPadding=PaddingValues(horizontal=4.dp)) { Text("取消",fontSize=12.sp) }
             }
+            error?.let { Text(it,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error) }
         }
     }
     removal?.let { tag -> AlertDialog(onDismissRequest = { removal = null },

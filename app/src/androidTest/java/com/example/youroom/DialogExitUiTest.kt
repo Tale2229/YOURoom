@@ -71,7 +71,7 @@ class DialogExitUiTest {
         assertEquals(0,writes); assertEquals(original,preferences.templates.single())
     }
 
-    @Test fun liveFilterTagsNotesAndExpectedRoomsAlwaysCloseWithACrossWithoutRepeatingWrites() {
+    @Test fun liveFiltersKeepCrossButRoomEditsAndExpectedSelectionsShowCheckWithoutRepeatingWrites() {
         var panel by mutableIntStateOf(0)
         var selected by mutableStateOf(emptySet<String>())
         compose.setContent { YOURoomTheme {
@@ -88,15 +88,15 @@ class DialogExitUiTest {
         compose.onNodeWithTag("close_filters").assertContentDescriptionEquals("关闭").performClick()
         assertEquals(count,writes)
         compose.runOnIdle { panel=1 }; closeIcon()
-        compose.onNodeWithTag("filter_outlets").performClick(); closeIcon(); assertTrue(profile.outlets)
+        compose.onNodeWithTag("filter_outlets").performClick(); saveIcon(); assertTrue(profile.outlets)
         count=writes; compose.onNodeWithTag("close_room_tags").performClick(); assertEquals(count,writes)
         compose.runOnIdle { panel=2 }; closeIcon()
-        compose.onNodeWithTag("room_note").performTextInput("靠窗"); closeIcon(); assertEquals("靠窗",profile.note)
-        count=writes; compose.onNodeWithTag("close_room_note").assertContentDescriptionEquals("关闭").performClick(); assertEquals(count,writes)
+        compose.onNodeWithTag("room_note").performTextInput("靠窗"); saveIcon(); assertEquals("靠窗",profile.note)
+        count=writes; compose.onNodeWithTag("close_room_note").assertContentDescriptionEquals("完成修改").performClick(); assertEquals(count,writes)
         compose.runOnIdle { panel=3 }; closeIcon()
-        compose.onNodeWithTag("expected_pin").performClick(); closeIcon(); assertEquals(1,selected.size)
-        count=writes; compose.onNodeWithTag("expected_close").assertContentDescriptionEquals("关闭").performClick(); assertEquals(count,writes)
-        assertEquals(4,closed)
+        compose.onNodeWithTag("expected_pin").performClick(); saveIcon(); assertEquals(1,selected.size)
+        count=writes; compose.onNodeWithTag("expected_close").assertContentDescriptionEquals("完成修改").performClick(); assertEquals(count,writes)
+        compose.waitForIdle();assertEquals(4,closed)
     }
 
     @Test fun newTemplateChangesFromCrossToCheckAndBackAndOnlyTheCheckSaves() {
@@ -116,7 +116,7 @@ class DialogExitUiTest {
         compose.onNodeWithTag("template_add_period").performScrollTo().performClick()
         shot("dialog-exit-save-1.21.1")
         compose.onNodeWithTag("template_save").performClick()
-        assertEquals(1,writes); assertEquals("上午",preferences.templates.single().name)
+        compose.waitForIdle();assertEquals(1,writes); assertEquals("上午",preferences.templates.single().name)
         closeIcon()
     }
 

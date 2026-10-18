@@ -104,11 +104,11 @@ class ThemeSettingsUiTest {
         compose.mainClock.autoAdvance = false
         compose.onNodeWithTag("settings_theme_next").performClick()
         compose.mainClock.advanceTimeBy(160)
-        compose.onNodeWithTag("settings_theme_name").assertTextEquals("砂岩")
+        compose.onNodeWithTag("settings_theme_name").assertTextEquals("敦煌")
         assertEquals(CampusTone.MATISSE, appearance.westTone); assertTrue(changes.isEmpty())
         compose.onNodeWithTag("settings_theme_next").performClick()
         compose.mainClock.advanceTimeBy(160)
-        compose.onNodeWithTag("settings_theme_name").assertTextEquals("松绿")
+        compose.onNodeWithTag("settings_theme_name").assertTextEquals("旧港来信")
         assertTrue(changes.isEmpty()); assertEquals(1f, progress())
         compose.onNodeWithTag("settings_theme_previous").performClick()
         compose.mainClock.advanceTimeBy(288)
@@ -122,17 +122,17 @@ class ThemeSettingsUiTest {
         val night = InstrumentationRegistry.getInstrumentation().targetContext.resources.configuration.uiMode and
             android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES
         val before = campusThemeRoles(campusColorScheme(Campus.XITUCHENG, night, CampusTone.MATISSE), CampusTone.MATISSE, night).navigation
-        val after = campusColorScheme(Campus.XITUCHENG, night, CampusTone.SAND).surface
+        val after = campusThemeRoles(campusColorScheme(Campus.XITUCHENG, night, CampusTone.DUNHUANG), CampusTone.DUNHUANG, night).header
         assertEquals(after, middle[4,12])
         assertEquals(before, middle[middle.width-4,middle.height-20])
         shot("settings-page-wave-1.20.1")
         compose.mainClock.advanceTimeBy(600)
         assertEquals(1f, progress())
-        assertEquals(CampusTone.SAND, appearance.westTone)
-        assertEquals(listOf(Campus.XITUCHENG to CampusTone.SAND), changes)
+        assertEquals(CampusTone.DUNHUANG, appearance.westTone)
+        assertEquals(listOf(Campus.XITUCHENG to CampusTone.DUNHUANG), changes)
         assertEquals(header, compose.onNodeWithTag("campus_header").fetchSemanticsNode().id)
         compose.onNodeWithTag("settings_theme_impression").assert(SemanticsMatcher.expectValue(
-            androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "砂岩"))
+            androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "敦煌"))
         compose.mainClock.autoAdvance = true
         compose.runOnIdle { campus = Campus.SHAHE }
         assertEquals(1f, progress())

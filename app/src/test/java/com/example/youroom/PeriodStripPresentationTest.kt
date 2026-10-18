@@ -76,7 +76,7 @@ class PeriodStripPresentationTest {
 
     @Test fun spatialWavePeaksAtConstantPixelSpeedAndStillFinishesAtBothEnds() {
         val bars=bars();val first=bars.first().center;val span=bars.last().center-first
-        val pulse=3f/16
+        val pulse=PeriodWave.pulseFraction(14)
         val peaks=bars.map { bar ->
             val x=(bar.center-first)/span;val peak=(1-pulse)*(1-x)+pulse/2
             assertEquals(1f,PeriodWave.spatialAmplitude(peak,x,14),.0001f)

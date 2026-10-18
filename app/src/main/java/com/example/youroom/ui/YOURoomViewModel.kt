@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.youroom.AppContainer
 import com.example.youroom.data.*
 import com.example.youroom.data.local.FilterSettings
+import com.example.youroom.data.local.RememberedCredentials
 import com.example.youroom.domain.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -25,6 +26,8 @@ data class YOURoomState(
     val loggedIn: Boolean = false,
     val loggingIn: Boolean = false,
     val rememberedAccount: String? = null,
+    // Memory only, never saveable; the credential holder redacts its toString output.
+    val rememberedLogin: RememberedCredentials? = null,
     val refreshing: Boolean = false,
     val snapshot: ClassroomSnapshot? = null,
     val campusSnapshots: Map<Campus, ClassroomSnapshot> = emptyMap(),
@@ -276,10 +279,12 @@ class YOURoomViewModel(
                 }
                 val remembered = repository.rememberedAccount()
                 val authenticated = repository.hasSession()
+                val rememberedLogin = if (authenticated) null else repository.rememberedCredentials()
                 appearanceReady.await()
                 planningPreferencesReady.await()
                 restoreWorkspace(state.value.appearance.defaultCampus)
                 mutableState.update { it.copy(initializing = false, loggedIn = authenticated, rememberedAccount = remembered,
+                    rememberedLogin = rememberedLogin,
                     cachedCampuses = realWorkspaces.filterValues { workspace -> workspace.snapshot != null }.keys) }
                 if (authenticated) refresh()
             } catch (error: Exception) {
@@ -300,7 +305,7 @@ class YOURoomViewModel(
     fun login(account: String, password: String, rememberPassword: Boolean) {
         if (state.value.loggingIn || state.value.initializing) return
         if (account.isBlank() || password.isEmpty()) { showError("请填写教务账号和密码。"); return }
-        mutableState.update { it.copy(loggingIn = true, error = null) }
+        mutableState.update { it.copy(loggingIn = true, rememberedLogin = null, error = null) }
         val generation = ++loginGeneration
         loginJob = viewModelScope.launch {
             try {
@@ -313,7 +318,7 @@ class YOURoomViewModel(
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 if (generation != loginGeneration) return@launch
-                mutableState.update { it.copy(loggingIn = false, rememberedAccount = null, error = message(error)) }
+                mutableState.update { it.copy(loggingIn = false, rememberedAccount = null, rememberedLogin = null, error = message(error)) }
             }
         }
     }
@@ -337,8 +342,13 @@ class YOURoomViewModel(
                 if (error is CancellationException) throw error
                 if (!isCurrentRequest(campus, generation)) return@launch
                 updateWorkspace(campus) { it.copy(refreshing = false, error = message(error)) }
-                if (error is AuthenticationRequired) mutableState.update {
-                    it.copy(loggedIn = false, viewingCache = false, selectedRoomId = null, rememberedAccount = null)
+                if (error is AuthenticationRequired) {
+                    val remembered = repository.rememberedCredentials()
+                    if (!isCurrentRequest(campus, generation)) return@launch
+                    mutableState.update {
+                        it.copy(loggedIn = false, viewingCache = false, selectedRoomId = null,
+                            rememberedAccount = remembered?.account, rememberedLogin = remembered)
+                    }
                 }
             }
         }
@@ -359,7 +369,8 @@ class YOURoomViewModel(
         demoWorkspaces = Campus.entries.associateWith { campus ->
             CampusWorkspace(snapshot = DemoData.snapshot(campus, clock))
         }
-        mutableState.update { it.copy(demo = true, loggedIn = false, viewingCache = false, profiles = emptyMap(), tagCatalog = TagCatalog()) }
+        mutableState.update { it.copy(demo = true, loggedIn = false, viewingCache = false, rememberedLogin = null,
+            profiles = emptyMap(), tagCatalog = TagCatalog()) }
         restoreWorkspace(state.value.appearance.defaultCampus)
     }
 
@@ -395,14 +406,14 @@ class YOURoomViewModel(
     }
 
     fun logout() {
-        if (state.value.demo || state.value.viewingCache) { openLogin(); return }
         cancelRefresh()
         loginGeneration++
         loginJob?.cancel()
         viewModelScope.launch {
             try {
                 repository.logout()
-                mutableState.update { it.copy(rememberedAccount = null) }
+                val remembered = repository.rememberedCredentials()
+                mutableState.update { it.copy(rememberedAccount = remembered?.account, rememberedLogin = remembered) }
                 openLogin()
             }
             catch (error: Exception) {

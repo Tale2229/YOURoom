@@ -3,6 +3,7 @@ package com.example.youroom
 import androidx.lifecycle.ViewModelStore
 import com.example.youroom.data.*
 import com.example.youroom.data.local.FilterSettings
+import com.example.youroom.data.local.RememberedCredentials
 import com.example.youroom.domain.*
 import com.example.youroom.ui.YOURoomViewModel
 import kotlinx.coroutines.*
@@ -145,16 +146,49 @@ class YOURoomViewModelTest {
         assertNull(model.state.value.rememberedAccount)
     }
 
-    @Test fun logoutClearsRememberedAccountButRetainsRoomMarks() = checkModel(
+    @Test fun logoutKeepsRememberedLoginForPrefillAndRetainsRoomMarks() = checkModel(
         setupSource = { remembered = "dummy-account" }) { model, source, _ ->
         val room = snapshot(Campus.XITUCHENG).classrooms.first()
         val profile = room.emptyProfile().copy(favorite = true, note = "保留")
         source.profiles.value = mapOf(room.id to profile); runCurrent()
         model.logout(); runCurrent()
-        assertNull(model.state.value.rememberedAccount)
-        assertNull(source.remembered)
+        assertEquals("dummy-account",model.state.value.rememberedAccount)
+        assertEquals("dummy-account",source.remembered)
+        assertEquals("dummy-password",model.state.value.rememberedLogin!!.password)
+        assertFalse(source.authenticated)
         assertFalse(model.state.value.showWorkspace)
         assertEquals(profile, model.state.value.profiles[room.id])
+    }
+
+    @Test fun endingDemoReloadsRememberedCredentialsWithoutALoginOrRefresh() = checkModel(false,
+        setupSource = { remembered = "dummy-account" }) { model, source, _ ->
+        assertEquals("dummy-password",model.state.value.rememberedLogin!!.password)
+        model.showDemo(); runCurrent()
+        assertNull(model.state.value.rememberedLogin)
+        model.logout(); runCurrent()
+        assertFalse(model.state.value.demo)
+        assertFalse(model.state.value.showWorkspace)
+        assertEquals("dummy-account",model.state.value.rememberedAccount)
+        assertEquals("dummy-password",model.state.value.rememberedLogin!!.password)
+        assertTrue(source.requests.isEmpty())
+    }
+
+    @Test fun unrememberedLoginAndEndingDemoNeverRefillThePassword() = checkModel(false) { model, _, _ ->
+        model.login("dummy-account","dummy-password",false);runCurrent()
+        model.logout();runCurrent()
+        assertNull(model.state.value.rememberedAccount)
+        assertNull(model.state.value.rememberedLogin)
+        model.showDemo();runCurrent();model.logout();runCurrent()
+        assertNull(model.state.value.rememberedAccount)
+        assertNull(model.state.value.rememberedLogin)
+        assertFalse(model.state.value.showWorkspace)
+    }
+
+    @Test fun rememberedPasswordsNeverAppearInStateDebugTextOrAuthenticatedState() = checkModel(false,
+        setupSource = { remembered = "dummy-account" }) { model, _, _ ->
+        assertFalse(model.state.value.toString().contains("dummy-password"))
+        model.login("dummy-account","dummy-password",true);runCurrent()
+        assertNull(model.state.value.rememberedLogin)
     }
 
     @Test fun canceledLateManualLoginCannotReopenWorkspace() = checkModel(false) { model, source, _ ->
@@ -574,7 +608,8 @@ class YOURoomViewModelTest {
             remembered = account.takeIf { rememberPassword }
         }
         override suspend fun rememberedAccount() = remembered
-        override suspend fun logout() { authenticated = false; remembered = null }
+        override suspend fun rememberedCredentials() = remembered?.let { RememberedCredentials(it,"dummy-password") }
+        override suspend fun logout() { authenticated = false }
         override suspend fun cached(campus: Campus): ClassroomSnapshot? = caches[campus]
         override suspend fun refresh(campus: Campus): ClassroomSnapshot { requests += campus; return loader(campus) }
         override suspend fun saveProfile(profile: RoomProfile) { profileWrites += profile; profileSaver(profile) }

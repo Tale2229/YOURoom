@@ -133,7 +133,7 @@ internal fun SettingOption(title: String, selected: Boolean, enabled: Boolean, t
 @Composable
 private fun StripStylePreview(slots: List<LessonSlot>, layout: PeriodStripLayout, modifier: Modifier) {
     val primary = MaterialTheme.colorScheme.primary
-    val muted = MaterialTheme.colorScheme.outlineVariant
+    val muted = availabilityColor(false)
     Canvas(modifier) {
         PeriodStripGeometry.bars(slots, size.width, if (layout == PeriodStripLayout.EQUAL) 3.dp.toPx() else 0f, layout)
             .forEachIndexed { i, bar -> drawRect(if (i in setOf(1, 2, 3, 6, 7, 10, 11)) primary else muted,

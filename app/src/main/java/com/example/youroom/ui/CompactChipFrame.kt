@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.*
+import com.example.youroom.ui.theme.themeRoles
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -33,18 +34,21 @@ internal fun CompactChipFrame(selected: Boolean, faceTag: String, modifier: Modi
     onDelete: (() -> Unit)? = null, deleteDescription: String = "", deleteTag: String? = null,
     enabled: Boolean = true, content: @Composable () -> Unit) {
     val palette = MaterialTheme.colorScheme
+    val roles = themeRoles()
+    val selectedFill = roles.selectionFill ?: palette.primaryContainer
+    val selectedInk = roles.onSelection ?: palette.primary
     val shape = MaterialTheme.shapes.small
     Box(modifier.height(40.dp), contentAlignment = Alignment.Center) {
         Surface(Modifier.fillMaxWidth().height(28.dp).testTag(faceTag)
-            .chipBorder(if (selected) palette.primary else palette.outlineVariant,shape,onDelete != null),
-            shape = shape, color = if (selected) palette.primaryContainer else palette.surface,
-            contentColor = if (selected) palette.primary else palette.onSurfaceVariant, content = content)
+            .chipBorder(if (selected) selectedInk else palette.outlineVariant,shape,onDelete != null),
+            shape = shape, color = if (selected) selectedFill else palette.surface,
+            contentColor = if (selected) selectedInk else palette.onSurfaceVariant, content = content)
         if (onDelete != null) Box(Modifier.align(Alignment.TopEnd).offset(x = 5.dp,y = (-1).dp)
             .size(20.dp).then(if (deleteTag != null) Modifier.testTag(deleteTag) else Modifier)
             .clickable(enabled = enabled,role = Role.Button,interactionSource = remember { MutableInteractionSource() },
                 indication = null,onClick = onDelete).semantics { contentDescription = deleteDescription },
             contentAlignment = Alignment.Center) {
-            Icon(Icons.Outlined.Close,null,Modifier.size(14.dp),tint = palette.primary)
+            Icon(Icons.Outlined.Close,null,Modifier.size(14.dp),tint = if (selected) selectedInk else palette.primary)
         }
     }
 }

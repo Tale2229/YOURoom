@@ -47,6 +47,17 @@ class AppearanceSettingChoicesUiTest {
         }
     }
     private fun rotation(tag: String) = compose.onNodeWithTag("${tag}_arrow", true).fetchSemanticsNode().config[SettingsDisclosureRotation]
+
+    @Test fun entireSettingsBodyHasTwentyDpTopInsetAndCanStillReachExit() {
+        render()
+        val list=compose.onNodeWithTag("settings_list").fetchSemanticsNode().boundsInRoot
+        val frame=compose.onNodeWithTag("settings_theme_frame").fetchSemanticsNode().boundsInRoot
+        // Existing picker top padding is 22dp; the whole body's new inset is 20dp.
+        val expected=with(compose.density) { (20.dp.roundToPx()+22.dp.roundToPx()).toFloat() }
+        assertEquals(expected,frame.top-list.top,.1f)
+        compose.onNodeWithTag("settings_list").performScrollToNode(hasTestTag("settings_logout"))
+        compose.onNodeWithTag("settings_logout").assertIsDisplayed()
+    }
     private fun shot(name: String) {
         val i = InstrumentationRegistry.getInstrumentation(); i.waitForIdleSync()
         val night = i.targetContext.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK ==

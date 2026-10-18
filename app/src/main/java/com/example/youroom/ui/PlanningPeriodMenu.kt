@@ -7,7 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -33,22 +33,22 @@ internal fun PlanningPeriodMenu(expanded: Boolean, enabled: Boolean, index: Int,
     if(visibility.currentState || visibility.targetState) Popup(position,onDismiss,
         properties=PopupProperties(focusable=true)) {
         AnimatedVisibility(visibility,enter=fadeIn(tween(100)),exit=fadeOut(tween(80))) {
-            Box(Modifier.size(if (onSave != null) 144.dp else 96.dp,48.dp).testTag("planner_period_actions_$index"),contentAlignment=Alignment.Center) {
+            Box(Modifier.size(if (onSave != null) 132.dp else 88.dp,48.dp).testTag("planner_period_actions_$index"),contentAlignment=Alignment.Center) {
                 Surface(Modifier.fillMaxWidth().height(37.dp).testTag("planner_period_actions_face_$index"),
                     shape=MaterialTheme.shapes.small,color=MaterialTheme.colorScheme.surface,
                     shadowElevation=2.dp) {}
                 Row {
                     IconButton(onClick=onEdit,enabled=enabled && expanded,
-                        modifier=Modifier.size(48.dp).testTag("planner_edit_period_$index")) {
+                        modifier=Modifier.width(44.dp).height(48.dp).testTag("planner_edit_period_$index")) {
                         Icon(Icons.Outlined.Edit,"编辑时段",Modifier.size(22.dp),tint=MaterialTheme.colorScheme.primary)
                     }
                     IconButton(onClick=onDelete,enabled=enabled && expanded,
-                        modifier=Modifier.size(48.dp).testTag("planner_remove_period_$index").semantics { contentDescription="删除时段" }) {
+                        modifier=Modifier.width(44.dp).height(48.dp).testTag("planner_remove_period_$index").semantics { contentDescription="删除时段" }) {
                         AnimatedTrashIcon(enabled && expanded,Modifier.size(22.dp))
                     }
                     if (onSave != null) IconButton(onClick=onSave,enabled=enabled && expanded,
-                        modifier=Modifier.size(48.dp).testTag("planner_save_periods_$index")) {
-                        Icon(Icons.Outlined.Save,"保存时段组合",Modifier.size(22.dp),tint=MaterialTheme.colorScheme.primary)
+                        modifier=Modifier.width(44.dp).height(48.dp).testTag("planner_save_periods_$index")) {
+                        Icon(Icons.Filled.Save,"保存时段组合",Modifier.size(22.dp),tint=MaterialTheme.colorScheme.primary)
                     }
                 }
             }

@@ -6,14 +6,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.test.platform.app.InstrumentationRegistry
 import com.example.youroom.data.DemoData
 import com.example.youroom.domain.Campus
 import com.example.youroom.domain.PeriodWave
+import com.example.youroom.domain.PeriodStripLayout
+import com.example.youroom.domain.PeriodStripPreferences
+import com.example.youroom.ui.LocalPeriodStripPreferences
 import com.example.youroom.ui.RoomAvailabilityStrip
 import com.example.youroom.ui.RoomPeriodWave
 import com.example.youroom.ui.theme.YOURoomTheme
@@ -22,6 +27,7 @@ import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 import kotlin.math.roundToInt
+import java.io.File
 
 @OptIn(ExperimentalTestApi::class)
 class RoomPeriodWaveUiTest {
@@ -38,11 +44,14 @@ class RoomPeriodWaveUiTest {
     private var direction by mutableStateOf(LayoutDirection.Ltr)
     private var campus by mutableStateOf(Campus.XITUCHENG)
     private var dark by mutableStateOf(false)
+    private var stripLayout by mutableStateOf(PeriodStripLayout.EQUAL)
+    private var showNumbers by mutableStateOf(false)
     private var compositions = 0
     private fun render() {
         compose.setContent {
             SideEffect { compositions++ }
-            CompositionLocalProvider(LocalLayoutDirection provides direction) {
+            CompositionLocalProvider(LocalLayoutDirection provides direction,
+                LocalPeriodStripPreferences provides PeriodStripPreferences(stripLayout,showNumbers)) {
                 YOURoomTheme(campus = campus, darkTheme = dark) {
                     wave.Run()
                     Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.background) {
@@ -64,7 +73,7 @@ class RoomPeriodWaveUiTest {
         assertTrue((0..13).any { wave.amplitude(it, 14) > 0f })
     }
 
-    @Test fun closingFirstWaitsThenPlaysTheSlowerFinitePulseWithoutRestartingItsDelay() {
+    @Test fun closingFirstWaitsThenPlaysTheFasterFinitePulseWithoutRestartingItsDelay() {
         render()
         compose.runOnIdle { wave.play() }
         compose.mainClock.advanceTimeBy(PeriodWave.startDelayMillis-48)
@@ -72,7 +81,7 @@ class RoomPeriodWaveUiTest {
         compose.runOnIdle { assertTrue(wave.isRunning);wave.play() }
         compose.mainClock.advanceTimeBy(160)
         moving()
-        compose.mainClock.advanceTimeBy(450)
+        compose.mainClock.advanceTimeBy(250)
         compose.runOnIdle { assertTrue(wave.isRunning) }
         compose.mainClock.advanceTimeBy(200)
         flat()
@@ -212,12 +221,54 @@ class RoomPeriodWaveUiTest {
             val raised = pixels[(bars[rightIndex].center.x - before.left).roundToInt(),
                 (bars[rightIndex].top - before.top).roundToInt() - 2]
             assertEquals(if (slots[rightIndex].number in free) colors.primary else colors.outlineVariant, raised)
+            assertEquals(colors.background,pixels[(bars[rightIndex].center.x-before.left).roundToInt(),
+                (bars[rightIndex].bottom-before.top).roundToInt()+1])
             assertEquals(colors.background, pixels[(bars[leftIndex].center.x - before.left).roundToInt(),
                 (bars[leftIndex].top - before.top).roundToInt() - 2])
             compose.mainClock.advanceTimeBy(600)
             flat()
         }
         compose.mainClock.autoAdvance = true
+    }
+
+    @Test fun curvedPulseOnlyGrowsUpwardWithEitherSpacingDirectionAndPeriodNumbers() {
+        render()
+        val strip=compose.onNodeWithTag("room_period_strip_$id")
+        for(mode in PeriodStripLayout.entries) for(numbers in listOf(false,true)) for(layout in LayoutDirection.entries) {
+            compose.runOnIdle { stripLayout=mode;showNumbers=numbers;direction=layout }
+            compose.mainClock.advanceTimeBy(700)
+            val before=strip.fetchSemanticsNode().boundsInRoot
+            val bars=slots.map { compose.onNodeWithTag("room_period_${id}_${it.number}",true).fetchSemanticsNode().boundsInRoot }
+            closePulse(0);waitForRightPeak()
+            val right=bars.indices.maxBy { bars[it].center.x }
+            val bar=bars[right];val pixels=strip.captureToImage().toPixelMap()
+            val c=campusColorScheme(campus,dark)
+            val ink=if(slots[right].number in free) c.primary else c.outlineVariant
+            val x=(bar.center.x-before.left).roundToInt()
+            val top=(bar.top-before.top).roundToInt();val bottom=(bar.bottom-before.top).roundToInt()
+            val upper=(0 until top).reversed().takeWhile { pixels[x,it]==ink }.size
+            val lower=(bottom until pixels.height).takeWhile { pixels[x,it]==ink }.count()
+            assertTrue("Only top grows: $mode $numbers $layout $upper/$lower",upper>=2&&lower==0)
+            assertEquals(before,strip.fetchSemanticsNode().boundsInRoot)
+            assertEquals(bar,compose.onNodeWithTag("room_period_${id}_${slots[right].number}",true).fetchSemanticsNode().boundsInRoot)
+            if(numbers) compose.onNodeWithTag("room_period_number_${id}_${slots[right].number}",true).assertExists()
+            // The crest is a curve within bars, not a row of flat-topped scaled rectangles.
+            val sloped=bars.any { b ->
+                val inkAtBar=if(slots[bars.indexOf(b)].number in free) c.primary else c.outlineVariant
+                fun heightAt(fraction: Float): Int {
+                    val bx=(b.left+b.width*fraction-before.left).roundToInt()
+                    return (0 until top).reversed().takeWhile { pixels[bx,it]==inkAtBar }.size
+                }
+                kotlin.math.abs(heightAt(.2f)-heightAt(.8f))>=1
+            }
+            assertTrue("Crest must slope within a bar: $mode $layout",sloped)
+            val context=InstrumentationRegistry.getInstrumentation().targetContext
+            File(context.getExternalFilesDir(null),"period-wave-$mode-$layout-$numbers.png").outputStream().use {
+                strip.captureToImage().asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)
+            }
+            compose.mainClock.advanceTimeBy(700);flat()
+        }
+        compose.mainClock.autoAdvance=true
     }
 
     @Test fun animationFramesOnlyRedrawAndNeverRecomposeTheContainingScreen() {

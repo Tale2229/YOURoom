@@ -112,7 +112,7 @@ private fun WorkspacePages(state: YOURoomState, tab: Int, model: YOURoomViewMode
     Column(Modifier.fillMaxSize()) {
         // A single header stays mounted and outside every tab transition.
         CampusHeaderPager(state, header, model::setCampus)
-        HorizontalDivider(Modifier.padding(horizontal = 24.dp).testTag("campus_divider"))
+        CampusHeaderDivider()
         navigation.AnimatedContent(
             modifier = Modifier.weight(1f).fillMaxWidth().clipToBounds().testTag("workspace_pages"),
             transitionSpec = {

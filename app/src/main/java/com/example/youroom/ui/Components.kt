@@ -59,7 +59,7 @@ fun WorkspaceNavigation(tab: Int, onTab: (Int) -> Unit) {
     val roles = themeRoles()
     Surface(color = roles.navigation) {
         Column(Modifier.navigationBarsPadding()) {
-            HorizontalDivider()
+            ThemeDivider()
             Row(Modifier.fillMaxWidth().selectableGroup()) {
                 listOf(Triple("找教室","tab_rooms",NavigationIcons.building),
                     Triple("自习规划","tab_planner",NavigationIcons.route),
@@ -111,7 +111,7 @@ fun StatusNotice(text: String, isError: Boolean = false, onDismiss: (() -> Unit)
 
 @Composable
 fun availabilityColor(free: Boolean): Color =
-    if (free) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+    if (free) MaterialTheme.colorScheme.primary else themeRoles().periodIdle ?: MaterialTheme.colorScheme.outlineVariant
 
 @Composable
 fun AvailabilityStrip(freeSlots: Set<Int>, allSlots: List<Int>, modifier: Modifier = Modifier) {

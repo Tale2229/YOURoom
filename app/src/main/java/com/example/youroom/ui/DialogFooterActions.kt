@@ -7,9 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -22,7 +20,7 @@ import androidx.compose.ui.unit.Dp
 internal fun DialogFooterActions(hasSelection: Boolean, resetTag: String, closeTag: String,
     onReset: () -> Unit, onClose: () -> Unit, middleTag: String? = null,
     middleDescription: String = "添加词条", middleSelected: Boolean = false,
-    onMiddle: (() -> Unit)? = null, resetIconOffsetY: Dp = 0.dp) {
+    onMiddle: (() -> Unit)? = null, resetIconOffsetY: Dp = 0.dp, changed: Boolean = false) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically) {
         FooterIcon("重置", resetTag, onReset) {
@@ -32,11 +30,7 @@ internal fun DialogFooterActions(hasSelection: Boolean, resetTag: String, closeT
             Modifier.semantics { selected=middleSelected;stateDescription=if(middleSelected) "编辑中" else "未编辑" }) {
             Icon(Icons.Outlined.Add, null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary)
         }
-        FooterIcon("关闭", closeTag, onClose) {
-            CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.primary) {
-                DialogExitIcon()
-            }
-        }
+        DialogExitAction(changed,onClose,Modifier.testTag(closeTag))
     }
 }
 

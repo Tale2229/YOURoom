@@ -27,6 +27,10 @@ internal class SchoolSession(
         lock.withLock { store.credentials()?.account }
     }
 
+    suspend fun rememberedCredentials() = withContext(Dispatchers.IO) {
+        lock.withLock { store.credentials() }
+    }
+
     suspend fun login(account: String, password: String, remember: Boolean) {
         val attempt = withContext(Dispatchers.IO) {
             lock.withLock {
@@ -50,7 +54,9 @@ internal class SchoolSession(
         lock.withLock {
             generation++
             recovery?.cancel(); recovery = null; recoveryToken = null
-            store.clear()
+            // Credentials only exist after an explicitly remembered login. Logout must
+            // revoke the session without revoking that consent or starting a new login.
+            store.clearToken()
         }
     }
 

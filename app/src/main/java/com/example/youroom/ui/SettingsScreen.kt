@@ -65,7 +65,7 @@ private fun SettingsContent(state: YOURoomState, onRoom: (String?) -> Unit,
         it.favorite || it.excluded || state.tagOrder.any(it::hasTerm) || it.note.isNotBlank()
     }.sortedWith(compareByDescending<RoomProfile> { it.favorite }.thenBy { it.name }) }
     LazyColumn(Modifier.fillMaxSize().testTag("settings_list"), state = listState,
-        userScrollEnabled = interactive, contentPadding = PaddingValues(bottom = 20.dp)) {
+        userScrollEnabled = interactive, contentPadding = PaddingValues(top = 20.dp, bottom = 20.dp)) {
         item { ThemeImpressionPicker(state.campus,
             (LocalThemePreview.current?.appearance ?: state.appearance).tone(state.campus), interactive, onTone) }
         if (state.demo) item { Text("演示模式", Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp),
@@ -78,7 +78,7 @@ private fun SettingsContent(state: YOURoomState, onRoom: (String?) -> Unit,
         item {
             Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                HorizontalDivider()
+                ListDivider(Modifier.testTag("settings_footer_divider"))
                 TextButton(onClick = { confirmExit = true }, enabled = interactive,
                     modifier = Modifier.heightIn(min = 48.dp).testTag("settings_logout")) {
                     Text(if (state.demo) "结束演示" else if (state.viewingCache) "返回登录" else "退出登录")
@@ -103,7 +103,7 @@ private fun SettingsContent(state: YOURoomState, onRoom: (String?) -> Unit,
         text = { Text(when {
             state.demo -> "本次演示中的个人标记将丢弃。"
             state.viewingCache -> "本地收藏、备注与教室缓存会保留。"
-            else -> "本地收藏和备注会保留，已保存的登录状态和账号密码将清除。"
+            else -> "本次登录状态将清除，本地收藏和备注会保留；已勾选记住的账号密码也会保留。"
         }) },
         confirmButton = { TextButton(onClick = { confirmExit = false; onLogout() }) { Text("确认") } },
         dismissButton = { TextButton(onClick = { confirmExit = false }) { Text("取消") } })
@@ -128,7 +128,7 @@ private fun SettingsEntry(title: String, icon: ImageVector, tag: String, enabled
 internal fun SettingsSheet(title: String, campus: Campus?, onDismiss: () -> Unit, avoidIme: Boolean = false,
     footer: (@Composable ColumnScope.() -> Unit)? = null,
     titleStyle: TextStyle? = null,
-    showTitle: Boolean = true,
+    showTitle: Boolean = true, changed: Boolean = false,
     content: @Composable ColumnScope.() -> Unit) {
     val density = LocalDensity.current
     val browser = LocalUriHandler.current
@@ -144,9 +144,7 @@ internal fun SettingsSheet(title: String, campus: Campus?, onDismiss: () -> Unit
                 }
                 content()
                 if (footer != null) footer() else {
-                    IconAction(onClick = onDismiss, modifier = Modifier.align(Alignment.End).testTag("settings_sheet_close")) {
-                        DialogExitIcon(description = "关闭")
-                    }
+                    DialogExitAction(changed,onDismiss,Modifier.align(Alignment.End).testTag("settings_sheet_close"))
                 }
             }
         }
@@ -158,7 +156,8 @@ internal fun SettingsSheet(title: String, campus: Campus?, onDismiss: () -> Unit
 private fun RoomMarksSheet(state: YOURoomState, profiles: List<RoomProfile>, onRoom: (String?) -> Unit,
     onClear: (String) -> Unit, onDismiss: () -> Unit) {
     var clearId by remember { mutableStateOf<String?>(null) }
-    SettingsSheet("教室标记", state.campus, onDismiss) {
+    val initial = remember(state.campus) { profiles.toList() }
+    SettingsSheet("教室标记", state.campus, onDismiss, changed=profiles!=initial) {
         if (profiles.isEmpty()) Text("还没有个人标记", Modifier.padding(vertical = 24.dp), style = MaterialTheme.typography.bodyMedium)
         else LazyColumn(Modifier.weight(1f, fill = false).heightIn(max = 360.dp).testTag("settings_marks_list")) {
             items(profiles, key = { it.roomId }) { profile ->
@@ -184,7 +183,7 @@ private fun RoomMarksSheet(state: YOURoomState, profiles: List<RoomProfile>, onR
                             AnimatedTrashIcon(clearId == profile.roomId, Modifier.size(24.dp))
                         }
                     }
-                    HorizontalDivider()
+                    ThemeDivider()
                 }
             }
         }

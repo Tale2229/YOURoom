@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.youroom.domain.*
@@ -27,6 +28,8 @@ fun RoomTagsDialog(room: RoomMatch, state: YOURoomState, onDismiss: () -> Unit,
     onChange: (RoomProfile) -> Unit, onAddTag: (String) -> Unit,
     onRemoveTag: (String) -> Unit, onTagOrder: (List<String>) -> Unit) {
     var draft by remember(room.classroom.id) { mutableStateOf(room.profile) }
+    val initial by remember(room.classroom.id) { mutableStateOf(room.profile.tagSelection()) }
+    val initialCatalog = remember(room.classroom.id) { state.tagOrder.toList() }
     var editingTags by remember { mutableStateOf(false) }
     LaunchedEffect(room.profile) { draft = room.profile }
     fun update(profile: RoomProfile) { draft = profile; onChange(profile) }
@@ -47,14 +50,15 @@ fun RoomTagsDialog(room: RoomMatch, state: YOURoomState, onDismiss: () -> Unit,
                             { update(draft.withTagSelection(it)) }, { name ->
                                 onAddTag(name); update(draft.withPersonalTag(name))
                             }, onRemoveTag, onTagOrder, showFavorite = false,
-                            editing = editingTags)
+                            editing = editingTags, onCancelEdit = { editingTags=false })
                     }
-                    HorizontalDivider(Modifier.padding(top = 12.dp))
+                    ThemeDivider(Modifier.padding(top = 12.dp))
                     DialogFooterActions(draft.allTags.isNotEmpty() || draft.outlets, "reset_room_tags", "close_room_tags",
                         { update(draft.withoutPersonalTags()) }, onDismiss,
                         middleTag = "edit_tags", middleDescription = if (editingTags) "结束词条编辑" else "添加词条",
                         middleSelected = editingTags, onMiddle = { editingTags = !editingTags },
-                        resetIconOffsetY = (-1).dp)
+                        resetIconOffsetY = (-1).dp,
+                        changed = draft.tagSelection()!=initial || state.tagOrder!=initialCatalog)
                 }
             }
         }
@@ -64,6 +68,7 @@ fun RoomTagsDialog(room: RoomMatch, state: YOURoomState, onDismiss: () -> Unit,
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 fun RoomNoteDialog(room: RoomMatch, onDismiss: () -> Unit, onChange: (RoomProfile) -> Unit) {
+    val initialNote = remember(room.classroom.id) { RoomNotes.limit(room.profile.note) }
     // Old notes remain stored until explicitly edited; just limit the editor's draft.
     var draft by remember(room.classroom.id) { mutableStateOf(room.profile.copy(note = RoomNotes.limit(room.profile.note))) }
     LaunchedEffect(room.profile) { draft = room.profile.copy(note = RoomNotes.limit(room.profile.note)) }
@@ -86,7 +91,8 @@ fun RoomNoteDialog(room: RoomMatch, onDismiss: () -> Unit, onChange: (RoomProfil
                                     label={ Text("个人备注",Modifier.testTag("room_note_label")) },
                                     trailingIcon={
                                         IconButton(onClick={update("")},modifier=Modifier.size(48.dp).testTag("clear_room_note")) {
-                                            AnimatedTrashIcon(draft.note.isNotEmpty(),Modifier.size(24.dp)
+                                            AnimatedTrashIcon(draft.note.isNotEmpty(),Modifier.size(24.dp).offset { IntOffset(0,-5) }
+                                                .testTag("room_note_trash_icon")
                                                 .semantics { contentDescription="清空备注" })
                                         }
                                     },contentPadding=PaddingValues(start=12.dp,top=16.dp,end=12.dp,bottom=24.dp),
@@ -99,10 +105,8 @@ fun RoomNoteDialog(room: RoomMatch, onDismiss: () -> Unit, onChange: (RoomProfil
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(48.dp)
-                        .testTag("close_room_note")) {
-                        DialogExitIcon(description = "关闭", size = 22.dp)
-                    }
+                    DialogExitAction(draft.note!=initialNote,onDismiss,
+                        Modifier.testTag("close_room_note"),iconSize=22.dp)
                 }
             }
         }

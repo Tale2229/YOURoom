@@ -35,7 +35,7 @@ fun LoginScreen(state: YOURoomState, onLogin: (String, String) -> Unit,
     var account by rememberSaveable { mutableStateOf(state.rememberedAccount.orEmpty()) }
     var rememberPassword by rememberSaveable { mutableStateOf(state.rememberedAccount != null) }
     // Deliberately NOT saveable: no plaintext password in saved instance state.
-    var password by remember { mutableStateOf("") }
+    var password by remember(state.rememberedLogin) { mutableStateOf(state.rememberedLogin?.password.orEmpty()) }
     var visible by remember { mutableStateOf(false) }
     val focus = LocalFocusManager.current
     val submit = {
@@ -58,7 +58,7 @@ fun LoginScreen(state: YOURoomState, onLogin: (String, String) -> Unit,
             Text("登录教务账号，按时段找到合适的自习教室。",
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        HorizontalDivider(Modifier.padding(vertical = 8.dp))
+        ThemeDivider(Modifier.padding(vertical = 8.dp))
         OutlinedTextField(account, { account = it }, Modifier.fillMaxWidth().testTag("account"),
             label = { Text("学号 / 工号") }, singleLine = true, enabled = !state.loggingIn,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Next))
@@ -91,11 +91,11 @@ fun LoginScreen(state: YOURoomState, onLogin: (String, String) -> Unit,
         }
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(Icons.Outlined.Lock, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(if (rememberPassword) "密码加密保存在本机，仅用于登录过期后自动重登；退出登录时清除。"
+            Text(if (rememberPassword) "账号密码加密保存在本机，用于自动填入和登录过期后重登；退出登录或结束演示后仍保留。"
                 else "密码仅用于本次 HTTPS 登录，不会保存。登录状态加密保存在本机。",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        HorizontalDivider(Modifier.padding(vertical = 4.dp))
+        ThemeDivider(Modifier.padding(vertical = 4.dp))
         Text("连接提示", style = MaterialTheme.typography.titleSmall)
         Text("可通过能访问教务服务的网络使用，不要求始终连接校园网；连接失败时请检查网络或校园访问策略。",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

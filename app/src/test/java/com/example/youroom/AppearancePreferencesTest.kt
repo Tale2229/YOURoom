@@ -18,11 +18,18 @@ class AppearancePreferencesTest {
     }
 
     @Test fun previousAndNextWrapWithoutChangingTheStableStorageIds() {
-        assertEquals(CampusTone.MATISSE, CampusTone.SAND.step(-1))
+        assertEquals(CampusTone.MONDRIAN, CampusTone.SAND.step(-1))
         assertEquals(CampusTone.MATISSE, CampusTone.CLAY.step(1))
-        assertEquals(CampusTone.SAND, CampusTone.MATISSE.step(1))
+        assertEquals(CampusTone.DUNHUANG, CampusTone.MATISSE.step(1))
+        assertEquals(CampusTone.OLD_PORT, CampusTone.DUNHUANG.step(1))
+        assertEquals(CampusTone.PEACH_PLUM, CampusTone.OLD_PORT.step(1))
+        assertEquals(CampusTone.BURGUNDY, CampusTone.PEACH_PLUM.step(1))
+        assertEquals(CampusTone.MORANDI, CampusTone.BURGUNDY.step(1))
+        assertEquals(CampusTone.RED_BEAN, CampusTone.MORANDI.step(1))
+        assertEquals(CampusTone.AUTUMN_CITRUS, CampusTone.RED_BEAN.step(1))
+        assertEquals(CampusTone.MORNING_BELL, CampusTone.AUTUMN_CITRUS.step(1))
         CampusTone.entries.forEach { assertEquals(it, it.step(1).step(-1)) }
-        assertEquals(listOf("sand", "pine", "slate", "clay", "matisse"), CampusTone.entries.map { it.id })
+        assertEquals(listOf("sand", "pine", "slate", "clay", "matisse", "dunhuang", "old_port", "peach_plum", "burgundy", "morandi", "red_bean", "autumn_citrus", "morning_bell", "mondrian"), CampusTone.entries.map { it.id })
     }
 
     @Test fun storageRoundTripKeepsFiltersTagsAndStripPreferencesUntouched() {

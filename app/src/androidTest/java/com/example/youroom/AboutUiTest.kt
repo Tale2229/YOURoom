@@ -108,7 +108,7 @@ class AboutUiTest {
             "空闲信息来自学校课表，并非实时空座",
             "教室开放情况请以现场为准",
             "教室标记与设置保存在设备上，可能参与系统备份",
-            "退出登录会清除登录凭据，保留教室标记与设置",
+            "退出登录清除登录状态，保留已记住的账号密码、教室标记与设置",
         )
         for (paragraph in paragraphs) {
             val layout = mutableListOf<TextLayoutResult>()
@@ -198,6 +198,6 @@ class AboutUiTest {
         val author=compose.onNodeWithTag("settings_about_author").fetchSemanticsNode().boundsInRoot
         val content=compose.onNodeWithTag("settings_about_content").fetchSemanticsNode().boundsInRoot
         assertEquals(content.right,author.right,1f)
-        assertTrue(author.top>=compose.onNodeWithText("退出登录会清除登录凭据，保留教室标记与设置",substring=true).fetchSemanticsNode().boundsInRoot.bottom)
+        assertTrue(author.top>=compose.onNodeWithText("退出登录清除登录状态，保留已记住的账号密码、教室标记与设置",substring=true).fetchSemanticsNode().boundsInRoot.bottom)
     }
 }

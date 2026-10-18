@@ -56,7 +56,7 @@ internal fun ColumnScope.AboutContent(version: String) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Column {
-            HorizontalDivider()
+            ThemeDivider()
             AboutLink("GitHub", Icons.Outlined.Code, "settings_about_project") { open(AboutLinks.project) }
             AboutLink("问题反馈", Icons.Outlined.ChatBubbleOutline, "settings_about_feedback") { open(AboutLinks.feedback) }
             AboutSection("数据与使用", Icons.Outlined.Info, "settings_about_data", listOf(
@@ -65,7 +65,7 @@ internal fun ColumnScope.AboutContent(version: String) {
             ))
             AboutSection("本地与登录", Icons.Outlined.Lock, "settings_about_local", listOf(
                 "   - 教室标记与设置保存在设备上，可能参与系统备份",
-                "   - 退出登录会清除登录凭据，保留教室标记与设置",
+                "   - 退出登录清除登录状态，保留已记住的账号密码、教室标记与设置",
             ))
         }
         Row(Modifier.fillMaxWidth().testTag("settings_about_author"), horizontalArrangement = Arrangement.End,

@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.youroom.domain.*
+import com.example.youroom.ui.theme.themeRoles
 
 // Headers, wheels / selection list, and footer actions share identical thirds.
 private const val ColumnWeight = 1f
@@ -46,6 +47,7 @@ private fun favoriteWheelLabel(room: Classroom, campus: Campus): String {
 @Composable
 internal fun ExpectedRoomDialog(state: YOURoomState, selected: Set<String>,
     onSelected: (Set<String>) -> Unit, onDismiss: () -> Unit) {
+    val initialSelection = remember(state.campus) { selected.filter { it.startsWith("${state.campus.dataKey}:") }.toSet() }
     val rooms = remember(state.campusSnapshot) { state.campusSnapshot?.classrooms.orEmpty()
         .filter { it.id.startsWith("${state.campus.dataKey}:") }.sortedBy { it.name } }
     val favorites = remember(rooms,state.profiles) { rooms.filter { state.profiles[it.id]?.favorite == true } }
@@ -123,7 +125,7 @@ internal fun ExpectedRoomDialog(state: YOURoomState, selected: Set<String>,
                             }
                         }
                     }
-                    HorizontalDivider()
+                    ThemeDivider()
                     Row(Modifier.fillMaxWidth().testTag("expected_actions"), horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically) {
                         ExpectedDialogAction("清空期望教室",Modifier.weight(ColumnWeight).testTag("expected_clear"),
@@ -138,9 +140,8 @@ internal fun ExpectedRoomDialog(state: YOURoomState, selected: Set<String>,
                             Icon(if (current?.id in selected) Icons.Filled.PushPin else Icons.Outlined.PushPin,null,
                                 Modifier.size(24.dp).graphicsLayer { rotationZ = ExpectedPinTilt }.testTag("expected_pin_icon"))
                         }
-                        ExpectedDialogAction("关闭",Modifier.weight(ColumnWeight).testTag("expected_close"),onClick = onDismiss) {
-                            DialogExitIcon()
-                        }
+                        DialogExitAction(campusSelection.toSet()!=initialSelection,onDismiss,
+                            Modifier.weight(ColumnWeight).testTag("expected_close"))
                     }
                 }
             }
@@ -167,11 +168,13 @@ private fun ExpectedDialogAction(label: String,modifier: Modifier,enabled: Boole
 
 @Composable
 private fun ExpectedSelectedRoom(label: String,fullName: String,id: String,onRemove: () -> Unit) {
+    val roles = themeRoles()
     Surface(Modifier.fillMaxWidth().heightIn(min = 40.dp).testTag("expected_selected_$id")
         .clickable(role = Role.Button,interactionSource = remember { MutableInteractionSource() },indication = null,onClick = onRemove)
         .semantics { contentDescription = "移除期望教室 $fullName" },shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.primaryContainer,contentColor = MaterialTheme.colorScheme.primary,
-        border = BorderStroke(1.dp,MaterialTheme.colorScheme.outlineVariant)) {
+        color = roles.selectionFill ?: MaterialTheme.colorScheme.primaryContainer,
+        contentColor = roles.onSelection ?: MaterialTheme.colorScheme.primary,
+        border = if (roles.outlineExpectedSelection) BorderStroke(1.dp,MaterialTheme.colorScheme.outlineVariant) else null) {
         Row(Modifier.padding(horizontal = 6.dp,vertical = 4.dp),verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             WidthFittedText(label,Modifier.weight(1f),style = MaterialTheme.typography.labelMedium,maxLines = 2)

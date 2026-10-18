@@ -8,11 +8,10 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -142,7 +141,6 @@ internal fun RoomAvailabilityStrip(roomId: String, freeSlots: Set<Int>, slots: L
             slots.forEachIndexed { index, slot -> key(slot.number) {
                 val shown = inspectionEnabled && inspected == slot.number
                 val color = availabilityColor(slot.number in freeSlots)
-                val visual = if (direction == LayoutDirection.Rtl) slots.lastIndex - index else index
                 val lift by animateDpAsState(if (shown) (-4).dp else 0.dp, tween(90), label = "period_inspection_lift")
                 Column {
                 Box(Modifier.fillMaxWidth().height(5.dp).offset { IntOffset(0, lift.roundToPx()) }
@@ -159,19 +157,28 @@ internal fun RoomAvailabilityStrip(roomId: String, freeSlots: Set<Int>, slots: L
                             onLongClick("查看节次时间") { inspectAccessibly(slot.number) }
                             onClick("查看节次时间") { inspectAccessibly(slot.number) }
                         }
-                    }.drawBehind {
-                        val first=slots.first().let { (it.start.toSecondOfDay()+it.end.toSecondOfDay())/2f }
-                        val last=slots.last().let { (it.start.toSecondOfDay()+it.end.toSecondOfDay())/2f }
-                        val center=(slot.start.toSecondOfDay()+slot.end.toSecondOfDay())/2f
-                        val position=if(last==first) .5f else (center-first)/(last-first)
-                        val amplitude=if(preferences.layout==PeriodStripLayout.TIME_PROPORTIONAL)
-                            wave?.spatialAmplitude(if(direction==LayoutDirection.Rtl) 1-position else position,slots.size)
-                            else wave?.amplitude(visual,slots.size)
-                        val extension = (amplitude ?: 0f) *
-                            PeriodWave.maximumExtensionDp.dp.toPx()
-                        // Extend upwards into existing padding. The baseline, hit
-                        // boxes, colors and row/list measurements never animate.
-                        drawRect(color, Offset(0f, -extension), Size(size.width, size.height + extension))
+                    }.drawWithCache {
+                        val width=(geometry.width-2*gutter).coerceAtLeast(size.width)
+                        val bar=PeriodStripGeometry.bars(slots,width,gap,preferences.layout).getOrNull(index)
+                        val start=if(bar==null) 0f else if(direction==LayoutDirection.Rtl) width-bar.end else bar.start
+                        val path=Path()
+                        val extension=PeriodWave.maximumExtensionDp.dp.toPx()
+                        // Sample one continuous physical wave across each bar, rather than
+                        // scaling a rigid rectangle. Cache geometry/path, read motion only in draw.
+                        onDrawBehind {
+                            if(wave?.isRunning!=true || width<=0 || bar==null) drawRect(color)
+                            else {
+                                path.reset()
+                                path.moveTo(0f,size.height)
+                                for(sample in 0..16) {
+                                    val x=size.width*sample/16f
+                                    val position=(start+x)/width
+                                    path.lineTo(x,-extension*wave.spatialAmplitude(position,slots.size))
+                                }
+                                path.lineTo(size.width,size.height);path.close()
+                                drawPath(path,color)
+                            }
+                        }
                     })
                 if(preferences.showNumbers) Text(slot.number.toString(),Modifier.fillMaxWidth().padding(top=3.dp)
                     .testTag("room_period_number_${roomId}_${slot.number}").clearAndSetSemantics {},

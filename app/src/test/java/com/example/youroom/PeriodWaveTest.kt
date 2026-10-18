@@ -15,15 +15,15 @@ class PeriodWaveTest {
     }
 
     @Test fun physicalRightPulsesFirstAndLeftPulsesLast() {
-        assertTrue(PeriodWave.amplitude(.09f, 13, 14) > .9f)
-        assertEquals(0f, PeriodWave.amplitude(.09f, 0, 14), 0f)
-        assertTrue(PeriodWave.amplitude(.91f, 0, 14) > .9f)
-        assertEquals(0f, PeriodWave.amplitude(.91f, 13, 14), 0f)
+        assertTrue(PeriodWave.amplitude(.16f, 13, 14) > .9f)
+        assertEquals(0f, PeriodWave.amplitude(.16f, 0, 14), 0f)
+        assertTrue(PeriodWave.amplitude(.84f, 0, 14) > .9f)
+        assertEquals(0f, PeriodWave.amplitude(.84f, 13, 14), 0f)
     }
 
     @Test fun everyBarHasOneSmoothPeakWithoutGoingBelowTheBaseline() {
         val count = 14
-        val pulse = 3f / (count + 2)
+        val pulse = PeriodWave.pulseFraction(count)
         for (i in 0 until count) {
             val start = (1f - pulse) * (count - 1 - i) / (count - 1)
             assertEquals(0f, PeriodWave.amplitude(start, i, count), .0001f)
@@ -33,12 +33,15 @@ class PeriodWaveTest {
         }
     }
 
-    @Test fun noMoreThanThreeAdjacentBarsRiseTogether() {
+    @Test fun broaderCrestOverlapsSeveralAdjacentBarsWithoutBreakingContinuity() {
+        var widest=0
         for (t in 1 until 1_000) {
             val moving = (0..13).filter { PeriodWave.amplitude(t / 1_000f, it, 14) > .0001f }
-            assertTrue(moving.size <= 3)
+            widest=maxOf(widest,moving.size)
+            assertTrue(moving.size <= 7)
             if (moving.isNotEmpty()) assertEquals(moving.size, moving.last() - moving.first() + 1)
         }
+        assertTrue(widest>=5)
     }
 
     @Test fun sparseResponsesAndOnePeriodStillProduceBoundedPulses() {
@@ -49,10 +52,21 @@ class PeriodWaveTest {
     }
 
     @Test fun motionDurationAndExtensionAreSmallAndFixed() {
-        assertEquals(600, PeriodWave.durationMillis)
+        assertEquals(480, PeriodWave.durationMillis)
         assertEquals(250L, PeriodWave.startDelayMillis)
-        assertEquals(.75f,450f/PeriodWave.durationMillis,.0001f)
+        assertEquals(1.25f,600f/PeriodWave.durationMillis,.0001f)
         assertEquals(3f, PeriodWave.maximumExtensionDp, 0f)
+    }
+
+    @Test fun spatialProfileVariesWithinOneBarAndHasSoftStationaryTails() {
+        val p=.4f
+        val samples=(0..1000).map { PeriodWave.spatialAmplitude(p,it/1000f,14) }
+        assertTrue(samples.zipWithNext().maxOf { (a,b)->kotlin.math.abs(a-b) }<.01f)
+        assertNotEquals(PeriodWave.spatialAmplitude(p,.6f,14),PeriodWave.spatialAmplitude(p,.65f,14))
+        val pulse=PeriodWave.pulseFraction(14)
+        assertTrue(PeriodWave.spatialAmplitude(.0001f,1f,14)<.00001f)
+        assertTrue(PeriodWave.spatialAmplitude(pulse-.0001f,1f,14)<.00001f)
+        assertEquals(PeriodWave.spatialAmplitude(.5f,0f,1),PeriodWave.amplitude(.5f,0,1),0f)
     }
 
 }
