@@ -1,6 +1,5 @@
 package com.example.youroom.ui
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -51,7 +50,7 @@ internal fun SlotClearAction(hasSelection: Boolean, onClick: () -> Unit,
 internal fun AnimatedTrashIcon(hasSelection: Boolean, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
     val angle = animateFloatAsState(if (hasSelection) 12f else 0f, tween(220), label = "trash_lid")
-    val tint = animateColorAsState(if (hasSelection) colors.primary else colors.onSurfaceVariant,
+    val tint = animateThemeColorAsState(if (hasSelection) colors.primary else colors.onSurfaceVariant,
         tween(220), label = "trash_tint")
     val body = remember {
         PathParser().parsePathString("M5.5 9H18.5L17.4 19.1Q17.3 20 16.4 20H7.6Q6.7 20 6.6 19.1Z " +

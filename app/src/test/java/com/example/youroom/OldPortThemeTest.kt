@@ -49,7 +49,7 @@ class OldPortThemeTest {
             assertFalse(r.outlineExpectedSelection)
             assertTrue(contrast(r.selectionFill!!,r.onSelection!!)>=4.5f)
         }
-        for(tone in CampusTone.entries.take(6)) for(dark in listOf(false,true)) {
+        for(tone in CampusTone.entries.take(4)) for(dark in listOf(false,true)) {
             val r=campusThemeRoles(campusColorScheme(Campus.XITUCHENG,dark,tone),tone,dark)
             assertNull(r.selectionFill);assertNull(r.onSelection)
         }
@@ -77,7 +77,7 @@ class OldPortThemeTest {
         AppearancePreferenceKeys.write(stored,value)
         assertEquals("old_port",stored[AppearancePreferenceKeys.west])
         assertEquals(value,AppearancePreferenceKeys.read(stored))
-        assertEquals(listOf("sand","pine","slate","clay","matisse","dunhuang"),CampusTone.entries.take(6).map { it.id })
+        assertEquals(listOf("sand","pine","matisse","dunhuang"),CampusTone.entries.take(4).map { it.id })
         assertEquals(CampusTone.OLD_PORT,CampusTone.DUNHUANG.step(1))
         assertEquals(CampusTone.DUNHUANG,CampusTone.OLD_PORT.step(-1))
         assertEquals(CampusTone.SAND,AppearancePreferences().westTone)

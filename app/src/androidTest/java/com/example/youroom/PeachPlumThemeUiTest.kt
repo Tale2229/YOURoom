@@ -81,8 +81,7 @@ class PeachPlumThemeUiTest {
         assertPaint("settings_theme_frame",roles.impressionFrame)
         assertPaint("settings_theme_previous_triangle",roles.themeArrow)
         assertPaint("settings_strip_layout_icon",roles.settingsIcon)
-        for (argb in listOf(0xFFFAEFE5,0xFFFAC7B7,0xFF6B5B63,0xFFD7AF9F,0xFF9B838E))
-            assertPaint("settings_theme_impression",Color(argb))
+        assertThemeAvatar(compose.onNodeWithTag("settings_theme_impression", true), CampusTone.PEACH_PLUM)
         shot("settings")
     }
 

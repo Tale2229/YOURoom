@@ -81,8 +81,7 @@ class BurgundyThemeUiTest {
         assertPaint("settings_theme_frame",roles.impressionFrame)
         assertPaint("settings_theme_previous_triangle",roles.themeArrow)
         assertPaint("settings_strip_layout_icon",roles.settingsIcon)
-        for (argb in listOf(0xFFE7D9C6,0xFF713F3D,0xFF916B58,0xFF800020,0xFFCEB28D))
-            assertPaint("settings_theme_impression",Color(argb))
+        assertThemeAvatar(compose.onNodeWithTag("settings_theme_impression", true), CampusTone.BURGUNDY)
         shot("settings")
     }
 

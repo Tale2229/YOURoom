@@ -146,6 +146,11 @@ class YOURoomViewModel(
         setAppearance(state.value.appearance.withTone(campus,tone))
     }
 
+    fun setDarkMode(enabled: Boolean) {
+        if (state.value.initializing) return
+        setAppearance(state.value.appearance.copy(darkMode = enabled))
+    }
+
     fun setDefaultCampus(campus: Campus) {
         if(state.value.initializing) return
         setAppearance(state.value.appearance.copy(defaultCampus=campus))

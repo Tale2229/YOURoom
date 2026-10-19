@@ -68,7 +68,7 @@ class AutumnCitrusThemeTest {
     }
 
     @Test fun priorThemeLocalAccentsAndOriginalDefaultsAreUnaffected() {
-        for(tone in CampusTone.entries.take(9)) for(dark in listOf(false,true)) {
+        for(tone in CampusTone.entries.take(7)) for(dark in listOf(false,true)) {
             val c=campusColorScheme(Campus.XITUCHENG,dark,tone);val r=campusThemeRoles(c,tone,dark)
             assertNull(r.periodIdle);assertNull(r.listDivider);assertNull(r.switchTrackOn)
             assertNull(r.selectedSlot);assertNull(r.onSelectedSlot)
@@ -83,8 +83,8 @@ class AutumnCitrusThemeTest {
         val value=AppearancePreferences(CampusTone.AUTUMN_CITRUS,CampusTone.RED_BEAN,Campus.SHAHE)
         AppearancePreferenceKeys.write(stored,value)
         assertEquals("autumn_citrus",stored[AppearancePreferenceKeys.west]);assertEquals(value,AppearancePreferenceKeys.read(stored))
-        assertEquals(listOf("sand","pine","slate","clay","matisse","dunhuang","old_port","peach_plum","burgundy","morandi","red_bean"),
-            CampusTone.entries.take(11).map { it.id })
+        assertEquals(listOf("sand","pine","matisse","dunhuang","old_port","peach_plum","burgundy","morandi","red_bean"),
+            CampusTone.entries.take(9).map { it.id })
         assertEquals(CampusTone.AUTUMN_CITRUS,CampusTone.RED_BEAN.step(1))
         assertEquals(CampusTone.MORNING_BELL,CampusTone.AUTUMN_CITRUS.step(1))
         assertEquals(CampusTone.MONDRIAN,CampusTone.SAND.step(-1))

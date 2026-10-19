@@ -1,6 +1,5 @@
 package com.example.youroom.ui
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
@@ -25,21 +24,22 @@ import com.example.youroom.ui.theme.themeRoles
  * Page transitions disable input, not the saved state's colors or position. */
 @Composable
 internal fun CompactSettingsSwitch(checked: Boolean, enabled: Boolean,
-    onCheckedChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+    onCheckedChange: (Boolean) -> Unit, modifier: Modifier = Modifier,
+    tag: String = "settings_strip_numbers_switch") {
     val offset by animateDpAsState(if(checked) 18.dp else 0.dp,
         tween(160,easing=FastOutSlowInEasing),label="settings switch thumb")
     val roles=themeRoles()
-    val track by animateColorAsState(if(checked) roles.switchTrackOn ?: MaterialTheme.colorScheme.primary else roles.switchTrackOff ?: MaterialTheme.colorScheme.outlineVariant,
+    val track by animateThemeColorAsState(if(checked) roles.switchTrackOn ?: MaterialTheme.colorScheme.primary else roles.switchTrackOff ?: MaterialTheme.colorScheme.outlineVariant,
         tween(160),label="settings switch track")
     Box(modifier.size(48.dp).toggleable(checked,enabled=enabled,role=Role.Switch,
         interactionSource=remember { MutableInteractionSource() },indication=null,
         onValueChange={ if(enabled) onCheckedChange(it) }),contentAlignment=Alignment.Center) {
-        Box(Modifier.size(44.dp,26.dp).testTag("settings_strip_numbers_switch_face")) {
+        Box(Modifier.size(44.dp,26.dp).testTag("${tag}_face")) {
             Box(Modifier.align(Alignment.Center).size(40.dp,20.dp)
-                .background(track,RoundedCornerShape(50)).testTag("settings_strip_numbers_switch_track"))
+                .background(track,RoundedCornerShape(50)).testTag("${tag}_track"))
             Box(Modifier.align(Alignment.CenterStart).offset(x=offset).size(26.dp)
                 .shadow(1.dp,CircleShape).background(roles.switchThumb ?: Color.White,CircleShape)
-                .testTag("settings_strip_numbers_switch_thumb"))
+                .testTag("${tag}_thumb"))
         }
     }
 }

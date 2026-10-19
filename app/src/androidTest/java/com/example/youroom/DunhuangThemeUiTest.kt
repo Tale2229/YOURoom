@@ -87,11 +87,7 @@ class DunhuangThemeUiTest {
         assertPaint("settings_theme_previous_triangle",roles.themeArrow)
         assertPaint("settings_theme_next_triangle",roles.themeArrow)
         assertPaint("settings_strip_layout_icon",roles.settingsIcon)
-        val p=compose.onNodeWithTag("settings_theme_impression",true).captureToImage().toPixelMap()
-        listOf(Triple(6,6,0xFF8FBFB0),Triple(19,18,0xFFA64C3B),Triple(5,49,0xFFCABEAF),
-            Triple(30,65,0xFFB78F68),Triple(53,60,0xFFA64C3B),Triple(62,60,0xFF6B3B32)).forEach { (x,y,argb)->
-            assertTrue("First-edition artwork pixel $x,$y",near(p[x*p.width/75,y*p.height/75],Color(argb)))
-        }
+        assertThemeAvatar(compose.onNodeWithTag("settings_theme_impression", true), CampusTone.DUNHUANG)
         shot("settings")
     }
 

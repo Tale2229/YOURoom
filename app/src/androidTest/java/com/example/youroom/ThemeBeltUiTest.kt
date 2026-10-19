@@ -152,8 +152,30 @@ class ThemeBeltUiTest {
         compose.onNodeWithTag("settings_theme_next").assertIsEnabled().performClick()
         compose.mainClock.autoAdvance=true
         compose.waitUntil(5000) { changes.size==1 };compose.waitForIdle()
-        assertEquals(listOf(Campus.SHAHE to CampusTone.SLATE),changes)
+        assertEquals(listOf(Campus.SHAHE to CampusTone.MATISSE),changes)
         assertEquals(CampusTone.SAND,appearance.westTone)
+    }
+
+    @Test fun settledSwipeStartsItsWaveAsSoonAsTheArrowsFinishReappearing() {
+        render(); compose.mainClock.autoAdvance = false
+        val stride = with(compose.density) { ThemeBeltGeometry.strideDp.dp.toPx() }
+        belt().performTouchInput {
+            down(center); moveBy(Offset(-stride, 0f), 400)
+            advanceEventTime(200); moveBy(Offset.Zero); up()
+        }
+        compose.mainClock.advanceTimeBy(240)
+        assertTrue(browsing()); assertTrue(changes.isEmpty())
+        var elapsed = 0L
+        while (browsing() && elapsed < 2000) {
+            compose.mainClock.advanceTimeByFrame(); elapsed += 16L
+        }
+        assertFalse(browsing())
+        assertTrue(changes.isEmpty())
+        compose.mainClock.advanceTimeBy(ThemeBeltGeometry.revealMillis + 48L)
+        // No extra 320ms theme debounce after the existing belt hold/reveal.
+        compose.waitUntil(5000) { changes.size == 1 }
+        assertEquals(listOf(Campus.XITUCHENG to CampusTone.PINE), changes)
+        compose.mainClock.autoAdvance = true
     }
 
     @Test fun aSettledStripStaysOpenAndAnotherDragRestartsItsExitDelay() {
@@ -183,7 +205,7 @@ class ThemeBeltUiTest {
         assertFalse(browsing());assertTrue(changes.isEmpty())
         compose.mainClock.autoAdvance=true
         compose.waitUntil(5000) { changes.size==1 };compose.waitForIdle()
-        assertEquals(listOf(Campus.XITUCHENG to CampusTone.SLATE),changes)
+        assertEquals(listOf(Campus.XITUCHENG to CampusTone.MATISSE),changes)
         compose.onNodeWithTag("settings_theme_next").assertIsDisplayed().assertIsEnabled()
     }
 }

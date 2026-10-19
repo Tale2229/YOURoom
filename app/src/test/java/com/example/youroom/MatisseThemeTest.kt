@@ -43,7 +43,7 @@ class MatisseThemeTest {
             assertEquals(c.tertiary,r.selectedRoomAction)
             assertNull(r.roomActionDivider)
             assertEquals(c.outlineVariant,r.divider)
-            for(tone in listOf(CampusTone.SAND,CampusTone.PINE,CampusTone.SLATE,CampusTone.CLAY)) {
+            for(tone in listOf(CampusTone.SAND,CampusTone.PINE)) {
                 val old=campusColorScheme(Campus.XITUCHENG,dark,tone)
                 val role=campusThemeRoles(old,tone,dark)
                 assertFalse(role.hideHeaderDivider);assertEquals(old.outlineVariant,role.divider)
@@ -67,7 +67,7 @@ class MatisseThemeTest {
         }
     }
     @Test fun theFourExistingThemesKeepTheirOriginalFunctionalRoles() {
-        for(tone in listOf(CampusTone.SAND,CampusTone.PINE,CampusTone.SLATE,CampusTone.CLAY)) for(dark in listOf(false,true)) {
+        for(tone in listOf(CampusTone.SAND,CampusTone.PINE)) for(dark in listOf(false,true)) {
             val c=campusColorScheme(Campus.XITUCHENG,dark,tone)
             val r=campusThemeRoles(c,tone,dark)
             assertEquals(c.surface,r.header);assertEquals(c.onSurface,r.onHeader)
@@ -85,6 +85,6 @@ class MatisseThemeTest {
         assertEquals(selected,AppearancePreferenceKeys.read(stored))
         assertEquals(CampusTone.PINE,selected.shaheTone)
         assertEquals(CampusTone.SAND,AppearancePreferences().westTone)
-        assertEquals(CampusTone.MATISSE,CampusTone.CLAY.step(1))
+        assertEquals(CampusTone.MATISSE,CampusTone.PINE.step(1))
     }
 }

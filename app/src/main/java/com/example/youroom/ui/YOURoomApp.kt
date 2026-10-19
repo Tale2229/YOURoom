@@ -12,6 +12,10 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.graphics.luminance
+import androidx.core.view.WindowCompat
+import com.example.youroom.ui.theme.themeRoles
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -51,6 +55,19 @@ fun YOURoomApp(model: YOURoomViewModel) {
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { model.onForeground() }
     ThemeTransitionHost(state.campus, state.appearance, tab to state.showWorkspace,
         enabled = state.showWorkspace, onTone = model::setCampusTone) { requestTone ->
+        val view = LocalView.current
+        val roles = themeRoles()
+        val statusSurface = if (state.showWorkspace) roles.header else MaterialTheme.colorScheme.surface
+        val waveMoving = LocalThemePreview.current?.busy == true
+        SideEffect {
+            val window = (view.context as? android.app.Activity)?.window
+            if (window != null && !waveMoving) {
+                WindowCompat.getInsetsController(window, view).apply {
+                    isAppearanceLightStatusBars = statusSurface.luminance() > .5f
+                    isAppearanceLightNavigationBars = roles.navigation.luminance() > .5f
+                }
+            }
+        }
         CompositionLocalProvider(LocalPeriodStripPreferences provides state.periodStrip) {
         RoomSearchFocusBoundary(Modifier.fillMaxSize()) {
         Scaffold(
@@ -136,10 +153,10 @@ private fun WorkspacePages(state: YOURoomState, tab: Int, model: YOURoomViewMode
                             sharedHeaderMoving = headerMoving, interactive = active, onCancel = model::cancelPlanning,
                             onPlanningPreferences = model::setPlanningPreferences)
                         else -> SettingsScreen(state, manageRoom, model::clearProfile, model::logout,
-                            model::setCampus, showHeader = false, sharedHeaderMoving = headerMoving, interactive = active,
+                            model::setCampus, showHeader = false, sharedHeaderMoving = headerMoving, interactive = page == tab,
                             onPeriodStrip = model::setPeriodStrip,
                             onTone = onTone, onDefaultCampus = model::setDefaultCampus,
-                            onPlanningPreferences = model::setPlanningPreferences)
+                            onPlanningPreferences = model::setPlanningPreferences, onDarkMode = model::setDarkMode)
                     }
                 }
             }

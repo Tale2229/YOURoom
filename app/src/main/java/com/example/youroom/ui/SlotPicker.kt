@@ -2,7 +2,6 @@ package com.example.youroom.ui
 
 import com.example.youroom.ui.theme.themeRoles
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -201,10 +200,10 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                                     val roles = themeRoles()
                                     val selectedBackground = roles.selectedSlot ?: colors.primary
                                     val selectedForeground = roles.onSelectedSlot ?: colors.onPrimary
-                                    val background by animateColorAsState(
+                                    val background by animateThemeColorAsState(
                                         if (isSelected) selectedBackground else colors.surfaceContainer,
                                         tween(140), label = "slot_background")
-                                    val stitch by animateColorAsState(
+                                    val stitch by animateThemeColorAsState(
                                         if (isSelected) selectedForeground.copy(alpha=.35f) else colors.outline.copy(alpha=.36f),
                                         tween(140), label = "slot_stitch")
                                     Box(modifier.height(48.dp).testTag("slot_${slot.number}")

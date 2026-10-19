@@ -78,8 +78,8 @@ class AboutUiTest {
         val version = context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty()
         compose.onNodeWithTag("settings_about_version").assertTextEquals(version)
         shot("about-compact-1.22.4")
-        compose.onNodeWithTag("settings_about_project").assertHeightIsAtLeast(48.dp).performClick()
-        compose.onNodeWithTag("settings_about_feedback").assertHeightIsAtLeast(48.dp).performClick()
+        compose.onNodeWithTag("settings_about_project").assertHeightIsAtLeast(44.dp).performClick()
+        compose.onNodeWithTag("settings_about_feedback").assertHeightIsAtLeast(44.dp).performClick()
         assertEquals(listOf("https://github.com/Tale2229/YOURoom", "https://github.com/Tale2229/YOURoom/issues"), opened)
         compose.onNodeWithText("反馈时请勿附带账号、密码或 Token").assertDoesNotExist()
         compose.onNodeWithText("GitHub").assertIsDisplayed()
@@ -174,6 +174,9 @@ class AboutUiTest {
     @Test fun allFourHeadingsUseTheSameTypographyAndTheAuthorIsLastAndRightAligned() {
         render(); open()
         compose.onNodeWithTag("settings_sheet_campus").assertDoesNotExist()
+        val brand = compose.onNodeWithTag("settings_about_name").fetchSemanticsNode().boundsInRoot
+        val description = compose.onNodeWithTag("settings_about_description").fetchSemanticsNode().boundsInRoot
+        assertEquals(with(compose.density) { 12.dp.toPx() }, description.top-brand.bottom, 1f)
         val sizes = mutableListOf<androidx.compose.ui.unit.TextUnit>()
         for (title in listOf("GitHub","问题反馈","数据与使用","本地与登录")) {
             val result = mutableListOf<TextLayoutResult>()
@@ -185,8 +188,13 @@ class AboutUiTest {
         val items=listOf("settings_about_project","settings_about_feedback","settings_about_data","settings_about_local")
         val bounds=items.map { compose.onNodeWithTag(it).fetchSemanticsNode().boundsInRoot }
         bounds.zipWithNext().forEach { (a,b) -> assertEquals("Uniform compact section spacing",a.bottom,b.top,1f) }
-        compose.onNodeWithTag("settings_about_data_heading").assertHeightIsEqualTo(48.dp)
-        compose.onNodeWithTag("settings_about_local_heading").assertHeightIsEqualTo(48.dp)
+        compose.onNodeWithTag("settings_about_data_heading").assertHeightIsEqualTo(36.dp)
+        compose.onNodeWithTag("settings_about_local_heading").assertHeightIsEqualTo(36.dp)
+        for (section in listOf("data", "local")) {
+            val heading = compose.onNodeWithTag("settings_about_${section}_heading").fetchSemanticsNode().boundsInRoot
+            val paragraphs = compose.onNodeWithTag("settings_about_${section}_paragraphs").fetchSemanticsNode().boundsInRoot
+            assertEquals(heading.bottom, paragraphs.top, 1f)
+        }
         compose.onNodeWithText("开发者  23级 软工 小嚎猪").performScrollTo()
         val authorLayout=mutableListOf<TextLayoutResult>()
         compose.onNodeWithText("开发者  23级 软工 小嚎猪")

@@ -12,6 +12,7 @@ import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,6 +31,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.youroom.domain.*
 import com.example.youroom.ui.theme.themeRoles
+import androidx.compose.foundation.isSystemInDarkTheme
 
 @Composable
 fun SettingsScreen(state: YOURoomState, onRoom: (String?) -> Unit,
@@ -37,16 +39,18 @@ fun SettingsScreen(state: YOURoomState, onRoom: (String?) -> Unit,
     showHeader: Boolean = true, sharedHeaderMoving: Boolean = false, interactive: Boolean = true,
     onPeriodStrip: (PeriodStripPreferences) -> Unit = {},
     onTone: (Campus, CampusTone) -> Unit = { _, _ -> }, onDefaultCampus: (Campus) -> Unit = {},
-    onPlanningPreferences: (Campus, CampusPlanningPreferences) -> Unit = { _, _ -> }) {
+    onPlanningPreferences: (Campus, CampusPlanningPreferences) -> Unit = { _, _ -> },
+    onDarkMode: (Boolean) -> Unit = {}) {
     val westList = rememberLazyListState()
     val shaheList = rememberLazyListState()
     CampusFrame(state, onCampus, showHeader, sharedHeaderMoving, interactive,
-        bodyTag = "settings_campus_body") { page, active, _, _ ->
+        animateBodyChange = false, bodyTag = "settings_campus_body") { page, active, _, _ ->
         SettingsContent(page, { if (active) onRoom(it) }, { if (active) onClear(it) },
             { if (active) onLogout() }, if (page.campus == Campus.XITUCHENG) westList else shaheList, active,
             { if (active) onPeriodStrip(it) }, { campus, tone -> if (active) onTone(campus, tone) },
             { if (active) onDefaultCampus(it) },
-            { if (active) onPlanningPreferences(page.campus, it) })
+            { if (active) onPlanningPreferences(page.campus, it) },
+            { if (active) onDarkMode(it) })
     }
 }
 
@@ -54,7 +58,8 @@ fun SettingsScreen(state: YOURoomState, onRoom: (String?) -> Unit,
 private fun SettingsContent(state: YOURoomState, onRoom: (String?) -> Unit,
     onClear: (String) -> Unit, onLogout: () -> Unit, listState: LazyListState, interactive: Boolean,
     onPeriodStrip: (PeriodStripPreferences) -> Unit, onTone: (Campus, CampusTone) -> Unit,
-    onDefaultCampus: (Campus) -> Unit, onPlanningPreferences: (CampusPlanningPreferences) -> Unit) {
+    onDefaultCampus: (Campus) -> Unit, onPlanningPreferences: (CampusPlanningPreferences) -> Unit,
+    onDarkMode: (Boolean) -> Unit) {
     var sheet by remember(state.campus) { mutableStateOf<String?>(null) }
     var confirmExit by remember(state.campus) { mutableStateOf(false) }
     val context = LocalContext.current
@@ -70,6 +75,7 @@ private fun SettingsContent(state: YOURoomState, onRoom: (String?) -> Unit,
             (LocalThemePreview.current?.appearance ?: state.appearance).tone(state.campus), interactive, onTone) }
         if (state.demo) item { Text("演示模式", Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp),
             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        item { DarkModeSetting(state.appearance.isDark(isSystemInDarkTheme()), interactive, onDarkMode) }
         item { AppearanceSettingChoices(state, interactive, onPeriodStrip, onDefaultCampus) }
         item { SettingsEntry("教室标记", Icons.Outlined.StarBorder, "settings_room_marks", interactive,
             value = profiles.size.toString()) { sheet = "marks" } }
@@ -107,6 +113,22 @@ private fun SettingsContent(state: YOURoomState, onRoom: (String?) -> Unit,
         }) },
         confirmButton = { TextButton(onClick = { confirmExit = false; onLogout() }) { Text("确认") } },
         dismissButton = { TextButton(onClick = { confirmExit = false }) { Text("取消") } })
+}
+
+@Composable
+private fun DarkModeSetting(checked: Boolean, enabled: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp).heightIn(min = 52.dp)
+        .testTag("settings_dark_mode")
+        .clickable(enabled = enabled, role = Role.Switch, interactionSource = remember { MutableInteractionSource() },
+            indication = null) { onCheckedChange(!checked) },
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        Icon(Icons.Outlined.DarkMode, null, Modifier.size(20.dp).testTag("settings_dark_mode_icon"),
+            tint = themeRoles().settingsIcon)
+        Text("深色模式", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        CompactSettingsSwitch(checked, enabled, onCheckedChange,
+            Modifier.testTag("settings_dark_mode_switch").semantics { contentDescription = "深色模式" },
+            tag = "settings_dark_mode_switch")
+    }
 }
 
 @Composable

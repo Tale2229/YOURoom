@@ -83,8 +83,7 @@ class MondrianThemeUiTest {
         assertPaint("settings_theme_frame",roles.impressionFrame)
         assertPaint("settings_theme_previous_triangle",roles.themeArrow)
         assertPaint("settings_strip_layout_icon",roles.settingsIcon)
-        for (argb in listOf(0xFFFAFAF6,0xFF060102,0xFF274997,0xFFCC3828,0xFFEEE95D))
-            assertPaint("settings_theme_impression",Color(argb))
+        assertThemeAvatar(compose.onNodeWithTag("settings_theme_impression", true), CampusTone.MONDRIAN)
         shot("settings")
     }
 

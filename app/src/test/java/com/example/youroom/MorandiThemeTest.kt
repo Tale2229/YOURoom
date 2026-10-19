@@ -70,7 +70,7 @@ class MorandiThemeTest {
     }
 
     @Test fun priorNineThemesDoNotAcquireLocalAccentOverrides() {
-        for(tone in CampusTone.entries.take(9)) for(dark in listOf(false,true)) {
+        for(tone in CampusTone.entries.take(7)) for(dark in listOf(false,true)) {
             val c=campusColorScheme(Campus.XITUCHENG,dark,tone);val r=campusThemeRoles(c,tone,dark)
             assertNull(r.periodIdle);assertNull(r.listDivider)
             assertNull(r.switchTrackOn);assertNull(r.switchTrackOff);assertNull(r.switchThumb)
@@ -82,7 +82,7 @@ class MorandiThemeTest {
         val value=AppearancePreferences(CampusTone.MORANDI,CampusTone.BURGUNDY,Campus.SHAHE)
         AppearancePreferenceKeys.write(stored,value)
         assertEquals("morandi",stored[AppearancePreferenceKeys.west]);assertEquals(value,AppearancePreferenceKeys.read(stored))
-        assertEquals(listOf("sand","pine","slate","clay","matisse","dunhuang","old_port","peach_plum","burgundy"),CampusTone.entries.take(9).map { it.id })
+        assertEquals(listOf("sand","pine","matisse","dunhuang","old_port","peach_plum","burgundy"),CampusTone.entries.take(7).map { it.id })
         assertEquals(CampusTone.MORANDI,CampusTone.BURGUNDY.step(1));assertEquals(CampusTone.RED_BEAN,CampusTone.MORANDI.step(1))
         assertEquals(CampusTone.MONDRIAN,CampusTone.SAND.step(-1))
         assertEquals(CampusTone.SAND,AppearancePreferences().westTone);assertEquals(CampusTone.PINE,AppearancePreferences().shaheTone)

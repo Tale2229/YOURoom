@@ -1,6 +1,5 @@
 package com.example.youroom.ui
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.Crossfade
@@ -132,7 +131,7 @@ internal fun PlanningRailAction(label: String, tag: String, enabled: Boolean, se
     val pressScale by animateFloatAsState(if (onLongClick != null && pressed) .9f else 1f, tween(100), label = "import press")
     val colors = MaterialTheme.colorScheme
     val roles = themeRoles()
-    val background by animateColorAsState(if (primary) roles.launch.copy(alpha = if (enabled || pending) 1f else .38f)
+    val background by animateThemeColorAsState(if (primary) roles.launch.copy(alpha = if (enabled || pending) 1f else .38f)
         else if (confirmation!=null) roles.confirmation else if (selected) roles.enabledOption else roles.planningControl,
         tween(if(briefFeedback) { if(confirmation!=null) 16 else 24 } else 100), label = "planning action state")
     val action = if (toggle) Modifier.toggleable(selected, enabled = enabled, role = Role.Checkbox,

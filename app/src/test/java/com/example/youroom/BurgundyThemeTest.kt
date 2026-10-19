@@ -72,7 +72,7 @@ class BurgundyThemeTest {
         val value=AppearancePreferences(CampusTone.BURGUNDY,CampusTone.PEACH_PLUM,Campus.SHAHE)
         AppearancePreferenceKeys.write(stored,value)
         assertEquals("burgundy",stored[AppearancePreferenceKeys.west]);assertEquals(value,AppearancePreferenceKeys.read(stored))
-        assertEquals(listOf("sand","pine","slate","clay","matisse","dunhuang","old_port","peach_plum"),CampusTone.entries.take(8).map { it.id })
+        assertEquals(listOf("sand","pine","matisse","dunhuang","old_port","peach_plum"),CampusTone.entries.take(6).map { it.id })
         assertEquals(CampusTone.BURGUNDY,CampusTone.PEACH_PLUM.step(1))
         assertEquals(CampusTone.MORANDI,CampusTone.BURGUNDY.step(1));assertEquals(CampusTone.MONDRIAN,CampusTone.SAND.step(-1))
         assertEquals(CampusTone.SAND,AppearancePreferences().westTone);assertEquals(CampusTone.PINE,AppearancePreferences().shaheTone)

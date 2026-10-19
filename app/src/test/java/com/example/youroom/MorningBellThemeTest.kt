@@ -79,7 +79,7 @@ class MorningBellThemeTest {
     }
 
     @Test fun originalCornerFallbackAndDefaultsRemainUnchanged() {
-        for(tone in CampusTone.entries.take(12)) for(dark in listOf(false,true)) {
+        for(tone in CampusTone.entries.take(10)) for(dark in listOf(false,true)) {
             val c=campusColorScheme(Campus.XITUCHENG,dark,tone)
             val r=campusThemeRoles(c,tone,dark)
             assertNull("$tone must retain its original favorite corner",r.favoriteCorner)
@@ -95,7 +95,7 @@ class MorningBellThemeTest {
         AppearancePreferenceKeys.write(stored,value)
         assertEquals("morning_bell",stored[AppearancePreferenceKeys.west])
         assertEquals(value,AppearancePreferenceKeys.read(stored));assertEquals("晨钟暮鼓",CampusTone.MORNING_BELL.title)
-        assertEquals(listOf("sand","pine","slate","clay","matisse","dunhuang","old_port","peach_plum","burgundy","morandi","red_bean","autumn_citrus"),CampusTone.entries.take(12).map { it.id })
+        assertEquals(listOf("sand","pine","matisse","dunhuang","old_port","peach_plum","burgundy","morandi","red_bean","autumn_citrus"),CampusTone.entries.take(10).map { it.id })
         assertEquals(CampusTone.MORNING_BELL,CampusTone.AUTUMN_CITRUS.step(1))
         assertEquals(CampusTone.MONDRIAN,CampusTone.MORNING_BELL.step(1))
         assertEquals(CampusTone.MONDRIAN,CampusTone.SAND.step(-1))

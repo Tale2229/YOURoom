@@ -11,15 +11,15 @@ class AppearancePreferencesTest {
         val original = AppearancePreferences()
         assertEquals(CampusTone.SAND, original.tone(Campus.XITUCHENG))
         assertEquals(CampusTone.PINE, original.tone(Campus.SHAHE))
-        val changed = original.withTone(Campus.XITUCHENG, CampusTone.CLAY)
+        val changed = original.withTone(Campus.XITUCHENG, CampusTone.DUNHUANG)
         assertEquals(CampusTone.PINE, changed.shaheTone)
-        assertEquals(CampusTone.CLAY, changed.westTone)
+        assertEquals(CampusTone.DUNHUANG, changed.westTone)
         assertEquals(Campus.XITUCHENG, changed.defaultCampus)
     }
 
     @Test fun previousAndNextWrapWithoutChangingTheStableStorageIds() {
         assertEquals(CampusTone.MONDRIAN, CampusTone.SAND.step(-1))
-        assertEquals(CampusTone.MATISSE, CampusTone.CLAY.step(1))
+        assertEquals(CampusTone.MATISSE, CampusTone.PINE.step(1))
         assertEquals(CampusTone.DUNHUANG, CampusTone.MATISSE.step(1))
         assertEquals(CampusTone.OLD_PORT, CampusTone.DUNHUANG.step(1))
         assertEquals(CampusTone.PEACH_PLUM, CampusTone.OLD_PORT.step(1))
@@ -29,13 +29,13 @@ class AppearancePreferencesTest {
         assertEquals(CampusTone.AUTUMN_CITRUS, CampusTone.RED_BEAN.step(1))
         assertEquals(CampusTone.MORNING_BELL, CampusTone.AUTUMN_CITRUS.step(1))
         CampusTone.entries.forEach { assertEquals(it, it.step(1).step(-1)) }
-        assertEquals(listOf("sand", "pine", "slate", "clay", "matisse", "dunhuang", "old_port", "peach_plum", "burgundy", "morandi", "red_bean", "autumn_citrus", "morning_bell", "mondrian"), CampusTone.entries.map { it.id })
+        assertEquals(listOf("sand", "pine", "matisse", "dunhuang", "old_port", "peach_plum", "burgundy", "morandi", "red_bean", "autumn_citrus", "morning_bell", "mondrian"), CampusTone.entries.map { it.id })
     }
 
     @Test fun storageRoundTripKeepsFiltersTagsAndStripPreferencesUntouched() {
         val values = mutablePreferencesOf(SharedFilterPreferences.favorites to true,
             TagCatalogPreferences.order to "[\"已收藏\",\"靠窗\"]", PeriodStripPreferenceKeys.numbers to true)
-        val pref = AppearancePreferences(CampusTone.SLATE, CampusTone.CLAY, Campus.SHAHE)
+        val pref = AppearancePreferences(CampusTone.MATISSE, CampusTone.DUNHUANG, Campus.SHAHE)
         AppearancePreferenceKeys.write(values, pref)
         assertEquals(pref, AppearancePreferenceKeys.read(values))
         assertEquals(true, values[SharedFilterPreferences.favorites])
@@ -46,8 +46,56 @@ class AppearancePreferencesTest {
     @Test fun missingOrUnknownStoredValuesFallBackIndependently() {
         assertEquals(AppearancePreferences(), AppearancePreferenceKeys.read(emptyPreferences()))
         val values = mutablePreferencesOf(AppearancePreferenceKeys.west to "unknown",
-            AppearancePreferenceKeys.shahe to "clay", AppearancePreferenceKeys.defaultCampus to "bad")
-        assertEquals(AppearancePreferences(shaheTone = CampusTone.CLAY), AppearancePreferenceKeys.read(values))
+            AppearancePreferenceKeys.shahe to "dunhuang", AppearancePreferenceKeys.defaultCampus to "bad")
+        assertEquals(AppearancePreferences(shaheTone = CampusTone.DUNHUANG), AppearancePreferenceKeys.read(values))
+    }
+
+    @Test fun retiredPalettesFallBackToCampusDefaultsWithoutChangingOtherSettings() {
+        for (retired in listOf("slate", "clay")) {
+            val values = mutablePreferencesOf(AppearancePreferenceKeys.west to retired,
+                AppearancePreferenceKeys.shahe to "mondrian", AppearancePreferenceKeys.defaultCampus to Campus.SHAHE.dataKey)
+            assertEquals(AppearancePreferences(CampusTone.SAND, CampusTone.MONDRIAN, Campus.SHAHE),
+                AppearancePreferenceKeys.read(values))
+            values[AppearancePreferenceKeys.west] = "matisse"
+            values[AppearancePreferenceKeys.shahe] = retired
+            assertEquals(AppearancePreferences(CampusTone.MATISSE, CampusTone.PINE, Campus.SHAHE),
+                AppearancePreferenceKeys.read(values))
+        }
+    }
+
+    @Test fun unsetModeKeepsFollowingSystemAndManualModeOverridesBothSystemStates() {
+        val original = AppearancePreferences()
+        assertNull(original.darkMode)
+        assertFalse(original.isDark(false)); assertTrue(original.isDark(true))
+        for (system in listOf(false, true)) {
+            assertFalse(original.copy(darkMode = false).isDark(system))
+            assertTrue(original.copy(darkMode = true).isDark(system))
+        }
+    }
+
+    @Test fun darkModeRoundTripsIndependentlyFromCampusPalettesAndOtherSettings() {
+        val values = mutablePreferencesOf(SharedFilterPreferences.favorites to true,
+            PeriodStripPreferenceKeys.numbers to true)
+        val original = AppearancePreferences(CampusTone.MATISSE, CampusTone.MONDRIAN, Campus.SHAHE)
+        for (mode in listOf(true, false, null)) {
+            val choice = original.copy(darkMode = mode)
+            AppearancePreferenceKeys.write(values, choice)
+            assertEquals(choice, AppearancePreferenceKeys.read(values))
+            assertEquals(mode, values[AppearancePreferenceKeys.darkMode])
+            assertEquals(true, values[SharedFilterPreferences.favorites])
+            assertEquals(true, values[PeriodStripPreferenceKeys.numbers])
+        }
+    }
+
+    @Test fun legacyAppearanceWithoutModeKeepsStoredCampusChoices() {
+        val stored = mutablePreferencesOf(AppearancePreferenceKeys.west to "morandi",
+            AppearancePreferenceKeys.shahe to "dunhuang")
+        val choice = AppearancePreferenceKeys.read(stored)
+        assertNull(choice.darkMode)
+        assertEquals(CampusTone.MORANDI, choice.westTone)
+        assertEquals(CampusTone.DUNHUANG, choice.shaheTone)
+        assertTrue(choice.withTone(Campus.SHAHE, CampusTone.PINE).isDark(true))
+        assertFalse(choice.withTone(Campus.XITUCHENG, CampusTone.SAND).isDark(false))
     }
 
     @Test fun mosaicTravelsDiagonallyAndAllTilesFinishWithinOneAnimation() {

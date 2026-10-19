@@ -90,7 +90,7 @@ class MondrianThemeTest {
         AppearancePreferenceKeys.write(stored,value)
         assertEquals("mondrian",stored[AppearancePreferenceKeys.west])
         assertEquals(value,AppearancePreferenceKeys.read(stored));assertEquals("蒙德里安",CampusTone.MONDRIAN.title)
-        assertEquals(listOf("sand","pine","slate","clay","matisse","dunhuang","old_port","peach_plum","burgundy","morandi","red_bean","autumn_citrus","morning_bell"),CampusTone.entries.take(13).map { it.id })
+        assertEquals(listOf("sand","pine","matisse","dunhuang","old_port","peach_plum","burgundy","morandi","red_bean","autumn_citrus","morning_bell"),CampusTone.entries.take(11).map { it.id })
         assertEquals(CampusTone.MONDRIAN,CampusTone.MORNING_BELL.step(1))
         assertEquals(CampusTone.SAND,CampusTone.MONDRIAN.step(1))
         assertEquals(CampusTone.MONDRIAN,CampusTone.SAND.step(-1))

@@ -16,8 +16,6 @@ val LocalCampusAppearance = staticCompositionLocalOf { AppearancePreferences() }
 fun campusBadgeColor(campus: Campus, tone: CampusTone = CampusTone.default(campus)) = when(tone) {
     CampusTone.SAND -> Color(0xFF493D27)
     CampusTone.PINE -> Color(0xFF203F34)
-    CampusTone.SLATE -> Color(0xFF34474D)
-    CampusTone.CLAY -> Color(0xFF5B3E34)
     CampusTone.MATISSE -> Color(0xFF343E47)
     CampusTone.DUNHUANG -> Color(0xFF6B3B32)
     CampusTone.OLD_PORT -> Color(0xFF344D4B)
@@ -208,14 +206,6 @@ private fun tonePalette(tone: CampusTone, dark: Boolean): TonePalette = when(ton
         0xFF35473B,0xFF819780,0xFF0E1511,0xFF1A271F,0xFF203026,0xFF293C30,0xFF344A3B)
         else palette(0xFF315C4E,0xFFFFFFFF,0xFFDFEADF,0xFFF0F5EF,0xFFF0F5EF,0xFF233128,0xFF526555,
             0xFFD2DFD0,0xFF7D927B,0xFFFAFFF8,0xFFEBF2E8,0xFFE7EFE4,0xFFDCE7D9,0xFFCEDDCB)
-    CampusTone.SLATE -> if(dark) palette(0xFFB7CED5,0xFF162227,0xFF2B414B,0xFF141A20,0xFF192129,0xFFE4ECF1,0xFFAABBC8,
-        0xFF354550,0xFF8296A7,0xFF0F151A,0xFF1E2933,0xFF25323D,0xFF2F3F4B,0xFF3A4C59)
-        else palette(0xFF4C6068,0xFFFFFFFF,0xFFE0E8ED,0xFFF0F3F6,0xFFF0F3F6,0xFF26313A,0xFF566575,
-            0xFFD1DBE3,0xFF8093A2,0xFFFAFDFF,0xFFEAF0F4,0xFFE5EDF2,0xFFD9E3EB,0xFFCBD9E3)
-    CampusTone.CLAY -> if(dark) palette(0xFFE6BBA9,0xFF281B16,0xFF51372E,0xFF211714,0xFF281D19,0xFFF3E6DE,0xFFC6AEA0,
-        0xFF513C32,0xFFA38A79,0xFF19110E,0xFF30231D,0xFF392920,0xFF473227,0xFF553D30)
-        else palette(0xFF785548,0xFFFFFFFF,0xFFF0DFD4,0xFFFAF1E9,0xFFFAF1E9,0xFF382C27,0xFF725B4E,
-            0xFFE6D2C1,0xFFA38670,0xFFFFFAF5,0xFFF7EAE0,0xFFF4E6D9,0xFFEBD7C6,0xFFE0C7B2)
     CampusTone.MATISSE -> if(dark) palette(0xFFBDCCD2,0xFF1D272B,0xFF46575C,0xFF25342D,0xFF25342D,0xFFE9EFE2,0xFFB4C6B8,
         0xFF4E6256,0xFF91A797,0xFF1E2B25,0xFF2C3E32,0xFF34473A,0xFF3A4B40,0xFF465A49)
         else palette(0xFF343E47,0xFFF3F6EF,0xFFC6D1D0,0xFFE9EFE4,0xFFE9EFE4,0xFF343E47,0xFF52635C,
@@ -260,7 +250,7 @@ private fun tonePalette(tone: CampusTone, dark: Boolean): TonePalette = when(ton
 
 @Composable
 fun YOURoomTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean? = null,
     campus: Campus = Campus.XITUCHENG,
     appearance: AppearancePreferences = LocalCampusAppearance.current,
     content: @Composable () -> Unit
@@ -268,8 +258,9 @@ fun YOURoomTheme(
     // Each campus surface has a stable palette. Animate its layer, not MaterialTheme:
     // interpolating colors would invalidate every consumer on every transition frame.
     val tone = appearance.tone(campus)
-    val colors = remember(campus, darkTheme, tone) { campusColorScheme(campus, darkTheme, tone) }
-    val roles = remember(colors, tone, darkTheme) { campusThemeRoles(colors, tone, darkTheme) }
+    val dark = darkTheme ?: appearance.isDark(isSystemInDarkTheme())
+    val colors = remember(campus, dark, tone) { campusColorScheme(campus, dark, tone) }
+    val roles = remember(colors, tone, dark) { campusThemeRoles(colors, tone, dark) }
     CompositionLocalProvider(LocalCampusAppearance provides appearance, LocalThemeRoles provides roles) {
     MaterialTheme(
         colorScheme = colors,

@@ -93,7 +93,7 @@ class DunhuangThemeTest {
     }
 
     @Test fun addingRolesDoesNotChangeExistingConfirmationOrArrowColors() {
-        for(tone in CampusTone.entries.take(5)) for(dark in listOf(false,true)) {
+        for(tone in CampusTone.entries.takeWhile { it != CampusTone.DUNHUANG }) for(dark in listOf(false,true)) {
             val r=campusThemeRoles(campusColorScheme(Campus.XITUCHENG,dark,tone),tone,dark)
             assertEquals(r.settingsIcon,r.themeArrow)
             assertEquals(r.onPlanningHeading,r.planningHeadingEntry)

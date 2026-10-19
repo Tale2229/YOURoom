@@ -111,14 +111,17 @@ object AppearancePreferenceKeys {
     val west = stringPreferencesKey("appearance.01.tone")
     val shahe = stringPreferencesKey("appearance.04.tone")
     val defaultCampus = stringPreferencesKey("appearance.default_campus")
+    val darkMode = booleanPreferencesKey("appearance.dark_mode")
     fun read(values: Preferences) = AppearancePreferences(
         CampusTone.entries.firstOrNull { it.id == values[west] } ?: CampusTone.SAND,
         CampusTone.entries.firstOrNull { it.id == values[shahe] } ?: CampusTone.PINE,
-        Campus.entries.firstOrNull { it.dataKey == values[defaultCampus] } ?: Campus.XITUCHENG)
+        Campus.entries.firstOrNull { it.dataKey == values[defaultCampus] } ?: Campus.XITUCHENG,
+        values[darkMode])
     fun write(values: MutablePreferences, appearance: AppearancePreferences) {
         values[west] = appearance.westTone.id
         values[shahe] = appearance.shaheTone.id
         values[defaultCampus] = appearance.defaultCampus.dataKey
+        appearance.darkMode?.let { values[darkMode] = it } ?: values.remove(darkMode)
     }
 }
 

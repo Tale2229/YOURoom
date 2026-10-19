@@ -10,6 +10,7 @@ internal object ThemeBeltGeometry {
     const val strideDp = 96f
     const val minScale = .62f
     const val holdMillis = 800L
+    const val revealMillis = 160
     fun initial(value: Int, count: Int) = cycles / 2 * count + value
     fun value(position: Float, count: Int) = Math.floorMod(position.roundToInt(), count)
     fun nearest(value: Int, around: Int, count: Int): Int =

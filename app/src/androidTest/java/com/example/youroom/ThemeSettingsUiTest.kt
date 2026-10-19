@@ -79,8 +79,8 @@ class ThemeSettingsUiTest {
         assertEquals(CampusTone.PINE, appearance.westTone)
         assertEquals(CampusTone.PINE, appearance.shaheTone)
         compose.onNodeWithTag("settings_theme_next").performClick()
-        settle(CampusTone.SLATE)
-        assertEquals(CampusTone.SLATE, appearance.westTone)
+        settle(CampusTone.MATISSE)
+        assertEquals(CampusTone.MATISSE, appearance.westTone)
         compose.onNodeWithTag("campus_swipe_region").performTouchInput { swipeLeft() }
         assertEquals(Campus.SHAHE, campus)
         compose.onNodeWithTag("settings_theme_previous").performClick()
@@ -92,7 +92,7 @@ class ThemeSettingsUiTest {
         assertEquals(Campus.SHAHE, campus)
         compose.onNodeWithTag("settings_default_01").performClick().assertIsSelected()
         assertEquals(Campus.SHAHE, campus)
-        assertEquals(CampusTone.SLATE, appearance.westTone)
+        assertEquals(CampusTone.MATISSE, appearance.westTone)
         assertEquals(3, changes.size)
     }
 
@@ -188,8 +188,8 @@ class ThemeSettingsUiTest {
         compose.onNodeWithTag("settings_theme_next").assertIsEnabled()
         compose.onNodeWithTag("settings_theme_next").performClick()
         compose.mainClock.autoAdvance=true
-        settle(CampusTone.SLATE)
-        assertEquals(listOf(Campus.XITUCHENG to CampusTone.PINE, Campus.XITUCHENG to CampusTone.SLATE),changes)
+        settle(CampusTone.MATISSE)
+        assertEquals(listOf(Campus.XITUCHENG to CampusTone.PINE, Campus.XITUCHENG to CampusTone.MATISSE),changes)
         assertEquals(1f,progress())
     }
 
@@ -246,7 +246,7 @@ class ThemeSettingsUiTest {
             val store = SettingsStore(raw)
             assertEquals(AppearancePreferences(), store.appearance.first())
             raw.edit { it[SharedFilterPreferences.favorites] = true; it[PeriodStripPreferenceKeys.numbers] = true }
-            val choice = AppearancePreferences(CampusTone.MATISSE, CampusTone.SLATE, Campus.SHAHE)
+            val choice = AppearancePreferences(CampusTone.MATISSE, CampusTone.MATISSE, Campus.SHAHE)
             store.saveAppearance(choice)
             scope.coroutineContext[Job]!!.cancelAndJoin()
             val reopened = SettingsStore(PreferenceDataStoreFactory.create(scope = reopenedScope, produceFile = { path }))

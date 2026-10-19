@@ -83,8 +83,7 @@ class MorningBellThemeUiTest {
         assertPaint("settings_theme_frame",roles.impressionFrame)
         assertPaint("settings_theme_previous_triangle",roles.themeArrow)
         assertPaint("settings_strip_layout_icon",roles.settingsIcon)
-        for (argb in listOf(0xFF8EA4CA,0xFFEDEDF4,0xFFB9C4D6,0xFF625466,0xFF9F463B))
-            assertPaint("settings_theme_impression",Color(argb))
+        assertThemeAvatar(compose.onNodeWithTag("settings_theme_impression", true), CampusTone.MORNING_BELL)
         shot("settings")
     }
 

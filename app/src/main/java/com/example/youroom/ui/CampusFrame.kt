@@ -57,24 +57,32 @@ internal fun CampusHeaderPager(state: YOURoomState, motion: CampusHeaderMotion, 
 @Composable
 internal fun CampusFrame(state: YOURoomState, onCampus: (Campus) -> Unit, showHeader: Boolean = true,
     sharedHeaderMoving: Boolean = false, interactive: Boolean = true, keepBothCampuses: Boolean = false,
+    animateBodyChange: Boolean = true,
     bodyTag: String, content: @Composable (YOURoomState, Boolean, Boolean, Boolean) -> Unit) {
     val localHeader = if (showHeader) rememberCampusHeaderMotion(state.campus) else null
     val headerMoving = localHeader?.moving ?: sharedHeaderMoving
     val latestHeaderMoving by rememberUpdatedState(headerMoving)
     val pages = remember(state.demo) { mutableMapOf<Campus, YOURoomState>() }
     pages[state.campus] = state
-    var bodyCampus by remember { mutableStateOf(state.campus) }
+    var animatedBodyCampus by remember { mutableStateOf(state.campus) }
+    val bodyCampus = if (animateBodyChange) animatedBodyCampus else state.campus
     val alpha = remember { Animatable(1f) }
     var replacing by remember { mutableStateOf(false) }
-    val moving = headerMoving || replacing || bodyCampus != state.campus
-    LaunchedEffect(state.campus) {
+    val moving = animateBodyChange && (headerMoving || replacing || bodyCampus != state.campus)
+    LaunchedEffect(state.campus, animateBodyChange) {
+        if (!animateBodyChange) {
+            animatedBodyCampus = state.campus
+            replacing = false
+            alpha.snapTo(1f)
+            return@LaunchedEffect
+        }
         val target = state.campus
         if (bodyCampus == target && !headerMoving && alpha.value == 1f) return@LaunchedEffect
         replacing = true
         try {
             if (bodyCampus != target) {
                 alpha.animateTo(0f, tween(durationMillis = 160, delayMillis = 160))
-                bodyCampus = target
+                animatedBodyCampus = target
             }
             snapshotFlow { !latestHeaderMoving }.first { it }
             alpha.animateTo(1f, tween(160))
@@ -96,7 +104,7 @@ internal fun CampusFrame(state: YOURoomState, onCampus: (Campus) -> Unit, showHe
                         refreshing = false, error = null, selectedRoomId = null)
                     pages.putIfAbsent(displayed, observed)
                     val visible = displayed == bodyCampus
-                    val ready = visible && displayed == state.campus && !headerMoving
+                    val ready = visible && displayed == state.campus && (!animateBodyChange || !headerMoving)
                     var held by remember(displayed) { mutableStateOf(observed) }
                     val page = if (ready) observed else held
                     SideEffect { if (ready) held = observed }

@@ -30,15 +30,18 @@ import kotlinx.coroutines.*
 internal val ThemePageWaveProgress = SemanticsPropertyKey<Float>("ThemePageWaveProgress")
 internal val ThemePendingTone = SemanticsPropertyKey<String>("ThemePendingTone")
 internal data class ThemePreview(val appearance: AppearancePreferences, val busy: Boolean,
-    val onBrowsing: (Boolean) -> Unit = {})
+    val onBrowsing: (Boolean) -> Unit = {},
+    val onSettledTone: ((Campus, CampusTone) -> Unit)? = null)
 internal val LocalThemePreview = staticCompositionLocalOf<ThemePreview?> { null }
-private data class ToneRequest(val campus: Campus, val tone: CampusTone, val revision: Long)
+private data class ToneRequest(val campus: Campus, val tone: CampusTone, val revision: Long,
+    val debounce: Boolean = true)
 
 /** One mounted UI tree. Before/after frames are captured once, then deformed through
  * one shared mesh. No per-frame snapshots or global theme interpolation. */
 @Composable
 internal fun ThemeTransitionHost(campus: Campus, appearance: AppearancePreferences, contextKey: Any,
-    enabled: Boolean, onTone: (Campus, CampusTone) -> Unit, darkTheme: Boolean = androidx.compose.foundation.isSystemInDarkTheme(),
+    enabled: Boolean, onTone: (Campus, CampusTone) -> Unit,
+    darkTheme: Boolean = appearance.isDark(androidx.compose.foundation.isSystemInDarkTheme()),
     content: @Composable ((Campus, CampusTone) -> Unit) -> Unit) {
     val layer = rememberGraphicsLayer()
     val scope = rememberCoroutineScope()
@@ -74,7 +77,9 @@ internal fun ThemeTransitionHost(campus: Campus, appearance: AppearancePreferenc
     LaunchedEffect(request, browsing) {
         if (browsing) return@LaunchedEffect
         val selected = request ?: return@LaunchedEffect
-        delay(ThemePageWave.debounceMillis)
+        // A swipe has already waited through its quiet hold and arrow reveal.
+        // Only repeated arrow clicks need the additional debounce.
+        if (selected.debounce) delay(ThemePageWave.debounceMillis)
         ensureActive()
         if (request != selected || !latestEnabled || latestCampus != selected.campus) return@LaunchedEffect
         if (latestAppearance.tone(selected.campus) == selected.tone) { request = null; return@LaunchedEffect }
@@ -116,9 +121,12 @@ internal fun ThemeTransitionHost(campus: Campus, appearance: AppearancePreferenc
     val preview = request?.takeIf { it.campus == campus }?.let { appearance.withTone(campus, it.tone) } ?: appearance
     val moving by rememberUpdatedState(oldFrame != null)
     YOURoomTheme(campus = campus, appearance = appearance, darkTheme = darkTheme) {
-        CompositionLocalProvider(LocalThemePreview provides ThemePreview(preview, oldFrame != null) {
-            if (campus == latestCampus && oldFrame == null) browsing = it
-        }) {
+        CompositionLocalProvider(LocalThemePreview provides ThemePreview(preview, oldFrame != null,
+            onBrowsing = { if (campus == latestCampus && oldFrame == null) browsing = it },
+            onSettledTone = { selectedCampus, tone ->
+                if (latestEnabled && oldFrame == null && selectedCampus == latestCampus)
+                    request = ToneRequest(selectedCampus, tone, ++revision, debounce = false)
+            })) {
             Box(Modifier.fillMaxSize().testTag("theme_transition_page").clipToBounds()
                 .onSizeChanged { rootSize = it }
                 .semantics {

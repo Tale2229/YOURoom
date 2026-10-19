@@ -46,12 +46,12 @@ internal fun ColumnScope.AboutContent(version: String) {
     Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).testTag("settings_about_content"),
         verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("YOURoom", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+            Row(Modifier.fillMaxWidth().padding(bottom = 8.dp).testTag("settings_about_brand"), verticalAlignment = Alignment.CenterVertically) {
+                Text("YOURoom", Modifier.weight(1f).testTag("settings_about_name"), style = MaterialTheme.typography.titleLarge)
                 Text(version, Modifier.testTag("settings_about_version"), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text("北邮空闲教室查询与自习规划", style = MaterialTheme.typography.bodySmall)
+            Text("北邮空闲教室查询与自习规划", Modifier.testTag("settings_about_description"), style = MaterialTheme.typography.bodySmall)
             Text("非学校官方应用", style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -84,12 +84,12 @@ internal fun ColumnScope.AboutContent(version: String) {
 @Composable
 private fun AboutSection(title: String, icon: ImageVector, tag: String, paragraphs: List<String>) {
     Column(Modifier.testTag(tag)) {
-        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("${tag}_heading"), verticalAlignment = Alignment.CenterVertically,
+        Row(Modifier.fillMaxWidth().heightIn(min = 36.dp).testTag("${tag}_heading"), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(icon, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
             Text(title, style = MaterialTheme.typography.bodyMedium)
         }
-        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(Modifier.fillMaxWidth().testTag("${tag}_paragraphs"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             paragraphs.forEach { Text(it, Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
@@ -98,9 +98,9 @@ private fun AboutSection(title: String, icon: ImageVector, tag: String, paragrap
 
 @Composable
 private fun AboutLink(title: String, icon: ImageVector, tag: String, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag(tag)
+    Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).testTag(tag)
         .clickable(role = Role.Button, interactionSource = remember { MutableInteractionSource() },
-            indication = null, onClick = onClick).padding(vertical = 8.dp),
+            indication = null, onClick = onClick).padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Icon(icon, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
         Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)

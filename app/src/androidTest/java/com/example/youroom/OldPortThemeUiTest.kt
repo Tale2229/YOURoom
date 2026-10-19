@@ -81,8 +81,7 @@ class OldPortThemeUiTest {
         assertPaint("settings_theme_frame",roles.impressionFrame)
         assertPaint("settings_theme_previous_triangle",roles.themeArrow)
         assertPaint("settings_strip_layout_icon",roles.settingsIcon)
-        for (argb in listOf(0xFFE8DDC8,0xFF788D81,0xFF38585A,0xFFF3ECE0,0xFFDDC1A0))
-            assertPaint("settings_theme_impression",Color(argb))
+        assertThemeAvatar(compose.onNodeWithTag("settings_theme_impression", true), CampusTone.OLD_PORT)
         shot("settings")
     }
 

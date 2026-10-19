@@ -193,6 +193,24 @@ class YOURoomUiTest {
         assertEquals(with(compose.density) { 3.dp.toPx() },b.left-a.right,1f)
     }
 
+    @Test fun manualDarkModeAppliesThroughTheSettingsSwitchAndSurvivesLeavingDemo() {
+        enterDemo()
+        compose.runOnIdle { capturedModel.setDarkMode(false) }
+        compose.onNodeWithTag("tab_settings").performClick()
+        compose.onNodeWithTag("settings_dark_mode_switch").assertIsOff().performClick()
+        compose.waitUntil(5000) { capturedModel.state.value.appearance.darkMode == true }
+        compose.onNodeWithTag("settings_dark_mode_switch").assertIsOn()
+        compose.onNodeWithTag("tab_rooms").performClick()
+        compose.onNodeWithTag("tab_settings").performClick()
+        compose.onNodeWithTag("settings_dark_mode_switch").assertIsOn()
+        compose.runOnIdle { capturedModel.logout() }
+        compose.waitUntil(5000) { !capturedModel.state.value.showWorkspace }
+        assertEquals(true, capturedModel.state.value.appearance.darkMode)
+        enterDemo()
+        compose.onNodeWithTag("tab_settings").performClick()
+        compose.onNodeWithTag("settings_dark_mode_switch").assertIsOn()
+    }
+
     @Test fun numberSwitchAlreadyShowsTheSavedCheckWhileTheSettingsPageIsEntering() {
         enterDemo()
         compose.runOnIdle { capturedModel.setPeriodStrip(PeriodStripPreferences(showNumbers=true)) }
@@ -200,7 +218,10 @@ class YOURoomUiTest {
         compose.mainClock.autoAdvance=false
         compose.onNodeWithTag("tab_settings").performClick()
         compose.mainClock.advanceTimeBy(96)
-        compose.onNodeWithTag("settings_strip_numbers_switch",true).assertIsOn().assertIsNotEnabled()
+        compose.onNodeWithTag("settings_strip_numbers_switch",true).assertIsOn().assertIsEnabled()
+        compose.onNodeWithTag("settings_logout",true).assertIsEnabled()
+        compose.onNodeWithTag("settings_theme_previous",true).assertIsEnabled()
+        compose.onNodeWithTag("settings_theme_next",true).assertIsEnabled()
         assertTrue(capturedModel.state.value.periodStrip.showNumbers)
         compose.mainClock.advanceTimeBy(1400)
         compose.onNodeWithTag("settings_strip_numbers_switch",true).assertIsOn().assertIsEnabled()
@@ -214,7 +235,7 @@ class YOURoomUiTest {
         val execution=capturedModel.planning.executions.value.getValue(Campus.XITUCHENG)
         compose.onNodeWithTag("tab_settings").performClick()
         compose.onNodeWithTag("settings_theme_previous").performClick()
-        compose.waitUntil(5_000) { capturedModel.state.value.appearance.westTone == CampusTone.CLAY }
+        compose.waitUntil(5_000) { capturedModel.state.value.appearance.westTone == CampusTone.MONDRIAN }
         compose.waitForIdle()
         compose.onNodeWithTag("tab_rooms").performClick()
         compose.onNodeWithTag("slot_1").assertIsSelected()
@@ -222,7 +243,7 @@ class YOURoomUiTest {
         compose.onNodeWithTag("planner_target_range_0",true).assertExists()
         assertEquals(execution,capturedModel.planning.executions.value.getValue(Campus.XITUCHENG))
         compose.onNodeWithTag("tab_settings").performClick()
-        compose.onNodeWithTag("settings_theme_name").assertTextEquals("陶土")
+        compose.onNodeWithTag("settings_theme_name").assertTextEquals("蒙德里安")
         compose.onNodeWithTag("settings_theme_impression").assert(androidx.compose.ui.test.SemanticsMatcher.expectValue(
             com.example.youroom.ui.ThemePreviewSlideProgress,1f))
     }

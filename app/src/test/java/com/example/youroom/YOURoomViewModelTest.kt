@@ -679,10 +679,37 @@ class YOURoomViewModelTest {
     }
 
     @Test fun savedDefaultCampusIsUsedBeforeTheFirstRequest() = checkModel(
-        initialAppearance = AppearancePreferences(CampusTone.CLAY, CampusTone.SLATE, Campus.SHAHE)) { model, source, _ ->
+        initialAppearance = AppearancePreferences(CampusTone.DUNHUANG, CampusTone.MATISSE, Campus.SHAHE)) { model, source, _ ->
         assertEquals(Campus.SHAHE, model.state.value.campus)
         assertEquals(listOf(Campus.SHAHE), source.requests)
-        assertEquals(CampusTone.SLATE, model.state.value.appearance.tone(Campus.SHAHE))
+        assertEquals(CampusTone.MATISSE, model.state.value.appearance.tone(Campus.SHAHE))
+    }
+
+    @Test fun darkModeIsGlobalPersistsAndNeverRefreshesRoomsOrChangesPlans() = checkModel(
+        initialAppearance = AppearancePreferences(CampusTone.MATISSE, CampusTone.MONDRIAN)) { model, source, settings ->
+        model.generatePlanning(PlanningDraft(flexible = false, savedWindows = listOf(StudyWindow(480, 720))))
+        runCurrent()
+        val before = model.state.value
+        val requests = source.requests.toList()
+        val plans = model.planning.executions.value
+        model.setDarkMode(true); runCurrent()
+        assertEquals(before.appearance.copy(darkMode = true), settings.appearance.value)
+        assertEquals(true, model.state.value.appearance.darkMode)
+        assertEquals(before.filters, model.state.value.filters)
+        assertEquals(before.profiles, model.state.value.profiles)
+        assertEquals(requests, source.requests); assertEquals(plans, model.planning.executions.value)
+        model.showDemo(); runCurrent()
+        assertEquals(true, model.state.value.appearance.darkMode)
+        model.logout(); runCurrent()
+        assertEquals(true, model.state.value.appearance.darkMode)
+        model.setDarkMode(false); runCurrent()
+        assertEquals(false, settings.appearance.value.darkMode)
+    }
+
+    @Test fun savedManualModeIsAvailableBeforeTheInitialWorkspaceIsDisplayed() = checkModel(
+        initialAppearance = AppearancePreferences(darkMode = true)) { model, _, _ ->
+        assertFalse(model.state.value.initializing)
+        assertEquals(true, model.state.value.appearance.darkMode)
     }
 
     @Test fun changingAppearanceDoesNotSwitchCampusOrTouchSearchMarksOrExistingPlan() = checkModel { model, source, settings ->
@@ -691,12 +718,12 @@ class YOURoomViewModelTest {
         val plans = model.planning.executions.value
         val before = model.state.value
         val requests = source.requests.toList()
-        model.setCampusTone(Campus.XITUCHENG, CampusTone.CLAY)
+        model.setCampusTone(Campus.XITUCHENG, CampusTone.DUNHUANG)
         model.setDefaultCampus(Campus.SHAHE)
         runCurrent()
         assertEquals(Campus.XITUCHENG, model.state.value.campus)
         assertEquals(CampusTone.PINE, model.state.value.appearance.shaheTone)
-        assertEquals(CampusTone.CLAY, settings.appearance.value.westTone)
+        assertEquals(CampusTone.DUNHUANG, settings.appearance.value.westTone)
         assertEquals(Campus.SHAHE, settings.appearance.value.defaultCampus)
         assertEquals(before.filters, model.state.value.filters)
         assertEquals(before.profiles, model.state.value.profiles)
@@ -706,14 +733,14 @@ class YOURoomViewModelTest {
         assertEquals(Campus.SHAHE, model.state.value.campus)
         model.openLogin(); runCurrent()
         assertEquals(Campus.SHAHE, model.state.value.campus)
-        assertEquals(CampusTone.CLAY, model.state.value.appearance.westTone)
+        assertEquals(CampusTone.DUNHUANG, model.state.value.appearance.westTone)
     }
 
     @Test fun rapidToneAndDefaultChangesPreserveBothCampusesDespiteOlderEmissions() = checkModel { model, _, settings ->
         settings.appearanceGate = CompletableDeferred()
-        model.setCampusTone(Campus.XITUCHENG, CampusTone.CLAY); runCurrent()
+        model.setCampusTone(Campus.XITUCHENG, CampusTone.DUNHUANG); runCurrent()
         val first = model.state.value.appearance
-        model.setCampusTone(Campus.SHAHE, CampusTone.SLATE)
+        model.setCampusTone(Campus.SHAHE, CampusTone.MATISSE)
         model.setDefaultCampus(Campus.SHAHE); runCurrent()
         val latest = model.state.value.appearance
         settings.appearance.value = first; runCurrent()
@@ -726,12 +753,12 @@ class YOURoomViewModelTest {
 
     @Test fun failedAppearanceSaveRollsBackAndCanBeRetried() = checkModel { model, _, settings ->
         settings.appearanceFailure = true
-        model.setCampusTone(Campus.XITUCHENG, CampusTone.CLAY); runCurrent()
+        model.setCampusTone(Campus.XITUCHENG, CampusTone.DUNHUANG); runCurrent()
         assertEquals(AppearancePreferences(), model.state.value.appearance)
         assertTrue(model.state.value.error!!.contains("外观设置保存失败"))
         settings.appearanceFailure = false
-        model.setCampusTone(Campus.XITUCHENG, CampusTone.CLAY); runCurrent()
-        assertEquals(CampusTone.CLAY, settings.appearance.value.westTone)
+        model.setCampusTone(Campus.XITUCHENG, CampusTone.DUNHUANG); runCurrent()
+        assertEquals(CampusTone.DUNHUANG, settings.appearance.value.westTone)
     }
 
     @Test fun stripDefaultsAreOriginalAndChangesDoNotTouchSearchOrPlans() = checkModel { model, source, settings ->

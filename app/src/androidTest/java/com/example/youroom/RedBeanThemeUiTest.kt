@@ -82,8 +82,7 @@ class RedBeanThemeUiTest {
         assertPaint("settings_theme_frame",roles.impressionFrame)
         assertPaint("settings_theme_previous_triangle",roles.themeArrow)
         assertPaint("settings_strip_layout_icon",roles.settingsIcon)
-        for (argb in listOf(0xFFF5F4F0,0xFFE0E3E6,0xFFB9C3CF,0xFF9DAABA,0xFFB3392F))
-            assertPaint("settings_theme_impression",Color(argb))
+        assertThemeAvatar(compose.onNodeWithTag("settings_theme_impression", true), CampusTone.RED_BEAN)
         shot("settings")
     }
 

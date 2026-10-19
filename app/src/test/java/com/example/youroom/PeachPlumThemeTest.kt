@@ -48,7 +48,7 @@ class PeachPlumThemeTest {
             assertFalse(r.outlineExpectedSelection)
             assertTrue(contrast(r.selectionFill!!,r.onSelection!!)>=4.5f)
         }
-        for(tone in CampusTone.entries.take(6)) for(dark in listOf(false,true)) {
+        for(tone in CampusTone.entries.take(4)) for(dark in listOf(false,true)) {
             val r=campusThemeRoles(campusColorScheme(Campus.XITUCHENG,dark,tone),tone,dark)
             assertNull(r.selectionFill);assertNull(r.onSelection)
         }
@@ -75,7 +75,7 @@ class PeachPlumThemeTest {
         val value=AppearancePreferences(CampusTone.PEACH_PLUM,CampusTone.OLD_PORT,Campus.SHAHE)
         AppearancePreferenceKeys.write(stored,value)
         assertEquals("peach_plum",stored[AppearancePreferenceKeys.west]);assertEquals(value,AppearancePreferenceKeys.read(stored))
-        assertEquals(listOf("sand","pine","slate","clay","matisse","dunhuang","old_port"),CampusTone.entries.take(7).map { it.id })
+        assertEquals(listOf("sand","pine","matisse","dunhuang","old_port"),CampusTone.entries.take(5).map { it.id })
         assertEquals(CampusTone.BURGUNDY,CampusTone.PEACH_PLUM.step(1))
         assertEquals(CampusTone.MONDRIAN,CampusTone.SAND.step(-1))
         assertEquals(CampusTone.SAND,AppearancePreferences().westTone);assertEquals(CampusTone.PINE,AppearancePreferences().shaheTone)

@@ -83,8 +83,7 @@ class AutumnCitrusThemeUiTest {
         assertPaint("settings_theme_frame",roles.impressionFrame)
         assertPaint("settings_theme_previous_triangle",roles.themeArrow)
         assertPaint("settings_strip_layout_icon",roles.settingsIcon)
-        for (argb in listOf(0xFFF0EBD9,0xFFC2B892,0xFF9AA066,0xFFC59359,0xFF4C5639))
-            assertPaint("settings_theme_impression",Color(argb))
+        assertThemeAvatar(compose.onNodeWithTag("settings_theme_impression", true), CampusTone.AUTUMN_CITRUS)
         shot("settings")
     }
 
