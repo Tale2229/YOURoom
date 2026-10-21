@@ -80,7 +80,7 @@ class MondrianThemeUiTest {
         } } } }
         compose.onNodeWithTag("settings_theme_name").assertTextEquals("蒙德里安")
         assertPaint("tab_settings_face",roles.navigationSelected)
-        assertPaint("settings_theme_frame",roles.impressionFrame)
+        assertThemeFrame(compose.onNodeWithTag("settings_theme_frame"), CampusTone.MONDRIAN, colors.surface, night)
         assertPaint("settings_theme_previous_triangle",roles.themeArrow)
         assertPaint("settings_strip_layout_icon",roles.settingsIcon)
         assertThemeAvatar(compose.onNodeWithTag("settings_theme_impression", true), CampusTone.MONDRIAN)
@@ -197,7 +197,7 @@ class MondrianThemeUiTest {
         compose.waitUntil(5000) { writes==1 };compose.waitForIdle()
         assertEquals(CampusTone.MONDRIAN,choice.westTone);assertEquals(CampusTone.PINE,choice.shaheTone)
         compose.onNodeWithTag("settings_theme_name").assertTextEquals("蒙德里安")
-        assertPaint("settings_theme_frame",roles.impressionFrame)
+        assertThemeFrame(compose.onNodeWithTag("settings_theme_frame"), CampusTone.MONDRIAN, colors.surface, night)
         compose.onNodeWithTag("settings_theme_next").performClick()
         compose.waitUntil(5000) { writes==2 };compose.waitForIdle()
         compose.onNodeWithTag("settings_theme_name").assertTextEquals("砂岩")

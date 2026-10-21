@@ -5,11 +5,11 @@ import com.example.youroom.ui.theme.themeRoles
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.SplineBasedFloatDecayAnimationSpec
 import androidx.compose.animation.core.generateDecayAnimationSpec
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.FlingBehavior
@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyListLayoutInfo
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -44,6 +43,7 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.*
 import com.example.youroom.domain.*
@@ -62,8 +62,11 @@ import kotlin.math.tan
 
 internal val ThemePreviewSlideProgress = SemanticsPropertyKey<Float>("ThemePreviewSlideProgress")
 internal val ThemeBeltPosition = SemanticsPropertyKey<Float>("ThemeBeltPosition")
+internal val ThemeBeltVisualPosition = SemanticsPropertyKey<Float>("ThemeBeltVisualPosition")
 internal val ThemeBeltBrowsing = SemanticsPropertyKey<Boolean>("ThemeBeltBrowsing")
 internal val ThemeBeltReveal = SemanticsPropertyKey<Float>("ThemeBeltReveal")
+internal val ThemeFrameTone = SemanticsPropertyKey<String>("ThemeFrameTone")
+internal val ThemeFrameAttached = SemanticsPropertyKey<Boolean>("ThemeFrameAttached")
 private data class ImpressionFrames(val from: ImageBitmap, val to: ImageBitmap)
 private val ThemeArrowHeight = 30.dp
 private val ThemeArrowWidth = (ThemeArrowHeight.value / (2f * tan(Math.toRadians(50.0)).toFloat())).dp
@@ -105,6 +108,15 @@ internal fun ThemeImpressionPicker(campus: Campus, tone: CampusTone, enabled: Bo
         val currentTone by rememberUpdatedState(tone)
         val currentSelectable by rememberUpdatedState(selectable)
         val position by remember { derivedStateOf { list.layoutInfo.themeBeltPosition(initial) } }
+        var captured by remember { mutableStateOf<Int?>(initial) }
+        // Raw touch travel escapes the detent; the shared visual target stays exactly
+        // centered until then. A short critically damped pull avoids teleporting.
+        val visualPosition by animateFloatAsState(
+            ThemeBeltMagnet.position(position, captured),
+            spring(dampingRatio = 1f, stiffness = 1800f, visibilityThreshold = .001f),
+            label = "theme belt detent")
+        var lastCapturedTone by remember { mutableStateOf(tone) }
+        val frameTone = if (browsing || revealingArrows) lastCapturedTone else tone
         val nearestTone = CampusTone.entries[ThemeBeltGeometry.value(position, count)]
         val reveal by animateFloatAsState(if (browsing) 1f else 0f, tween(ThemeBeltGeometry.revealMillis), label = "theme belt reveal")
         val nativeFling = remember(list, density) {
@@ -112,11 +124,13 @@ internal fun ThemeImpressionPicker(campus: Campus, tone: CampusTone, enabled: Bo
                 SplineBasedFloatDecayAnimationSpec(density).generateDecayAnimationSpec(),
                 tween(180, easing = FastOutSlowInEasing))
         }
+        val releaseCapture by rememberUpdatedState { ThemeBeltMagnet.captured(position, captured) }
         val fling = remember(nativeFling) { object : FlingBehavior {
             override suspend fun ScrollScope.performFling(initialVelocity: Float): Float {
                 flingRunning = true
                 awaitingFling = false
-                return try { with(nativeFling) { performFling(initialVelocity) } }
+                val velocity = ThemeBeltMagnet.releaseVelocity(initialVelocity, releaseCapture())
+                return try { with(nativeFling) { performFling(velocity) } }
                 finally { flingRunning = false }
             }
         } }
@@ -124,6 +138,14 @@ internal fun ThemeImpressionPicker(campus: Campus, tone: CampusTone, enabled: Bo
         LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
             browsing = false; revealingArrows = false; awaitingFling = false; onBrowsing(false)
             scope.launch { list.stopScroll() }
+        }
+        LaunchedEffect(list) {
+            snapshotFlow { position to if (!browsing && !revealingArrows) tone else null }
+                .collect { (position, resetTone) ->
+                    captured = ThemeBeltMagnet.captured(position, captured)
+                    // A gap releases capture, not its color. Only a new capture replaces it.
+                    lastCapturedTone = resetTone ?: captured?.let { CampusTone.entries[Math.floorMod(it, count)] } ?: lastCapturedTone
+                }
         }
         LaunchedEffect(list) {
             list.interactionSource.interactions.collect { interaction ->
@@ -194,13 +216,17 @@ internal fun ThemeImpressionPicker(campus: Campus, tone: CampusTone, enabled: Bo
             verticalArrangement=Arrangement.spacedBy(10.dp)) {
             BoxWithConstraints(Modifier.fillMaxWidth().height(95.dp).testTag("settings_theme_belt").semantics {
                 this[ThemeBeltPosition] = position - initial
+                this[ThemeBeltVisualPosition] = visualPosition - initial
                 this[ThemeBeltBrowsing] = browsing
                 this[ThemeBeltReveal] = reveal
             }, contentAlignment = Alignment.TopCenter) {
-                Box(Modifier.size(95.dp).testTag("settings_theme_frame")
-                    .background(themeRoles().impressionFrame, RoundedCornerShape(14.dp))
-                    .padding(10.dp)) {
-                Box(Modifier.size(75.dp).testTag("settings_theme_impression")
+                Box(Modifier.size(95.dp).zIndex(1f).testTag("settings_theme_frame")
+                    .semantics {
+                        this[ThemeFrameTone] = frameTone.id
+                        this[ThemeFrameAttached] = (!browsing && !revealingArrows) || captured != null
+                    }) {
+                ThemeAvatarFrame(campus, frameTone, night, Modifier.matchParentSize())
+                Box(Modifier.size(75.dp).align(Alignment.Center).testTag("settings_theme_impression")
                     .semantics {
                         contentDescription="${campus.label}配色预览"
                         stateDescription=if(browsing) nearestTone.title else tone.title
@@ -217,12 +243,16 @@ internal fun ThemeImpressionPicker(campus: Campus, tone: CampusTone, enabled: Bo
                     }.focusable(selectable && !browsing))
                 }
                 Canvas(Modifier.matchParentSize()) {
-                    if (browsing || reveal > .001f) drawThemeBelt(artworks, position, reveal)
-                    else inset((size.width-pixels)/2f, 10.dp.toPx(),
-                        (size.width-pixels)/2f,size.height-10.dp.toPx()-pixels) {
-                        clipPath(Path().apply { addRoundRect(RoundRect(Rect(0f,0f,pixels.toFloat(),pixels.toFloat()),
-                            CornerRadius(4.dp.toPx()))) }) {
-                            slide(frames,progress.value,direction)
+                    if (browsing || reveal > .001f) drawThemeBelt(artworks, visualPosition, reveal)
+                    else {
+                        val square = themeAvatarPixelSquare(size.width.roundToInt(), 95.dp.roundToPx(),
+                            size.height.roundToInt(), pixels)
+                        inset(square.left.toFloat(), square.top.toFloat(),
+                            size.width-square.left-pixels, size.height-square.top-pixels) {
+                            clipPath(Path().apply { addRoundRect(RoundRect(Rect(0f,0f,pixels.toFloat(),pixels.toFloat()),
+                                CornerRadius(4.dp.toPx()))) }) {
+                                slide(frames,progress.value,direction)
+                            }
                         }
                     }
                 }
@@ -254,16 +284,20 @@ private fun LazyListLayoutInfo.themeBeltPosition(fallback: Int): Float {
     return item.index - (item.offset + item.size/2f-center)/item.size
 }
 
-private fun DrawScope.drawThemeBelt(artworks: List<ImageBitmap>, position: Float, reveal: Float) {
+private fun DrawScope.drawThemeBelt(artworks: List<ImageBitmap>, visualPosition: Float, reveal: Float) {
     val stride = ThemeBeltGeometry.strideDp.dp.toPx()
+    val square = themeAvatarPixelSquare(size.width.roundToInt(), 95.dp.roundToPx(),
+        size.height.roundToInt(), artworks.first().width)
+    val origin = Offset(square.left+square.edge/2f, square.top+square.edge/2f)
     val edge = minOf(size.width/2-24.dp.toPx(),168.dp.toPx()).coerceAtLeast(1f)
     val bounds = Rect(size.width/2-edge,0f,size.width/2+edge,size.height)
+    // Every tile uses this one attracted position: all center distances stay 120dp.
     drawContext.canvas.saveLayer(bounds,Paint())
     clipRect(bounds.left,bounds.top,bounds.right,bounds.bottom) {
-        for (index in floor(position).toInt()-3..ceil(position).toInt()+3) {
-            val distance = index-position
+        for (index in floor(visualPosition).toInt()-3..ceil(visualPosition).toInt()+3) {
+            val distance = index-visualPosition
             val image = artworks[Math.floorMod(index,artworks.size)]
-            val center = Offset(size.width/2 + distance*stride,size.height/2)
+            val center = Offset(origin.x + distance*stride,origin.y)
             val x = center.x-image.width/2f
             val y = center.y-image.height/2f
             val area = Rect(x,y,x+image.width,y+image.height)

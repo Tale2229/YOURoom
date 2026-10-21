@@ -81,7 +81,7 @@ class AppearanceSettingChoicesUiTest {
         shot("settings-compact-collapsed-1.20.4")
     }
 
-    @Test fun themeFrameIs70PercentTransparentAndArrowTipsAre35dpAwayWith100DegreeApexes() {
+    @Test fun themeFrameUsesArtworkColorsAndArrowTipsAre35dpAwayWith100DegreeApexes() {
         render()
         val night = InstrumentationRegistry.getInstrumentation().targetContext.resources.configuration.uiMode and
             android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES
@@ -90,12 +90,7 @@ class AppearanceSettingChoicesUiTest {
             compose.runOnIdle { campus = target }
             compose.waitForIdle()
             val colors = campusColorScheme(target, night, appearance.tone(target))
-            val pixels = compose.onNodeWithTag("settings_theme_frame").captureToImage().toPixelMap()
-            val expected = colors.surfaceContainerHighest.copy(alpha = .3f).compositeOver(colors.surface)
-            val actual = pixels[5, pixels.height / 2]
-            assertEquals(expected.red, actual.red, .015f)
-            assertEquals(expected.green, actual.green, .015f)
-            assertEquals(expected.blue, actual.blue, .015f)
+            assertThemeFrame(compose.onNodeWithTag("settings_theme_frame"), appearance.tone(target), colors.surface, night)
             val frame = compose.onNodeWithTag("settings_theme_frame").fetchSemanticsNode().boundsInRoot
             val clearance = with(compose.density) { 35.dp.toPx() }
             for (next in listOf(false, true)) {

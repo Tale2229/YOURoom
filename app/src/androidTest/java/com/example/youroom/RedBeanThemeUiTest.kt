@@ -79,7 +79,7 @@ class RedBeanThemeUiTest {
             Box(Modifier.weight(1f)) { SettingsScreen(state,{},{},{}) };WorkspaceNavigation(2,{})
         } } } }
         compose.onNodeWithTag("settings_theme_name").assertTextEquals("入骨相思")
-        assertPaint("settings_theme_frame",roles.impressionFrame)
+        assertThemeFrame(compose.onNodeWithTag("settings_theme_frame"), CampusTone.RED_BEAN, colors.surface, night)
         assertPaint("settings_theme_previous_triangle",roles.themeArrow)
         assertPaint("settings_strip_layout_icon",roles.settingsIcon)
         assertThemeAvatar(compose.onNodeWithTag("settings_theme_impression", true), CampusTone.RED_BEAN)
@@ -196,7 +196,7 @@ class RedBeanThemeUiTest {
         compose.waitUntil(5000) { writes==1 };compose.waitForIdle()
         assertEquals(CampusTone.RED_BEAN,choice.westTone);assertEquals(CampusTone.PINE,choice.shaheTone)
         compose.onNodeWithTag("settings_theme_name").assertTextEquals("入骨相思")
-        assertPaint("settings_theme_frame",roles.impressionFrame)
+        assertThemeFrame(compose.onNodeWithTag("settings_theme_frame"), CampusTone.RED_BEAN, colors.surface, night)
         compose.onNodeWithTag("settings_theme_next").performClick()
         compose.waitUntil(5000) { writes==2 };compose.waitForIdle()
         compose.onNodeWithTag("settings_theme_name").assertTextEquals("橙黄橘绿时")

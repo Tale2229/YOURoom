@@ -83,7 +83,7 @@ class DunhuangThemeUiTest {
             WorkspaceNavigation(2,{})
         } } } }
         compose.onNodeWithTag("settings_theme_name").assertTextEquals("敦煌")
-        assertPaint("settings_theme_frame",roles.impressionFrame)
+        assertThemeFrame(compose.onNodeWithTag("settings_theme_frame"), CampusTone.DUNHUANG, colors.surface, night)
         assertPaint("settings_theme_previous_triangle",roles.themeArrow)
         assertPaint("settings_theme_next_triangle",roles.themeArrow)
         assertPaint("settings_strip_layout_icon",roles.settingsIcon)
@@ -205,7 +205,7 @@ class DunhuangThemeUiTest {
         assertEquals(CampusTone.DUNHUANG,choice.westTone)
         assertEquals(CampusTone.PINE,choice.shaheTone)
         compose.onNodeWithTag("settings_theme_name").assertTextEquals("敦煌")
-        assertPaint("settings_theme_frame",roles.impressionFrame)
+        assertThemeFrame(compose.onNodeWithTag("settings_theme_frame"), CampusTone.DUNHUANG, colors.surface, night)
         compose.onNodeWithTag("settings_theme_next").assertIsEnabled()
         assertEquals(1,writes)
     }

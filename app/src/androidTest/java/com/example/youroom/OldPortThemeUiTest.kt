@@ -78,7 +78,7 @@ class OldPortThemeUiTest {
             Box(Modifier.weight(1f)) { SettingsScreen(state,{},{},{}) };WorkspaceNavigation(2,{})
         } } } }
         compose.onNodeWithTag("settings_theme_name").assertTextEquals("旧港来信")
-        assertPaint("settings_theme_frame",roles.impressionFrame)
+        assertThemeFrame(compose.onNodeWithTag("settings_theme_frame"), CampusTone.OLD_PORT, colors.surface, night)
         assertPaint("settings_theme_previous_triangle",roles.themeArrow)
         assertPaint("settings_strip_layout_icon",roles.settingsIcon)
         assertThemeAvatar(compose.onNodeWithTag("settings_theme_impression", true), CampusTone.OLD_PORT)
@@ -169,7 +169,7 @@ class OldPortThemeUiTest {
         compose.waitUntil(5000) { writes==1 };compose.waitForIdle()
         assertEquals(CampusTone.OLD_PORT,choice.westTone);assertEquals(CampusTone.PINE,choice.shaheTone)
         compose.onNodeWithTag("settings_theme_name").assertTextEquals("旧港来信")
-        assertPaint("settings_theme_frame",roles.impressionFrame)
+        assertThemeFrame(compose.onNodeWithTag("settings_theme_frame"), CampusTone.OLD_PORT, colors.surface, night)
         compose.onNodeWithTag("settings_theme_next").performClick()
         compose.waitUntil(5000) { writes==2 };compose.waitForIdle()
         compose.onNodeWithTag("settings_theme_name").assertTextEquals("蜜桃乌梅")

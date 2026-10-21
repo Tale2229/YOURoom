@@ -77,7 +77,7 @@ class MatisseThemeUiTest {
             WorkspaceNavigation(2,{})
         } } } }
         compose.onNodeWithTag("settings_theme_name").assertTextEquals("马蒂斯")
-        assertPaint("settings_theme_frame",roles.impressionFrame)
+        assertThemeFrame(compose.onNodeWithTag("settings_theme_frame"), CampusTone.MATISSE, colors.surface, night)
         assertPaint("settings_strip_layout_icon",roles.settingsIcon)
         assertPaint("settings_strip_numbers_icon",roles.settingsIcon)
         assertEquals(colors.onSurface,textColor(compose.onNodeWithText("时段条样式")))

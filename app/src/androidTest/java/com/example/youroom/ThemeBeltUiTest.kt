@@ -35,6 +35,13 @@ class ThemeBeltUiTest {
     }
     private fun belt()=compose.onNodeWithTag("settings_theme_belt")
     private fun position()=belt().fetchSemanticsNode().config[ThemeBeltPosition]
+    private fun flingAcrossGap() {
+        val stride=with(compose.density){ThemeBeltGeometry.strideDp.dp.toPx()}
+        // Release between detents, not in a captured slot whose velocity is suppressed.
+        belt().performTouchInput {
+            swipe(Offset(width*.9f,centerY),Offset(width*.9f-stride*1.55f,centerY),80)
+        }
+    }
     private fun browsing()=belt().fetchSemanticsNode().config[ThemeBeltBrowsing]
     private fun wave()=compose.onNodeWithTag("theme_transition_page").fetchSemanticsNode().config[ThemePageWaveProgress]
     private fun shot(name: String) {
@@ -57,7 +64,7 @@ class ThemeBeltUiTest {
             advanceEventTime(200);moveBy(Offset.Zero)
         }
         compose.mainClock.advanceTimeBy(1000)
-        assertTrue(browsing());assertTrue(position()>2f)
+        assertTrue(browsing());assertTrue("Long drag browses multiple themes at 120dp spacing",position()>1.5f)
         assertEquals(1f,belt().fetchSemanticsNode().config[ThemeBeltReveal],.001f)
         compose.onNodeWithTag("settings_theme_next").assertDoesNotExist()
         compose.onNodeWithTag("settings_theme_previous").assertDoesNotExist()
@@ -82,7 +89,7 @@ class ThemeBeltUiTest {
 
     @Test fun releaseHasInertiaAndATouchCanInterruptItWithoutPublishingAnIntermediateTheme() {
         render();compose.mainClock.autoAdvance=false
-        belt().performTouchInput { swipe(Offset(width*.82f,centerY),Offset(width*.4f,centerY),80) }
+        flingAcrossGap()
         assertTrue(browsing());assertTrue(changes.isEmpty())
         val released=position()
         compose.mainClock.advanceTimeBy(128)
@@ -143,7 +150,7 @@ class ThemeBeltUiTest {
 
     @Test fun switchingCampusDuringInertiaDoesNotCommitTheUnconfirmedToneToEitherCampus() {
         render();compose.mainClock.autoAdvance=false
-        belt().performTouchInput { swipe(Offset(width*.82f,centerY),Offset(width*.4f,centerY),80) }
+        flingAcrossGap()
         compose.mainClock.advanceTimeBy(96);assertTrue(browsing())
         compose.runOnIdle { campus=Campus.SHAHE }
         compose.mainClock.advanceTimeBy(1600)

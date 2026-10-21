@@ -80,7 +80,7 @@ class MorningBellThemeUiTest {
         } } } }
         compose.onNodeWithTag("settings_theme_name").assertTextEquals("晨钟暮鼓")
         assertPaint("tab_settings_face",roles.navigationSelected)
-        assertPaint("settings_theme_frame",roles.impressionFrame)
+        assertThemeFrame(compose.onNodeWithTag("settings_theme_frame"), CampusTone.MORNING_BELL, colors.surface, night)
         assertPaint("settings_theme_previous_triangle",roles.themeArrow)
         assertPaint("settings_strip_layout_icon",roles.settingsIcon)
         assertThemeAvatar(compose.onNodeWithTag("settings_theme_impression", true), CampusTone.MORNING_BELL)
@@ -197,7 +197,7 @@ class MorningBellThemeUiTest {
         compose.waitUntil(5000) { writes==1 };compose.waitForIdle()
         assertEquals(CampusTone.MORNING_BELL,choice.westTone);assertEquals(CampusTone.PINE,choice.shaheTone)
         compose.onNodeWithTag("settings_theme_name").assertTextEquals("晨钟暮鼓")
-        assertPaint("settings_theme_frame",roles.impressionFrame)
+        assertThemeFrame(compose.onNodeWithTag("settings_theme_frame"), CampusTone.MORNING_BELL, colors.surface, night)
         compose.onNodeWithTag("settings_theme_next").performClick()
         compose.waitUntil(5000) { writes==2 };compose.waitForIdle()
         compose.onNodeWithTag("settings_theme_name").assertTextEquals("蒙德里安")

@@ -7,7 +7,7 @@ import kotlin.math.roundToInt
 /** Virtual repeats keep the carousel cheap and independent of the palette count. */
 internal object ThemeBeltGeometry {
     const val cycles = 2001
-    const val strideDp = 96f
+    const val strideDp = 120f // Approved 96dp x 1.25 spacing; artwork remains 75dp.
     const val minScale = .62f
     const val holdMillis = 800L
     const val revealMillis = 160

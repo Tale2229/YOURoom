@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.*
@@ -213,10 +214,18 @@ class ThemeSettingsUiTest {
 
     @Test fun artworkCanSwipeBothWaysAndAllPalettesFitWithoutClippingAtLargeFonts() {
         render()
-        compose.onNodeWithTag("settings_theme_impression").performTouchInput { swipeLeft() }
+        val stride=with(compose.density){ThemeBeltGeometry.strideDp.dp.toPx()}
+        fun dragOneStep(direction: Float) {
+            // The 75dp artwork is smaller than the approved step; drag the strip.
+            compose.onNodeWithTag("settings_theme_belt").performTouchInput {
+                down(center);moveBy(Offset(direction*stride,0f),300)
+                advanceEventTime(200);moveBy(Offset.Zero);up()
+            }
+        }
+        dragOneStep(-1f)
         settle(CampusTone.PINE)
         assertEquals(CampusTone.PINE, appearance.westTone)
-        compose.onNodeWithTag("settings_theme_impression").performTouchInput { swipeRight() }
+        dragOneStep(1f)
         settle(CampusTone.SAND)
         assertEquals(CampusTone.SAND, appearance.westTone)
         for (c in Campus.entries) for (tone in CampusTone.entries) {

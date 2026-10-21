@@ -12,6 +12,7 @@ import com.example.youroom.data.DemoData
 import com.example.youroom.domain.*
 import com.example.youroom.ui.*
 import com.example.youroom.ui.theme.YOURoomTheme
+import com.example.youroom.ui.theme.campusColorScheme
 import org.junit.Rule
 import org.junit.Test
 import java.io.File
@@ -34,6 +35,8 @@ class ThemeAvatarUiTest {
             val node = compose.onNodeWithTag("settings_theme_impression", true)
                 .assertWidthIsEqualTo(75.dp).assertHeightIsEqualTo(75.dp)
             assertThemeAvatar(node, tone)
+            assertThemeFrame(compose.onNodeWithTag("settings_theme_frame"), tone,
+                campusColorScheme(c, dark, tone).surface, dark)
             if (c == Campus.XITUCHENG) {
                 val i = InstrumentationRegistry.getInstrumentation()
                 File(i.targetContext.getExternalFilesDir(null), "avatar-${tone.id}-${if (dark) "dark" else "light"}.png")
