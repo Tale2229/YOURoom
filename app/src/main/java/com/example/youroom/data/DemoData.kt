@@ -8,6 +8,12 @@ import java.time.LocalTime
 
 /** Deliberately synthetic availability. Never persisted or presented as school data. */
 object DemoData {
+    /** Session-only templates: never written to the user's preference store. */
+    fun planningPreferences() = PlanningPreferences(Campus.entries.associateWith {
+        CampusPlanningPreferences(templates = listOf(TimeTemplate("demo", "演示", listOf(
+            StudyWindow(8*60,10*60), StudyWindow(14*60,16*60), StudyWindow(19*60,20*60+30)))))
+    })
+
     fun snapshot(campus: Campus = Campus.XITUCHENG, clock: Clock = Clock.system(SchoolZone)): ClassroomSnapshot {
         val names = if (campus == Campus.SHAHE) listOf("演示楼-A101(60)", "演示楼-A102(80)",
             "演示楼-A201(100)", "演示楼-A202(60)", "演示楼-B101(80)", "演示楼-B102(60)")

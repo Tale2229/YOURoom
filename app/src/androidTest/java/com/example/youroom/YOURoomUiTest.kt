@@ -16,6 +16,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.youroom.data.ClassroomDataSource
+import com.example.youroom.data.DemoData
 import com.example.youroom.data.local.FilterSettings
 import com.example.youroom.domain.*
 import com.example.youroom.ui.YOURoomApp
@@ -29,11 +30,14 @@ import org.junit.Test
 
 class YOURoomUiTest {
 
-    @Test fun savedPlanningDefaultsInitializeANewDraftAndOnlyANewGenerationChangesTheDisplayedDirection() {
+    @Test fun demoPlanningDefaultsInitializeANewDraftAndOnlyANewGenerationChangesTheDisplayedDirection() {
         compose.waitUntil(10_000) { !capturedModel.state.value.initializing }
-        compose.runOnIdle { capturedModel.setPlanningPreferences(Campus.XITUCHENG,
-            CampusPlanningPreferences(PlanningDirection.FAVORITES,false)) }
-        enterDemo()
+        compose.runOnIdle {
+            capturedModel.showDemo()
+            capturedModel.setPlanningPreferences(Campus.XITUCHENG,
+                CampusPlanningPreferences(PlanningDirection.FAVORITES,false))
+        }
+        compose.waitForIdle()
         compose.onNodeWithTag("tab_planner").performClick()
         compose.onNodeWithTag("planner_adjust").assertIsOff()
         compose.onNodeWithTag("planner_add_period").performClick(); compose.waitForIdle()
@@ -55,6 +59,41 @@ class YOURoomUiTest {
     }
     @get:Rule val compose = createComposeRule()
     private lateinit var capturedModel: YOURoomViewModel
+
+    @Test fun endingDemoDiscardsAPendingThemeWithoutFlushingItToFormalPreferences() {
+        compose.waitUntil(10_000) { !capturedModel.state.value.initializing }
+        val real = capturedModel.state.value.appearance
+        enterDemo()
+        compose.onNodeWithTag("tab_settings").performClick()
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag("settings_theme_next").performClick()
+        compose.mainClock.advanceTimeBy(80)
+        compose.runOnIdle { capturedModel.openLogin() }
+        compose.mainClock.advanceTimeBy(1600)
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        compose.onNodeWithTag("login_title").assertIsDisplayed()
+        assertEquals(real,capturedModel.state.value.appearance)
+        assertTrue(!capturedModel.state.value.demo)
+        // A fresh demonstration must start from real preferences, not a flushed
+        // request retained by the old transition host or its coroutine.
+        enterDemo()
+        assertEquals(real,capturedModel.state.value.appearance)
+    }
+
+    @Test fun demoIncludesAnImportableTimeCombinationWithoutAutomaticPlanning() {
+        enterDemo()
+        compose.onNodeWithTag("tab_planner").performClick()
+        compose.onNodeWithTag("planner_add_period").performTouchInput { longClick() }
+        compose.onNodeWithText("演示",useUnmergedTree=true).assertIsDisplayed().performClick()
+        compose.waitForIdle()
+        assertTrue(capturedModel.planning.executions.value.isEmpty())
+        compose.onNodeWithTag("planner_generate").performClick()
+        compose.waitUntil(20_000) { capturedModel.planning.executions.value[Campus.XITUCHENG]?.pending == false }
+        val goal = capturedModel.planning.executions.value.getValue(Campus.XITUCHENG).input.goal
+        assertEquals(DemoData.planningPreferences().forCampus(Campus.XITUCHENG).templates.single().windows,goal.windows)
+    }
 
     @Before fun renderIsolatedApp() {
         // Never read a real user's Token, database or preferences during instrumentation.

@@ -835,6 +835,149 @@ class YOURoomViewModelTest {
         assertEquals(latest,settings.planningPreferences.value)
     }
 
+    @Test fun demoSettingsNeverWriteAndFormalPreferencesReturnBeforeLogin() = checkModel(false,
+        initialAppearance=AppearancePreferences(CampusTone.MATISSE,CampusTone.DUNHUANG,Campus.SHAHE,true),
+        initialPlanning=PlanningPreferences().withCampus(Campus.SHAHE,
+            CampusPlanningPreferences(PlanningDirection.FAVORITES,false,
+                listOf(TimeTemplate("real","正式",listOf(StudyWindow(480,600))))))) { model, source, settings ->
+        val realStrip=PeriodStripPreferences(PeriodStripLayout.TIME_PROPORTIONAL,true)
+        settings.periodStrip.value=realStrip;runCurrent()
+        val before=model.state.value
+        model.showDemo()
+        model.setCampusTone(Campus.XITUCHENG,CampusTone.MONDRIAN)
+        model.setCampusTone(Campus.SHAHE,CampusTone.RED_BEAN)
+        model.setDarkMode(false)
+        model.setDefaultCampus(Campus.XITUCHENG)
+        model.setPeriodStrip(PeriodStripPreferences())
+        for (campus in Campus.entries) model.setPlanningPreferences(campus,CampusPlanningPreferences(
+            PlanningDirection.BUILDINGS,false,listOf(TimeTemplate("temporary","临时",listOf(StudyWindow(600,720))))))
+        model.setFilters(model.state.value.filters.copy(outletsOnly=true,buildings=setOf("演示楼")))
+        model.addCustomTag("演示标签")
+        model.toggleFavorite(model.state.value.snapshot!!.classrooms.first())
+        runCurrent()
+        assertTrue(model.state.value.demo)
+        assertFalse(model.state.value.appearance.darkMode!!)
+        assertEquals(CampusTone.RED_BEAN,model.state.value.appearance.shaheTone)
+        assertTrue(settings.appearanceSaved.isEmpty());assertTrue(settings.stripSaved.isEmpty())
+        assertTrue(settings.planningSaved.isEmpty());assertTrue(settings.saved.isEmpty())
+        assertTrue(settings.savedBuildings.isEmpty());assertTrue(source.profileWrites.isEmpty())
+        assertEquals(before.appearance,settings.appearance.value)
+        assertEquals(before.planningPreferences,settings.planningPreferences.value)
+        assertEquals(realStrip,settings.periodStrip.value)
+        model.openLogin();runCurrent()
+        assertFalse(model.state.value.demo)
+        assertEquals(before.appearance,model.state.value.appearance)
+        assertEquals(before.planningPreferences,model.state.value.planningPreferences)
+        assertEquals(realStrip,model.state.value.periodStrip)
+        assertEquals(Campus.SHAHE,model.state.value.campus)
+        assertFalse(model.state.value.filters.outletsOnly)
+        assertFalse("演示标签" in model.state.value.tagOrder)
+        assertTrue(model.state.value.profiles.isEmpty())
+        model.login("dummy","dummy");runCurrent()
+        assertTrue(model.state.value.loggedIn);assertFalse(model.state.value.snapshot!!.isDemo)
+        assertEquals(before.appearance,model.state.value.appearance)
+        assertEquals(before.planningPreferences,model.state.value.planningPreferences)
+        assertEquals(listOf(Campus.SHAHE),source.requests)
+    }
+
+    @Test fun delayedRealPreferenceWritesCannotReplaceDemoChoices() = checkModel(false) { model, _, settings ->
+        settings.appearanceGate=CompletableDeferred();settings.stripGate=CompletableDeferred()
+        settings.planningGate=CompletableDeferred()
+        val realStrip=PeriodStripPreferences(PeriodStripLayout.TIME_PROPORTIONAL,true)
+        model.setCampusTone(Campus.XITUCHENG,CampusTone.DUNHUANG)
+        model.setPeriodStrip(realStrip)
+        model.setPlanningPreferences(Campus.XITUCHENG,CampusPlanningPreferences(flexible=false))
+        runCurrent()
+        val real=model.state.value
+        model.showDemo()
+        model.setCampusTone(Campus.XITUCHENG,CampusTone.MATISSE)
+        model.setPeriodStrip(PeriodStripPreferences())
+        model.setPlanningPreferences(Campus.XITUCHENG,CampusPlanningPreferences(PlanningDirection.FAVORITES))
+        val demo=model.state.value
+        settings.appearanceGate!!.complete(Unit);settings.stripGate!!.complete(Unit)
+        settings.planningGate!!.complete(Unit);runCurrent()
+        assertEquals(demo.appearance,model.state.value.appearance)
+        assertEquals(demo.periodStrip,model.state.value.periodStrip)
+        assertEquals(demo.planningPreferences,model.state.value.planningPreferences)
+        assertEquals(listOf(real.appearance),settings.appearanceSaved)
+        assertEquals(listOf(real.periodStrip),settings.stripSaved)
+        assertEquals(listOf(real.planningPreferences),settings.planningSaved)
+        model.openLogin();runCurrent()
+        assertEquals(real.appearance,model.state.value.appearance)
+        assertEquals(real.periodStrip,model.state.value.periodStrip)
+        assertEquals(real.planningPreferences,model.state.value.planningPreferences)
+    }
+
+    @Test fun failedRealWritesDoNotRollBackDemoAndRestoreSavedValuesOnExit() = checkModel(false) { model, _, settings ->
+        val saved=model.state.value
+        settings.appearanceGate=CompletableDeferred();settings.appearanceFailure=true
+        settings.stripGate=CompletableDeferred();settings.stripFailure=true
+        settings.planningGate=CompletableDeferred();settings.planningFailure=true
+        model.setCampusTone(Campus.XITUCHENG,CampusTone.DUNHUANG)
+        model.setPeriodStrip(PeriodStripPreferences(showNumbers=true))
+        model.setPlanningPreferences(Campus.XITUCHENG,CampusPlanningPreferences(flexible=false))
+        runCurrent();model.showDemo()
+        model.setCampusTone(Campus.XITUCHENG,CampusTone.MONDRIAN)
+        val demo=model.state.value
+        settings.appearanceGate!!.complete(Unit);settings.stripGate!!.complete(Unit)
+        settings.planningGate!!.complete(Unit);runCurrent()
+        assertEquals(demo.appearance,model.state.value.appearance)
+        assertEquals(demo.periodStrip,model.state.value.periodStrip)
+        assertEquals(demo.planningPreferences,model.state.value.planningPreferences)
+        assertNull(model.state.value.error)
+        model.openLogin();runCurrent()
+        assertEquals(saved.appearance,model.state.value.appearance)
+        assertEquals(saved.periodStrip,model.state.value.periodStrip)
+        assertEquals(saved.planningPreferences,model.state.value.planningPreferences)
+    }
+
+    @Test fun incomingRealPreferenceChangesStayOutsideTheActiveDemo() = checkModel(false) { model, _, settings ->
+        model.showDemo()
+        val demo=model.state.value
+        val appearance=AppearancePreferences(CampusTone.MORANDI,CampusTone.BURGUNDY,Campus.SHAHE,true)
+        val strip=PeriodStripPreferences(PeriodStripLayout.TIME_PROPORTIONAL,true)
+        val planning=PlanningPreferences().withCampus(Campus.SHAHE,CampusPlanningPreferences(flexible=false))
+        settings.appearance.value=appearance;settings.periodStrip.value=strip;settings.planningPreferences.value=planning
+        runCurrent()
+        assertEquals(demo.appearance,model.state.value.appearance)
+        assertEquals(demo.periodStrip,model.state.value.periodStrip)
+        assertEquals(demo.planningPreferences,model.state.value.planningPreferences)
+        model.openLogin();runCurrent()
+        assertEquals(appearance,model.state.value.appearance)
+        assertEquals(strip,model.state.value.periodStrip)
+        assertEquals(planning,model.state.value.planningPreferences)
+        assertEquals(Campus.SHAHE,model.state.value.campus)
+    }
+
+    @Test fun demoTemplateIsLegalForBothCampusesAndResetsWithoutPersistence() = checkModel(false) { model, _, settings ->
+        model.showDemo()
+        for (campus in Campus.entries) {
+            model.setCampus(campus)
+            val template=model.state.value.planningPreferences.forCampus(campus).templates.single()
+            assertEquals("演示",template.name)
+            assertTrue(TimeTemplates.valid(template.windows))
+            assertEquals(3,template.windows.size)
+            model.generatePlanning(PlanningDraft(savedWindows=template.windows));runCurrent()
+            assertTrue(model.planning.executions.value.getValue(campus).result!!.options.isNotEmpty())
+        }
+        model.setPlanningPreferences(Campus.XITUCHENG,CampusPlanningPreferences())
+        model.setCampusTone(Campus.XITUCHENG,CampusTone.MONDRIAN)
+        model.openLogin();model.showDemo();runCurrent()
+        assertEquals(DemoData.planningPreferences(),model.state.value.planningPreferences)
+        assertEquals(AppearancePreferences(),model.state.value.appearance)
+        assertTrue(settings.planningSaved.isEmpty());assertTrue(settings.appearanceSaved.isEmpty())
+    }
+
+    @Test fun loginDirectlyFromDemoAlsoRestoresTheRealSettings() = checkModel(false) { model, _, settings ->
+        model.showDemo();model.setDarkMode(true);model.setDefaultCampus(Campus.SHAHE)
+        model.login("dummy","dummy");runCurrent()
+        assertTrue(model.state.value.loggedIn);assertFalse(model.state.value.demo)
+        assertEquals(Campus.XITUCHENG,model.state.value.campus)
+        assertFalse(model.state.value.snapshot!!.isDemo)
+        assertEquals(settings.appearance.value,model.state.value.appearance)
+        assertEquals(settings.planningPreferences.value,model.state.value.planningPreferences)
+    }
+
     @Test fun failedPlanningPreferenceSaveRollsBackAndCanBeRetried() = checkModel { model, _, settings ->
         settings.planningFailure=true
         model.setPlanningPreferences(Campus.XITUCHENG,CampusPlanningPreferences(flexible=false)); runCurrent()

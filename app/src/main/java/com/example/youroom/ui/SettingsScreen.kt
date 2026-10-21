@@ -107,7 +107,7 @@ private fun SettingsContent(state: YOURoomState, onRoom: (String?) -> Unit,
     if (confirmExit) AlertDialog(onDismissRequest = { confirmExit = false },
         title = { Text(if (state.demo) "结束演示？" else "返回登录页？") },
         text = { Text(when {
-            state.demo -> "本次演示中的个人标记将丢弃。"
+            state.demo -> "本次演示中的设置、时段组合与个人标记将丢弃，不影响正式使用。"
             state.viewingCache -> "本地收藏、备注与教室缓存会保留。"
             else -> "本次登录状态将清除，本地收藏和备注会保留；已勾选记住的账号密码也会保留。"
         }) },

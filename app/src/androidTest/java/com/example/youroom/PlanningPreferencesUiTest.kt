@@ -77,11 +77,14 @@ class PlanningPreferencesUiTest {
         compose.onNodeWithTag("template_name").performTextReplacement("上午")
         compose.onNodeWithTag("template_add_period").performScrollTo().performClick()
         compose.onNodeWithTag("template_save").performClick()
+        // Saving runs after the check-mark acknowledgement animation completes.
+        compose.waitForIdle()
         val created=preferences.forCampus(Campus.XITUCHENG).templates.single()
         assertEquals(listOf(StudyWindow(480,720)),created.windows)
         compose.onNodeWithText("上午").performClick()
         compose.onNodeWithTag("template_name").performTextReplacement("上午自习")
         compose.onNodeWithTag("template_save").performClick()
+        compose.waitForIdle()
         val edited=preferences.forCampus(Campus.XITUCHENG).templates.single()
         assertEquals(created.id,edited.id); assertEquals("上午自习",edited.name)
         shot("time-template-manager-1.21")
@@ -168,6 +171,7 @@ class PlanningPreferencesUiTest {
         compose.onNodeWithTag("template_save").assertIsDisplayed()
         shot("time-template-editor-large-1.21")
         compose.onNodeWithTag("template_save").performClick()
+        compose.waitForIdle()
         assertEquals(2,preferences.forCampus(Campus.XITUCHENG).templates.size)
         assertEquals(0,generations)
     }

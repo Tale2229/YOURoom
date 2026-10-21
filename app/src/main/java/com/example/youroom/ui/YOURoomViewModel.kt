@@ -136,8 +136,9 @@ class YOURoomViewModel(
         val updated = state.value.planningPreferences.withCampus(campus, value.copy(
             templates = value.templates.map { it.copy(windows = it.windows.toList()) }.toList()))
         if (updated == state.value.planningPreferences) return
-        pendingPlanning = updated
         mutableState.update { it.copy(planningPreferences = updated) }
+        if (state.value.demo) return
+        pendingPlanning = updated
         planningWrites.trySend(updated)
     }
 
@@ -158,15 +159,17 @@ class YOURoomViewModel(
 
     private fun setAppearance(value: AppearancePreferences) {
         if(value==state.value.appearance) return
-        pendingAppearance=value
         mutableState.update { it.copy(appearance=value) }
+        if (state.value.demo) return
+        pendingAppearance=value
         appearanceWrites.trySend(value)
     }
 
     fun setPeriodStrip(value: PeriodStripPreferences) {
-        if(value==state.value.periodStrip) return
-        pendingStrip=value
+        if(state.value.initializing || value==state.value.periodStrip) return
         mutableState.update { it.copy(periodStrip=value) }
+        if (state.value.demo) return
+        pendingStrip=value
         stripWrites.trySend(value)
     }
 
@@ -176,7 +179,7 @@ class YOURoomViewModel(
                 persistedPlanning = value
                 if (pendingPlanning == null || pendingPlanning == value) {
                     pendingPlanning = null
-                    mutableState.update { it.copy(planningPreferences = value) }
+                    mutableState.update { if (it.demo) it else it.copy(planningPreferences = value) }
                 }
                 planningPreferencesReady.complete(Unit)
             }
@@ -187,9 +190,9 @@ class YOURoomViewModel(
                 if (error is CancellationException) throw error
                 if (pendingPlanning == value) {
                     pendingPlanning = null
-                    mutableState.update { it.copy(planningPreferences = persistedPlanning) }
+                    mutableState.update { if (it.demo) it else it.copy(planningPreferences = persistedPlanning) }
                 }
-                showError("规划偏好保存失败，请重试")
+                if (!state.value.demo) showError("规划偏好保存失败，请重试")
             }
         }
         viewModelScope.launch {
@@ -197,7 +200,7 @@ class YOURoomViewModel(
                 persistedAppearance=value
                 if(pendingAppearance==null || pendingAppearance==value) {
                     pendingAppearance=null
-                    mutableState.update { it.copy(appearance=value) }
+                    mutableState.update { if (it.demo) it else it.copy(appearance=value) }
                 }
                 appearanceReady.complete(Unit)
             }
@@ -208,9 +211,9 @@ class YOURoomViewModel(
                 if(error is CancellationException) throw error
                 if(pendingAppearance==value) {
                     pendingAppearance=null
-                    mutableState.update { it.copy(appearance=persistedAppearance) }
+                    mutableState.update { if (it.demo) it else it.copy(appearance=persistedAppearance) }
                 }
-                showError("外观设置保存失败，请重试。")
+                if (!state.value.demo) showError("外观设置保存失败，请重试。")
             }
         }
         viewModelScope.launch {
@@ -218,7 +221,7 @@ class YOURoomViewModel(
                 persistedStrip=value
                 if(pendingStrip!=null && pendingStrip!=value) return@collect
                 pendingStrip=null
-                mutableState.update { it.copy(periodStrip=value) }
+                mutableState.update { if (it.demo) it else it.copy(periodStrip=value) }
             }
         }
         viewModelScope.launch {
@@ -227,9 +230,9 @@ class YOURoomViewModel(
                 if(error is CancellationException) throw error
                 if(pendingStrip==value) {
                     pendingStrip=null
-                    mutableState.update { it.copy(periodStrip=persistedStrip) }
+                    mutableState.update { if (it.demo) it else it.copy(periodStrip=persistedStrip) }
                 }
-                showError("时段条设置保存失败，请重试。")
+                if (!state.value.demo) showError("时段条设置保存失败，请重试。")
             }
         }
         viewModelScope.launch {
@@ -310,6 +313,7 @@ class YOURoomViewModel(
     fun login(account: String, password: String, rememberPassword: Boolean) {
         if (state.value.loggingIn || state.value.initializing) return
         if (account.isBlank() || password.isEmpty()) { showError("请填写教务账号和密码。"); return }
+        if (state.value.demo) openLogin()
         mutableState.update { it.copy(loggingIn = true, rememberedLogin = null, error = null) }
         val generation = ++loginGeneration
         loginJob = viewModelScope.launch {
@@ -366,6 +370,7 @@ class YOURoomViewModel(
     }
 
     fun showDemo() {
+        if (state.value.initializing || state.value.loggingIn || state.value.demo) return
         planning.clear()
         cancelRefresh()
         demoFilters = SearchFilters(setOf(1, 2))
@@ -375,11 +380,12 @@ class YOURoomViewModel(
             CampusWorkspace(snapshot = DemoData.snapshot(campus, clock))
         }
         mutableState.update { it.copy(demo = true, loggedIn = false, viewingCache = false, rememberedLogin = null,
-            profiles = emptyMap(), tagCatalog = TagCatalog()) }
+            profiles = emptyMap(), tagCatalog = TagCatalog(), planningPreferences = DemoData.planningPreferences()) }
         restoreWorkspace(state.value.appearance.defaultCampus)
     }
 
     fun viewCache() {
+        if (state.value.demo) openLogin()
         val campus = state.value.campus.takeIf { realWorkspaces.getValue(it).snapshot != null }
             ?: Campus.entries.firstOrNull { realWorkspaces.getValue(it).snapshot != null } ?: return
         restoreWorkspace(campus)
@@ -393,7 +399,10 @@ class YOURoomViewModel(
         cancelRefresh()
         demoWorkspaces = emptyMap()
         mutableState.update { it.copy(demo = false, loggedIn = false, loggingIn = false, viewingCache = false,
-            profiles = realProfiles(), tagCatalog = storedCatalog) }
+            profiles = realProfiles(), tagCatalog = storedCatalog,
+            appearance = pendingAppearance ?: persistedAppearance,
+            periodStrip = pendingStrip ?: persistedStrip,
+            planningPreferences = pendingPlanning ?: persistedPlanning) }
         restoreWorkspace(state.value.appearance.defaultCampus)
         mutableState.update { it.copy(error = null) }
     }

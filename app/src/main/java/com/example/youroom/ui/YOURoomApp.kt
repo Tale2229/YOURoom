@@ -46,15 +46,24 @@ fun YOURoomApp(model: YOURoomViewModel) {
             goal = goal.copy(flexible = state.planningPreferences.forCampus(state.campus).flexible)
         }
         planningDefaultsCampus = state.campus.dataKey
-        if (planningDate != state.today.toString() || planningDemo != state.demo) {
+        if (planningDemo != state.demo) {
+            // Demo wheel values and temporary choices must not seed a real draft.
+            goal = PlanningDraft(flexible = state.planningPreferences.forCampus(state.campus).flexible)
+        } else if (planningDate != state.today.toString()) {
             goal = goal.copy(savedWindows = emptyList(), flexible = state.planningPreferences.forCampus(state.campus).flexible,
-                expectedRooms = if (planningDemo != state.demo) emptySet() else goal.expectedRooms)
+                expectedRooms = goal.expectedRooms)
         }
         planningDate = state.today.toString(); planningDemo = state.demo
     }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { model.onForeground() }
+    // A pending demo theme request must be discarded, not flushed to real settings
+    // when ThemeTransitionHost resets after returning to the login screen.
+    key(state.demo) {
+    val demoScope = state.demo
     ThemeTransitionHost(state.campus, state.appearance, tab to state.showWorkspace,
-        enabled = state.showWorkspace, onTone = model::setCampusTone) { requestTone ->
+        enabled = state.showWorkspace, onTone = { campus, tone ->
+            if (model.state.value.demo == demoScope) model.setCampusTone(campus, tone)
+        }) { requestTone ->
         val view = LocalView.current
         val roles = themeRoles()
         val statusSurface = if (state.showWorkspace) roles.header else MaterialTheme.colorScheme.surface
@@ -93,7 +102,7 @@ fun YOURoomApp(model: YOURoomViewModel) {
                     when (route) {
                         "loading" -> LoadingScreen()
                         "login" -> LoginScreen(state, model::login, { tab = 0; model.showDemo() },
-                            { tab = 0; model.viewCache() }, onRememberedLogin = model::login)
+                            onRememberedLogin = model::login)
                         else -> WorkspacePages(state, tab, model, goal, plans,
                             { goal = it }, { model.generatePlanning(goal) }, ::editRoom, ::manageRoom, requestTone)
                     }
@@ -113,6 +122,7 @@ fun YOURoomApp(model: YOURoomViewModel) {
             }
         }
         }
+    }
     }
 }
 
