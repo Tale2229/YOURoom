@@ -214,7 +214,7 @@ internal fun ThemeImpressionPicker(campus: Campus, tone: CampusTone, enabled: Bo
         fun step(direction: Int) { if(selectable && !browsing) latestAction(campus,tone.step(direction)) }
         Column(Modifier.fillMaxWidth().padding(top=22.dp,bottom=18.dp),horizontalAlignment=Alignment.CenterHorizontally,
             verticalArrangement=Arrangement.spacedBy(10.dp)) {
-            BoxWithConstraints(Modifier.fillMaxWidth().height(95.dp).testTag("settings_theme_belt").semantics {
+            BoxWithConstraints(Modifier.fillMaxWidth().height(95.dp).guideTag("settings_theme_belt").semantics {
                 this[ThemeBeltPosition] = position - initial
                 this[ThemeBeltVisualPosition] = visualPosition - initial
                 this[ThemeBeltBrowsing] = browsing

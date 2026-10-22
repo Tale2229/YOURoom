@@ -21,7 +21,11 @@ fun FilterDialog(state: YOURoomState, onDismiss: () -> Unit, onFilters: (SearchF
         state.campusSnapshot?.classrooms.orEmpty().map { it.building }.distinct().sorted()
     }
     var editingTags by remember { mutableStateOf(false) }
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    val guide=LocalUsageGuide.current
+    LaunchedEffect(guide?.stage,guide?.entry) {
+        if(guide!=null) editingTags=guide.stage==GuideStage.FILTER_TAGS && guide.entry>0
+    }
+    GuideDialog("filter",onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp), contentAlignment = Alignment.Center) {
             Surface(Modifier.widthIn(max = 480.dp).fillMaxWidth().testTag("filter_dialog"),
                 shape = MaterialTheme.shapes.small, tonalElevation = 0.dp) {
@@ -30,19 +34,19 @@ fun FilterDialog(state: YOURoomState, onDismiss: () -> Unit, onFilters: (SearchF
                         Text("筛选教室", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
                         Text(state.campus.label, Modifier.testTag("filter_campus"), style = MaterialTheme.typography.bodySmall)
                     }
-                    Column(Modifier.weight(1f, fill = false).fillMaxWidth().heightIn(max = 480.dp)
+                    Column(Modifier.weight(1f, fill = false).fillMaxWidth().heightIn(max = 480.dp).guideTag("filter_choices")
                         .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         BuildingFilterRows(state, buildings, onFilters)
                         ThemeDivider()
                         TagEditor(state, onFilters, onAddTag, onRemoveTag, onTagOrder,
-                            editing = editingTags, onCancelEdit = { editingTags=false })
+                            editing = editingTags, onCancelEdit = { editingTags=false;guide?.editingFilterTags(false) })
                     }
                     ThemeDivider(Modifier.padding(top = 12.dp))
                     DialogFooterActions(state.filters.badgeCount > 0, "reset_filters", "close_filters",
                         { onFilters(SearchFilters(selectedSlots = state.filters.selectedSlots, query = state.filters.query)) }, onDismiss,
                         middleTag = "edit_tags", middleDescription = if (editingTags) "结束词条编辑" else "添加和整理词条",
-                        middleSelected = editingTags, onMiddle = { editingTags = !editingTags },
+                        middleSelected = editingTags, onMiddle = { editingTags = !editingTags;guide?.editingFilterTags(editingTags) },
                         resetIconOffsetY = (-1).dp)
                 }
             }
@@ -55,7 +59,7 @@ private fun BuildingFilterRows(state: YOURoomState, buildings: List<String>, onF
     val names = listOf<String?>(null) + buildings
     val rows = if (state.campus == Campus.SHAHE) 1 else minOf(2, names.size)
     val perRow = (names.size + rows - 1) / rows
-    Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag("building_rows")) {
+    Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).guideTag("building_rows")) {
         names.chunked(perRow).forEachIndexed { index, row ->
             Row(Modifier.testTag("building_row_$index"), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 row.forEach { building ->
@@ -63,7 +67,7 @@ private fun BuildingFilterRows(state: YOURoomState, buildings: List<String>, onF
                         if (building == null) "全部教学楼" else if (building.all(Char::isDigit)) "教学楼 $building" else building,
                         if (building == null) state.filters.buildings.isEmpty() else building in state.filters.buildings,
                         { onFilters(if (building == null) state.filters.copy(buildings = emptySet()) else state.filters.toggleBuilding(building)) },
-                        Modifier.testTag(if (building == null) "building_all" else "building_$building"))
+                        Modifier.guideTag(if (building == null) "building_all" else "building_$building"))
                 }
             }
         }

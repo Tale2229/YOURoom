@@ -22,6 +22,8 @@ class ClassroomRepository(
     override suspend fun hasSession(): Boolean = authentication.hasSession()
     override suspend fun rememberedAccount(): String? = authentication.rememberedAccount()
     override suspend fun rememberedCredentials(): RememberedCredentials? = authentication.rememberedCredentials()
+    override suspend fun currentAccount():String? = authentication.currentAccount()
+    override suspend fun verifyCacheClearCredentials(account:String,password:String) = authentication.verifyCacheClearCredentials(account,password)
 
     override suspend fun login(account: String, password: String) {
         login(account, password, false)

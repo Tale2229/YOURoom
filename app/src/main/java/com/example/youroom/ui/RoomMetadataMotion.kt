@@ -12,6 +12,8 @@ internal class RoomMetadataMotion(initialLabels: List<String>, initialNote: Stri
     var note by mutableStateOf(initialNote); private set
     val labelsAlpha = Animatable(1f)
     val noteAlpha = Animatable(1f)
+    fun settled(targetLabels:List<String>,targetNote:String) = labels==targetLabels && note==targetNote &&
+        labelsAlpha.value>=.999f && noteAlpha.value>=.999f
 
     @Composable
     fun Run(targetLabels: List<String>, targetNote: String, editing: Boolean, enabled: Boolean, closed: () -> Boolean) {

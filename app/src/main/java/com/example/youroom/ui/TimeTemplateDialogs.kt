@@ -64,41 +64,43 @@ internal fun TimeTemplateManager(campus: Campus, preferences: CampusPlanningPref
     var editing by remember { mutableStateOf<TimeTemplate?>(null) }
     var editor by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<TimeTemplate?>(null) }
-    if (editor) {
+    val readOnly=LocalUsageGuide.current?.stage==GuideStage.TEMPLATES
+    if (editor && !readOnly) {
         TimeTemplateEditor(campus, editing, emptyList(), "组合${preferences.templates.size+1}", { template ->
             val updated = preferences.templates.filterNot { it.id == template.id } + template
             onChange(preferences.copy(templates = updated)); editor = false
         }, { editor = false })
         return
     }
-    SettingsSheet("常用时段组合", campus, onDismiss, titleStyle = MaterialTheme.typography.titleMedium,
+    SettingsSheet("常用时段组合", campus, onDismiss, titleStyle = MaterialTheme.typography.titleMedium,exitEnabled=!readOnly,
         footer = {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically) {
-                IconAction({ editing = null; editor = true }, Modifier.testTag("template_create")) {
+                IconAction({ if(!readOnly) { editing = null; editor = true } }, Modifier.testTag("template_create"),enabled=!readOnly) {
                     Icon(Icons.Outlined.Add, "新建时段组合")
                 }
-                DialogExitAction(false,onDismiss,Modifier.testTag("settings_sheet_close"))
+                DialogExitAction(false,onDismiss,Modifier.testTag("settings_sheet_close"),enabled=!readOnly)
             }
         }) {
-        Column(Modifier.weight(1f, false).verticalScroll(rememberScrollState()).testTag("template_list")) {
+        Column(Modifier.weight(1f, false).verticalScroll(rememberScrollState()).guideTag("template_list")) {
             if (preferences.templates.isEmpty()) Text("还没有常用组合", Modifier.padding(vertical = 20.dp),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             preferences.templates.forEach { template ->
-                TimeTemplateSummary(template,Modifier.testTag("template_${template.id}").clickable(role = Role.Button,
+                val editable=!readOnly
+                TimeTemplateSummary(template,Modifier.testTag("template_${template.id}").clickable(enabled=editable,role = Role.Button,
                         interactionSource = remember { MutableInteractionSource() }, indication = null) {
-                        editing = template; editor = true
+                        if(!readOnly) { editing = template; editor = true }
                     }) {
-                    IconAction({ deleting = template }, Modifier.testTag("template_delete_${template.id}").semantics {
+                    IconAction({ if(!readOnly) deleting = template }, Modifier.testTag("template_delete_${template.id}").semantics {
                         contentDescription="删除${template.name}"
-                    }) {
+                    },enabled=editable) {
                         AnimatedTrashIcon(deleting?.id == template.id, Modifier.size(24.dp))
                     }
                 }
             }
         }
     }
-    deleting?.let { template -> AlertDialog(onDismissRequest = { deleting = null },
+    deleting?.takeUnless { readOnly }?.let { template -> GuideAlertDialog(onDismissRequest = { deleting = null },
         title = { Text("删除这个组合？") }, text = { Text(template.name) },
         confirmButton = { TextButton({
             onChange(preferences.copy(templates = preferences.templates.filterNot { it.id == template.id })); deleting = null
@@ -166,14 +168,14 @@ internal fun TimeTemplateEditor(campus: Campus, original: TimeTemplate?, current
                 if (dirty) {
                     if(validate()) onSave(TimeTemplate(original?.id ?: UUID.randomUUID().toString(),name.trim(),windows.sortedBy { it.start }))
                 } else onDismiss()
-            }, Modifier.testTag(if (dirty) "template_save" else "settings_sheet_close"),
+            }, Modifier.guideTag(if (dirty) "template_save" else "settings_sheet_close"),
                 enabled = !dirty || (!startMoving && !endMoving),
                 description=if(dirty) "保存组合" else "关闭",canConfirm=::validate)
         }
     }) {
         val focus = LocalFocusManager.current
         val keyboard = LocalSoftwareKeyboardController.current
-        Column(Modifier.weight(1f, false).verticalScroll(editorScroll).testTag("template_editor_content")) {
+        Column(Modifier.weight(1f, false).verticalScroll(editorScroll).guideTag("template_editor_content")) {
             CompactNameField(name, { if (it.length <= 20) { name=it;feedback=null } }, "组合名称",
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { focus.clearFocus(); keyboard?.hide() }),
@@ -242,36 +244,58 @@ internal fun TimeTemplateImportDialog(campus: Campus, templates: List<TimeTempla
     var skipInvalid by rememberSaveable { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var replacing by remember { mutableStateOf<TimeTemplate?>(null) }
-    fun apply(template: TimeTemplate) {
-        if (!enabled) return
+    val guide=LocalUsageGuide.current
+    val choiceEnabled=enabled && guide?.stage!=GuideStage.IMPORT
+    fun apply(template: TimeTemplate):Boolean {
+        if (!choiceEnabled) return false
         val imported = TimeTemplates.import(template.windows, skipInvalid, notBefore())
         if (imported.accepted) onImport(imported) else message = imported.message
+        return imported.accepted
     }
-    SettingsSheet("导入时段组合", campus, onDismiss, titleStyle = MaterialTheme.typography.titleMedium) {
-        Column(Modifier.weight(1f, false).verticalScroll(rememberScrollState()).testTag("template_import_list")) {
+    LaunchedEffect(guide?.preparedStage,guide?.demonstration) {
+        if(guide==null || guide.preparedStage!=guide.stage) return@LaunchedEffect
+        if(guide.stage==GuideStage.REPLACE) {
+            if(guide.demonstration>0) {
+                templates.firstOrNull { it.id==guide.importTemplateId }?.let(::apply)
+                replacing=null
+            } else replacing=templates.firstOrNull { it.id==guide.importTemplateId }
+        } else {
+            replacing=null
+            if(guide.stage==GuideStage.IMPORT_PICK && guide.demonstration>0)
+                guide.pickedImportTemplate("guide")
+        }
+    }
+    SettingsSheet("导入时段组合", campus, onDismiss, titleStyle = MaterialTheme.typography.titleMedium,
+        modifier=Modifier.guideTag("template_import_dialog"),exitEnabled=guide?.stage!=GuideStage.IMPORT) {
+        Column(Modifier.weight(1f, false).verticalScroll(rememberScrollState()).guideTag("template_import_list")) {
             if (templates.isEmpty()) Text("还没有常用组合", Modifier.padding(vertical = 16.dp), style = MaterialTheme.typography.bodySmall)
             templates.forEach { template ->
-                TimeTemplateSummary(template,Modifier.testTag("template_import_${template.id}").clickable(enabled = enabled,
+                TimeTemplateSummary(template,Modifier.guideTag("template_import_${template.id}").clickable(enabled = choiceEnabled,
                     role = Role.Button, interactionSource = remember { MutableInteractionSource() }, indication = null) {
                     val checked = TimeTemplates.import(template.windows, skipInvalid, notBefore())
                     if (!checked.accepted) message = checked.message
-                    else if (existing.isNotEmpty()) replacing = template else apply(template)
+                    else if (existing.isNotEmpty()) { replacing = template;guide?.pickedImportTemplate(template.id) }
+                    else apply(template)
                 })
             }
             message?.let { Text(it, Modifier.padding(vertical = 10.dp).testTag("template_import_error"),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(skipInvalid, { skipInvalid = it }, enabled = enabled, modifier = Modifier.testTag("template_skip_invalid"))
-            Text("某一时段不合法时仍导入剩余时段", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
-            IconAction(onManage, Modifier.testTag("template_import_manage"), enabled = enabled) {
+            Row(Modifier.weight(1f).guideTag("template_skip_invalid_option").clickable(enabled=choiceEnabled,
+                interactionSource=remember { MutableInteractionSource() },indication=null) { skipInvalid=!skipInvalid },
+                verticalAlignment=Alignment.CenterVertically) {
+                Checkbox(skipInvalid, { skipInvalid = it }, enabled = choiceEnabled, modifier = Modifier.testTag("template_skip_invalid"))
+                Text("某一时段不合法时仍导入剩余时段", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+            }
+            IconAction(onManage, Modifier.testTag("template_import_manage"), enabled = choiceEnabled) {
                 Icon(Icons.Outlined.Tune, "管理时段组合", Modifier.size(20.dp))
             }
         }
     }
-    replacing?.let { template -> AlertDialog(onDismissRequest = { replacing = null },
+    replacing?.takeIf { guide==null || guide.stage==GuideStage.REPLACE }?.let { template -> GuideAlertDialog(onDismissRequest = { replacing = null },
         title = { Text("替换当前时段？") }, text = { Text("仅替换已添加的时段，保留期望教室与已有方案") },
-        confirmButton = { TextButton({ replacing = null; apply(template) }, enabled = enabled,
-            modifier = Modifier.testTag("template_replace_confirm")) { Text("替换") } },
+        confirmButton = { TextButton({ replacing = null;if(apply(template)) guide?.importedTemplate() }, enabled = enabled,
+            modifier = Modifier.guideTag("template_replace_confirm")) { Text("替换") } },
         dismissButton = { TextButton({ replacing = null }) { Text("取消") } }) }
 }

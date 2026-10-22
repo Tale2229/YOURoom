@@ -22,6 +22,13 @@ import com.example.youroom.domain.*
 internal fun PlanningPreferencesSheet(campus: Campus, preferences: CampusPlanningPreferences,
     onChange: (CampusPlanningPreferences) -> Unit, onTemplates: () -> Unit, onDismiss: () -> Unit) {
     var expanded by rememberSaveable { mutableStateOf(false) }
+    val guide=LocalUsageGuide.current
+    LaunchedEffect(guide?.preparedStage) {
+        if(guide!=null) {
+            if(guide.stage==GuideStage.TEMPLATES) { if(expanded) expanded=false }
+            else if(guide.preparedStage==GuideStage.PLANNING) expanded=true
+        }
+    }
     SettingsSheet("规划偏好", campus, onDismiss) {
         Column(Modifier.weight(1f, false).verticalScroll(rememberScrollState())) {
             SettingsChoiceGroup("默认偏好", preferences.direction.shortTitle, "planning_default_direction", true,
@@ -36,7 +43,7 @@ internal fun PlanningPreferencesSheet(campus: Campus, preferences: CampusPlannin
                 CompactSettingsSwitch(preferences.flexible, true, { onChange(preferences.copy(flexible = it)) },
                     Modifier.testTag("planning_default_flexible"))
             }
-            Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("planning_templates_entry")
+            Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).guideTag("planning_templates_entry")
                 .clickable(role = Role.Button, interactionSource = remember { MutableInteractionSource() },
                     indication = null, onClick = onTemplates), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)) {

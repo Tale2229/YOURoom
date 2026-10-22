@@ -394,6 +394,47 @@ class ClassroomRepositoryTest {
         assertEquals("new-account", repository.rememberedAccount())
     }
 
+    @Test fun cacheClearVerificationDiscardsNewTokenAndDoesNotChangeAnyLocalData() = runBlocking {
+        remember();dao.savedSnapshot=oldSnapshot()
+        server.enqueue(loginReply())
+        repository.verifyCacheClearCredentials("dummy-user","dummy-password")
+        assertEquals("dummy-test-token",session.token)
+        assertEquals("dummy-password",session.remembered!!.password)
+        assertEquals(oldSnapshot(),dao.savedSnapshot)
+        assertEquals("dummy-user",repository.currentAccount())
+        assertEquals("/bjyddx/login",server.takeRequest().requestUrl!!.encodedPath)
+    }
+
+    @Test fun failedCacheClearVerificationDoesNotClearTokenPasswordOrCache() = runBlocking {
+        remember();dao.savedSnapshot=oldSnapshot()
+        server.enqueue(MockResponse().setBody("""{"code":"0","Msg":"wrong"}"""))
+        try { repository.verifyCacheClearCredentials("dummy-user","wrong");fail("Expected rejection") }
+        catch(_:SchoolLoginRejected) { }
+        assertEquals("dummy-test-token",session.token)
+        assertEquals("dummy-password",session.remembered!!.password)
+        assertEquals(oldSnapshot(),dao.savedSnapshot)
+    }
+
+    @Test fun anotherAccountCannotAuthorizeCacheClearAndMakesNoLoginRequest() = runBlocking {
+        remember()
+        try { repository.verifyCacheClearCredentials("other-account","valid-password");fail("Expected owner mismatch") }
+        catch(_:SchoolLoginRejected) { }
+        assertEquals(0,server.requestCount)
+        assertEquals("dummy-test-token",session.token)
+    }
+
+    @Test fun logoutDuringCacheClearVerificationInvalidatesTheApproval() = runBlocking {
+        remember()
+        server.enqueue(loginReply().setBodyDelay(250,TimeUnit.MILLISECONDS))
+        val verification=async { repository.verifyCacheClearCredentials("dummy-user","dummy-password") }
+        withContext(Dispatchers.IO) { assertNotNull(server.takeRequest(5,TimeUnit.SECONDS)) }
+        repository.logout()
+        try { verification.await();fail("Expected stale approval") }
+        catch(_:CancellationException) { }
+        assertNull(session.token)
+        assertEquals("dummy-password",session.remembered!!.password)
+    }
+
     private fun remember() { session.remembered = RememberedCredentials("dummy-user", "dummy-password") }
     private fun expiredReply() = MockResponse().setResponseCode(500).setBody("""{"code":"401"}""")
     private fun loginReply() = MockResponse().setBody("""{"code":"1","data":{"token":"fresh-token"}}""")

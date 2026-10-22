@@ -232,9 +232,11 @@ class YOURoomUiTest {
         assertEquals(with(compose.density) { 3.dp.toPx() },b.left-a.right,1f)
     }
 
-    @Test fun manualDarkModeAppliesThroughTheSettingsSwitchAndSurvivesLeavingDemo() {
-        enterDemo()
+    @Test fun manualDarkModeAppliesInsideDemoButLeavingRestoresFormalAppearance() {
+        compose.waitUntil(10_000) { !capturedModel.state.value.initializing }
         compose.runOnIdle { capturedModel.setDarkMode(false) }
+        compose.waitForIdle()
+        enterDemo()
         compose.onNodeWithTag("tab_settings").performClick()
         compose.onNodeWithTag("settings_dark_mode_switch").assertIsOff().performClick()
         compose.waitUntil(5000) { capturedModel.state.value.appearance.darkMode == true }
@@ -244,10 +246,10 @@ class YOURoomUiTest {
         compose.onNodeWithTag("settings_dark_mode_switch").assertIsOn()
         compose.runOnIdle { capturedModel.logout() }
         compose.waitUntil(5000) { !capturedModel.state.value.showWorkspace }
-        assertEquals(true, capturedModel.state.value.appearance.darkMode)
+        assertEquals(false, capturedModel.state.value.appearance.darkMode)
         enterDemo()
         compose.onNodeWithTag("tab_settings").performClick()
-        compose.onNodeWithTag("settings_dark_mode_switch").assertIsOn()
+        compose.onNodeWithTag("settings_dark_mode_switch").assertIsOff()
     }
 
     @Test fun numberSwitchAlreadyShowsTheSavedCheckWhileTheSettingsPageIsEntering() {
@@ -869,7 +871,7 @@ class YOURoomUiTest {
         compose.onNodeWithTag("filter_outlets").performClick().assertIsSelected()
         compose.onNodeWithTag("edit_tags").performClick()
         compose.onNodeWithContentDescription("删除词条 有插座").assertIsDisplayed().performClick()
-        compose.onNodeWithText("取消").performClick()
+        compose.onNode(hasText("取消") and !hasTestTag("cancel_add_tag")).performClick()
         compose.onNodeWithTag("filter_outlets").assertIsSelected()
         compose.onNodeWithContentDescription("删除词条 有插座").performClick()
         compose.onNodeWithTag("confirm_delete_tag").performClick()
@@ -1269,7 +1271,7 @@ class YOURoomUiTest {
         compose.onNodeWithTag("edit_tags").performClick()
         compose.onNodeWithContentDescription("删除词条 已收藏").assertDoesNotExist()
         compose.onNodeWithContentDescription("删除词条 有插座").performClick()
-        compose.onNodeWithText("取消").performClick()
+        compose.onNode(hasText("取消") and !hasTestTag("cancel_add_tag")).performClick()
         compose.onNodeWithTag("filter_outlets").assertExists()
         compose.onNodeWithContentDescription("删除词条 有插座").performClick()
         compose.onNodeWithTag("confirm_delete_tag").performClick()

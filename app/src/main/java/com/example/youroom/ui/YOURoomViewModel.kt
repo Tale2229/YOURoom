@@ -16,6 +16,8 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.currentCoroutineContext
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
@@ -34,6 +36,9 @@ data class YOURoomState(
     val fromCache: Boolean = false,
     val viewingCache: Boolean = false,
     val demo: Boolean = false,
+    val training: Boolean = false,
+    val guideRequest: GuideRequest? = null,
+    val cacheClear:CacheClearState? = null,
     val campus: Campus = Campus.XITUCHENG,
     val cachedCampuses: Set<Campus> = emptySet(),
     val today: LocalDate = LocalDate.now(SchoolZone),
@@ -52,7 +57,7 @@ data class YOURoomState(
     val customTags: Set<String> get() = tagOrder.filterNot { it in PersonalTags.builtIn }.toSet()
     val showWorkspace: Boolean get() = loggedIn || demo || viewingCache
     val campusSnapshot: ClassroomSnapshot? get() = snapshot?.takeIf {
-        it.campusId == campus.dataKey && it.isDemo == demo
+        it.campusId == campus.dataKey && it.isDemo == (demo || training)
     }
     val campusProfiles: List<RoomProfile> get() = profiles.values.filter { it.roomId.startsWith("${campus.dataKey}:") }
     val stale: Boolean get() = campusSnapshot?.isCurrentOn(today) == false
@@ -63,7 +68,7 @@ data class YOURoomState(
         val id = selectedRoomId ?: return null
         if (!id.startsWith("${campus.dataKey}:")) return null
         // Demo snapshots must not leak into an authenticated or cached workspace.
-        if (snapshot?.isDemo == true && !demo) return null
+        if (snapshot?.isDemo == true && !demo && !training) return null
         val profile = profiles[id]
         val room = campusSnapshot?.index?.roomsById?.get(id)
             ?: profile?.let { Classroom(it.roomId, it.name, it.building, null) } ?: return null
@@ -87,10 +92,105 @@ class YOURoomViewModel(
     private val settings: FilterSettings,
     private val clock: Clock = Clock.system(SchoolZone),
     planningDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val training: Boolean = false,
+    trainingCalculation: (suspend (PlanningInput) -> PlanningResult)? = null,
+    private val resetApplicationData:() -> Boolean = { false },
 ) : ViewModel() {
-    private val mutableState = MutableStateFlow(YOURoomState(today = today()))
+    private val mutableState = MutableStateFlow(YOURoomState(today = today(), training = training))
     val state: StateFlow<YOURoomState> = mutableState.asStateFlow()
-    val planning = PlanningSession(viewModelScope,planningDispatcher)
+    val planning = if (trainingCalculation == null) PlanningSession(viewModelScope,planningDispatcher)
+        else PlanningSession(viewModelScope,planningDispatcher,trainingCalculation)
+    private var guideHistory = GuideHistory()
+    private var guideAccount: String? = null
+    private var guideSerial = 0L
+    private val offeredGuides = mutableSetOf<String>()
+    private val pendingGuides = mutableMapOf<String,GuideRecord>()
+    private val guideWrites = Channel<Pair<String,GuideRecord>>(Channel.UNLIMITED)
+    private var cacheClearJob:Job?=null
+
+    fun requestCacheClear() {
+        if(state.value.initializing || state.value.cacheClear!=null || state.value.guideRequest!=null) return
+        mutableState.update { it.copy(cacheClear=CacheClearState(
+            if(training || it.demo || !it.loggedIn) CacheClearPhase.INFORMATION else CacheClearPhase.CONFIRM)) }
+    }
+
+    fun confirmCacheClear() {
+        if(state.value.cacheClear?.phase==CacheClearPhase.CONFIRM)
+            mutableState.update { it.copy(cacheClear=CacheClearState(CacheClearPhase.CREDENTIALS)) }
+    }
+
+    fun cancelCacheClear() {
+        if(state.value.cacheClear?.irreversible==true) return
+        cacheClearJob?.cancel();cacheClearJob=null
+        mutableState.update { it.copy(cacheClear=null) }
+    }
+
+    fun verifyAndClearCache(rawAccount:String,password:String) {
+        val account=rawAccount.trim()
+        if(training || state.value.demo || !state.value.loggedIn || state.value.cacheClear?.phase!=CacheClearPhase.CREDENTIALS) return
+        if(account.isBlank() || password.isEmpty()) {
+            mutableState.update { it.copy(cacheClear=CacheClearState(CacheClearPhase.CREDENTIALS,"请输入当前登录账号和教务密码。")) }
+            return
+        }
+        val generation=loginGeneration
+        mutableState.update { it.copy(cacheClear=CacheClearState(CacheClearPhase.VERIFYING)) }
+        cacheClearJob=viewModelScope.launch {
+            try {
+                val owner=repository.currentAccount()
+                if(owner!=null && owner!=account) throw SchoolLoginRejected("请使用当前登录账号进行身份校验。")
+                if(owner==null) when(settings.matchesActiveAccount(account)) {
+                    false -> throw SchoolLoginRejected("请使用当前登录账号进行身份校验。")
+                    null -> throw SchoolLoginRejected("无法确认当前账号，请先退出并重新登录，再清除缓存。")
+                    true -> Unit
+                }
+                repository.verifyCacheClearCredentials(account,password)
+                currentCoroutineContext().ensureActive()
+                if(generation!=loginGeneration || state.value.demo || !state.value.loggedIn ||
+                    state.value.cacheClear?.phase!=CacheClearPhase.VERIFYING) return@launch
+                mutableState.update { it.copy(cacheClear=CacheClearState(CacheClearPhase.CLEARING)) }
+                // The platform owns the complete reset and stops this process. Do
+                // not report completion, manually delete files or save a new token.
+                if(resetApplicationData()) mutableState.update { it.copy(cacheClear=CacheClearState(CacheClearPhase.REQUESTED)) }
+                else mutableState.update { it.copy(cacheClear=CacheClearState(CacheClearPhase.CREDENTIALS,
+                    "系统未接受清除请求，本地数据未清除。请重试身份校验。")) }
+            } catch(error:Exception) {
+                if(error is CancellationException) throw error
+                if(generation!=loginGeneration || state.value.cacheClear==null) return@launch
+                val text=when(error) {
+                    is SchoolRequestFailed -> error.userMessage
+                    else -> "身份校验或清除请求未完成，请检查网络后重试；本地数据未主动清除。"
+                }
+                mutableState.update { it.copy(cacheClear=CacheClearState(CacheClearPhase.CREDENTIALS,text)) }
+            }
+        }
+    }
+
+    private fun guideIdentity() = if (state.value.demo) GuideHistory.Guest
+        else guideAccount ?: guideHistory.activeAccount ?: GuideHistory.ExistingSession
+
+    private fun offerGuide() {
+        if (training || !guideHistory.available || state.value.initializing || !(state.value.loggedIn || state.value.demo) ||
+            state.value.guideRequest != null || state.value.cacheClear!=null) return
+        val identity = guideIdentity()
+        if (identity in offeredGuides || !guideHistory.copy(records = guideHistory.records + pendingGuides).shouldOffer(identity)) return
+        offeredGuides += identity
+        val previous = (pendingGuides[identity] ?: guideHistory.records[identity])?.takeIf { it.version == GuideHistory.Version }
+        mutableState.update { it.copy(guideRequest = GuideRequest(identity, previous?.step ?: 0,
+            resume = previous?.outcome == GuideOutcome.IN_PROGRESS, serial = ++guideSerial)) }
+    }
+
+    fun startGuide() {
+        if (training || state.value.initializing || !state.value.showWorkspace || state.value.cacheClear!=null) return
+        mutableState.update { it.copy(guideRequest = GuideRequest(guideIdentity(), manual = true, serial = ++guideSerial)) }
+    }
+
+    fun saveGuideProgress(request: GuideRequest, step: Int, outcome: GuideOutcome = GuideOutcome.IN_PROGRESS) {
+        if (state.value.guideRequest?.serial != request.serial) return
+        val record = GuideRecord(step.coerceAtLeast(0),outcome,GuideHistory.Version)
+        pendingGuides[request.identity] = record
+        if (guideHistory.available) guideWrites.trySend(request.identity to record)
+        if (outcome != GuideOutcome.IN_PROGRESS) mutableState.update { it.copy(guideRequest = null) }
+    }
 
     fun cancelPlanning() { planning.cancel(state.value.campus) }
 
@@ -174,6 +274,20 @@ class YOURoomViewModel(
     }
 
     init {
+        viewModelScope.launch {
+            settings.guideHistory.catch { emit(GuideHistory()) }.collect { value ->
+                guideHistory = value.current()
+                pendingGuides.entries.removeAll { (id, record) -> guideHistory.records[id] == record }
+                offerGuide()
+            }
+        }
+        viewModelScope.launch {
+            for ((identity, record) in guideWrites) try { settings.saveGuideRecord(identity,record) }
+            catch (error: Exception) {
+                if (error is CancellationException) throw error
+                // Keep the in-memory record: storage failure must not cause a replay loop.
+            }
+        }
         viewModelScope.launch {
             settings.planningPreferences.catch { showError("无法读取规划偏好"); emit(PlanningPreferences()) }.collect { value ->
                 persistedPlanning = value
@@ -294,6 +408,9 @@ class YOURoomViewModel(
                 mutableState.update { it.copy(initializing = false, loggedIn = authenticated, rememberedAccount = remembered,
                     rememberedLogin = rememberedLogin,
                     cachedCampuses = realWorkspaces.filterValues { workspace -> workspace.snapshot != null }.keys) }
+                if (authenticated && guideHistory.activeAccount == null && remembered != null)
+                    guideAccount = runCatching { settings.guideAccountIdentity(remembered) }.getOrNull()
+                offerGuide()
                 if (authenticated) refresh()
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
@@ -313,6 +430,7 @@ class YOURoomViewModel(
     fun login(account: String, password: String, rememberPassword: Boolean) {
         if (state.value.loggingIn || state.value.initializing) return
         if (account.isBlank() || password.isEmpty()) { showError("请填写教务账号和密码。"); return }
+        cancelCacheClear()
         if (state.value.demo) openLogin()
         mutableState.update { it.copy(loggingIn = true, rememberedLogin = null, error = null) }
         val generation = ++loginGeneration
@@ -320,9 +438,12 @@ class YOURoomViewModel(
             try {
                 repository.login(account.trim(), password, rememberPassword)
                 if (generation != loginGeneration) return@launch
+                guideAccount = runCatching { settings.guideAccountIdentity(account.trim()) }.getOrNull()
+                if (generation != loginGeneration) return@launch
                 planning.clear()
                 mutableState.update { it.copy(loggedIn = true, loggingIn = false, viewingCache = false,
                     rememberedAccount = account.trim().takeIf { rememberPassword }) }
+                offerGuide()
                 refresh()
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
@@ -343,7 +464,7 @@ class YOURoomViewModel(
             try {
                 val snapshot = repository.refresh(campus)
                 if (!isCurrentRequest(campus, generation)) return@launch
-                require(snapshot.campusId == campus.dataKey && !snapshot.isDemo)
+                require(snapshot.campusId == campus.dataKey && snapshot.isDemo == training)
                 realWorkspaces = realWorkspaces + (campus to withSnapshot(realWorkspaces.getValue(campus), snapshot, false))
                 restoreWorkspace(campus)
                 mutableState.update { it.copy(cachedCampuses = it.cachedCampuses + campus) }
@@ -371,6 +492,7 @@ class YOURoomViewModel(
 
     fun showDemo() {
         if (state.value.initializing || state.value.loggingIn || state.value.demo) return
+        cancelCacheClear()
         planning.clear()
         cancelRefresh()
         demoFilters = SearchFilters(setOf(1, 2))
@@ -382,6 +504,7 @@ class YOURoomViewModel(
         mutableState.update { it.copy(demo = true, loggedIn = false, viewingCache = false, rememberedLogin = null,
             profiles = emptyMap(), tagCatalog = TagCatalog(), planningPreferences = DemoData.planningPreferences()) }
         restoreWorkspace(state.value.appearance.defaultCampus)
+        offerGuide()
     }
 
     fun viewCache() {
@@ -393,12 +516,14 @@ class YOURoomViewModel(
     }
 
     fun openLogin() {
+        cancelCacheClear()
         loginGeneration++
         loginJob?.cancel()
         planning.clear()
         cancelRefresh()
         demoWorkspaces = emptyMap()
         mutableState.update { it.copy(demo = false, loggedIn = false, loggingIn = false, viewingCache = false,
+            guideRequest = null,
             profiles = realProfiles(), tagCatalog = storedCatalog,
             appearance = pendingAppearance ?: persistedAppearance,
             periodStrip = pendingStrip ?: persistedStrip,
@@ -420,6 +545,7 @@ class YOURoomViewModel(
     }
 
     fun logout() {
+        cancelCacheClear()
         cancelRefresh()
         loginGeneration++
         loginJob?.cancel()
@@ -682,7 +808,7 @@ class YOURoomViewModel(
         fun factory(container: AppContainer) = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                YOURoomViewModel(container.repository, container.settings) as T
+                YOURoomViewModel(container.repository, container.settings,resetApplicationData=container.userDataReset::request) as T
         }
     }
 }

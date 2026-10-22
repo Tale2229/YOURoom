@@ -21,11 +21,13 @@ interface SessionStore {
     fun save(token: String)
     fun clear()
     fun credentials(): RememberedCredentials? = null
+    fun currentAccount():String? = credentials()?.account
     fun saveLogin(token: String, credentials: RememberedCredentials?) {
         check(credentials == null) { "Credential storage is unavailable" }
         save(token)
     }
     fun clearToken() = clear()
+    fun saveLogin(token:String,credentials:RememberedCredentials?,account:String?) = saveLogin(token,credentials)
 }
 
 class SecureSessionStore(context: Context,
@@ -68,20 +70,28 @@ class SecureSessionStore(context: Context,
     }
 
     override fun saveLogin(token: String, credentials: RememberedCredentials?) {
+        saveLogin(token,credentials,null)
+    }
+
+    override fun currentAccount():String? = decrypt("account","account_iv") ?: credentials()?.account
+
+    override fun saveLogin(token: String, credentials: RememberedCredentials?, account:String?) {
         // Encrypt everything before committing: never persist a half-updated account/session.
         val encryptedToken = encrypt(token)
         val encryptedCredentials = credentials?.let {
             encrypt(JSONObject().put("account", it.account).put("password", it.password).toString())
         }
+        val encryptedAccount=account?.let(::encrypt)
         val edit = preferences.edit().putString("iv", encryptedToken.first)
             .putString("ciphertext", encryptedToken.second)
-            .remove("credentials").remove("credentials_iv")
+            .remove("credentials").remove("credentials_iv").remove("account").remove("account_iv")
         encryptedCredentials?.let { edit.putString("credentials_iv", it.first).putString("credentials", it.second) }
+        encryptedAccount?.let { edit.putString("account_iv",it.first).putString("account",it.second) }
         check(edit.commit())
     }
 
     override fun clearToken() {
-        check(preferences.edit().remove("ciphertext").remove("iv").commit())
+        check(preferences.edit().remove("ciphertext").remove("iv").remove("account").remove("account_iv").commit())
     }
 
     private fun encrypt(value: String): Pair<String, String> {

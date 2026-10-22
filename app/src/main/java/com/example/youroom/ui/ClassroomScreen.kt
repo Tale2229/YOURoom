@@ -61,6 +61,18 @@ private fun ClassroomPage(state: YOURoomState, listState: LazyListState, active:
     var expandedRoom by remember(state.campus, state.demo) { mutableStateOf<String?>(null) }
     var pendingActionRoom by remember(state.campus, state.demo) { mutableStateOf<String?>(null) }
     var previousEditorRoom by remember(state.campus, state.demo) { mutableStateOf<String?>(null) }
+    val guide=LocalUsageGuide.current
+    LaunchedEffect(guide?.preparedStage,guide?.demonstration,active) {
+        if(guide==null || !active || guide.preparedStage!=guide.stage) return@LaunchedEffect
+        showFilters=guide.stage in listOf(GuideStage.BUILDINGS,GuideStage.FILTER_TAGS) ||
+            (guide.stage==GuideStage.FILTER && guide.demonstration>0)
+        // Scaffold may create this page during measure. Queue positioning for
+        // its next measure instead of forcing a nested measure from the effect.
+        listState.requestScrollToItem(0)
+    }
+    LaunchedEffect(expandedRoom) {
+        if(guide?.stage==GuideStage.SWIPE && expandedRoom=="01:2-201") guide.signal("swipe")
+    }
     val snapshot = state.campusSnapshot
     val search = rememberClassroomSearch(state, enabled = searchEnabled)
     val result = search.result
@@ -80,6 +92,17 @@ private fun ClassroomPage(state: YOURoomState, listState: LazyListState, active:
     LaunchedEffect(result.rooms.map { it.classroom.id }, state.campusSnapshot?.queryDate) {
         if (result.rooms.none { it.classroom.id == expandedRoom }) expandedRoom = null
     }
+    var guideRailPrepared by remember(guide?.stage,guide?.demonstration) { mutableStateOf(false) }
+    LaunchedEffect(guide?.preparedStage,guide?.demonstration,active,result.rooms.map { it.classroom.id }) {
+        if(guide==null || !active || guide.preparedStage!=guide.stage || guideRailPrepared) return@LaunchedEffect
+        val open=guide.stage in listOf(GuideStage.FAVORITE,GuideStage.TAGS,GuideStage.NOTE,GuideStage.EXCLUDE) ||
+            (guide.stage==GuideStage.SWIPE && guide.demonstration>0)
+        // A fresh chapter can arrive before the first search result. Do not lose
+        // its one initial opening when the temporary empty list clears the rail.
+        if(open && result.rooms.none { it.classroom.id=="01:2-201" }) return@LaunchedEffect
+        expandedRoom=if(open) "01:2-201" else null
+        guideRailPrepared=true
+    }
     if (showFilters && active) FilterDialog(state, { showFilters = false }, onFilters, onAddTag, onRemoveTag, onTagOrder)
     LazyColumn(Modifier.fillMaxSize().testTag("room_list"), state = listState,
         userScrollEnabled = active, contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -91,7 +114,10 @@ private fun ClassroomPage(state: YOURoomState, listState: LazyListState, active:
                 val gutter = ((maxWidth - 308.dp) / 2).coerceIn(0.dp, 24.dp)
                 Box(Modifier.padding(horizontal = gutter, vertical = 14.dp)) {
                     SlotPicker(state.campus, snapshot?.queryDate, state.demo, state.filters, slots, onFilters,
-                        enabled = active, onShowFilters = { showFilters = true })
+                        enabled = active, onShowFilters = {
+                            if(guide?.stage==GuideStage.FILTER) guide.select(GuideStage.BUILDINGS.ordinal)
+                            else showFilters = true
+                        })
                 }
             }
         }
@@ -103,7 +129,7 @@ private fun ClassroomPage(state: YOURoomState, listState: LazyListState, active:
                     Text("可选教室", style = MaterialTheme.typography.titleMedium)
                 }
                 if (!waiting || displayedRooms.isNotEmpty()) Text("${displayedRooms.size}", style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.primary)
+                    color = MaterialTheme.colorScheme.primary,modifier=Modifier.guideTag("room_result_count"))
             }
         }
         if (!waiting && displayedRooms.isEmpty()) item {
@@ -137,7 +163,10 @@ private fun ClassroomPage(state: YOURoomState, listState: LazyListState, active:
                 else -> Modifier.animateItem(placementSpec = tween(FavoriteMotionTiming.Move))
             }
             SwipeRoomRow(current, slots, state.tagOrder, expanded = expandedRoom == id, active = active,
-                onExpanded = { open -> if (open) expandedRoom = id else if (expandedRoom == id) expandedRoom = null },
+                onExpanded = { open ->
+                    if(open) { guide?.recordAction(GuideStage.SWIPE);expandedRoom=id }
+                    else if(expandedRoom==id) expandedRoom=null
+                },
                 onFavorite = {
                     if (favorites.start(room.classroom, result.rooms, state.profiles)) onFavorite(room.classroom)
                 },
@@ -150,7 +179,8 @@ private fun ClassroomPage(state: YOURoomState, listState: LazyListState, active:
                 favoriteClosing = isMovingFavorite,
                 onActionPending = { pending ->
                     if (pending) pendingActionRoom = id else if (pendingActionRoom == id) pendingActionRoom = null
-                }, editorOpen = state.selectedRoomId == id)
+                }, editorOpen = state.selectedRoomId == id,
+                guideAutoReopen = guide?.stage in listOf(GuideStage.FAVORITE,GuideStage.TAGS,GuideStage.NOTE,GuideStage.EXCLUDE) && id=="01:2-201")
         }
     }
 }

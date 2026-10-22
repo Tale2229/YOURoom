@@ -39,7 +39,7 @@ fun CampusHeader(state: YOURoomState, onCampus: (Campus) -> Unit) {
     val other = if (campus == Campus.XITUCHENG) Campus.SHAHE else Campus.XITUCHENG
     fun switch(target: Campus) { focus.clearFocus(); latestSwitch(target) }
     Box(Modifier.fillMaxWidth().background(roles.header).testTag("campus_header")) {
-        Row(Modifier.fillMaxWidth().testTag("campus_swipe_region")
+        Row(Modifier.fillMaxWidth().guideTag("campus_swipe_region")
                 .semantics {
                     customActions = listOf(CustomAccessibilityAction("切换到${other.label}校区") {
                         switch(other); true

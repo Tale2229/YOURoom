@@ -80,6 +80,11 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
     var inspectedNumber by remember(context, available) { mutableStateOf<Int?>(null) }
     var lastInspectedNumber by remember(context, available) { mutableStateOf<Int?>(null) }
     var pointerHeld by remember(context, available) { mutableStateOf(false) }
+    val guide=LocalUsageGuide.current
+    val searchAndFilterEnabled=enabled && guide?.stage !in listOf(GuideStage.SLOTS,GuideStage.INSPECT)
+    LaunchedEffect(guide?.preparedStage) {
+        if(guide!=null) { inspectedNumber=null;lastInspectedNumber=null }
+    }
     val haptic = LocalHapticFeedback.current
     val inspectionGap = with(LocalDensity.current) { 6.dp.toPx() }
     val selection = previewSelection ?: filters.selectedSlots
@@ -91,10 +96,10 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
     LaunchedEffect(context, filters.selectedSlots) { summaryScroll.scrollTo(0) }
     LaunchedEffect(pointerHeld, inspectedNumber) {
         // Keyboard/accessibility inspection has no pointer-up event to dismiss it.
-        if (!pointerHeld && inspectedNumber != null) { delay(2_000); inspectedNumber = null }
+        if (!pointerHeld && inspectedNumber != null && guide?.stage!=GuideStage.INSPECT) { delay(2_000); inspectedNumber = null }
     }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        BoxWithConstraints(Modifier.fillMaxWidth().testTag("slot_grid").onGloballyPositioned { geometry.origin = it.positionInRoot() }) {
+    Column(Modifier.guideTag("slot_grid"),verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        BoxWithConstraints(Modifier.fillMaxWidth().onGloballyPositioned { geometry.origin = it.positionInRoot() }) {
             val cellWidth = (maxWidth - 4.dp * (StudyGridLayout.columns - 1)) / StudyGridLayout.columns
             Column(Modifier.fillMaxWidth().pointerInput(context, available, enabled, inspectionGap) {
                 // Initial-pass consumption owns grid painting, not the surrounding LazyColumn.
@@ -241,9 +246,9 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
                                     onFilters(filters.copy(selectedSlots = emptySet()))
                                 }, modifier, enabled)
                                 StudyGridCellKind.SEARCH -> CompactRoomSearch(filters.query,
-                                    { onFilters(filters.copy(query = it)) }, modifier, enabled)
+                                    { onFilters(filters.copy(query = it)) }, modifier, searchAndFilterEnabled)
                                 StudyGridCellKind.FILTER -> CompactFilterAction(campus, filters.badgeCount,
-                                    onShowFilters, modifier, enabled)
+                                    onShowFilters, modifier, searchAndFilterEnabled)
                             }
                         } }
                     }
@@ -274,12 +279,20 @@ fun SlotPicker(campus: Campus, queryDate: LocalDate?, demo: Boolean, filters: Se
 private fun CompactRoomSearch(query: String, onQuery: (String) -> Unit, modifier: Modifier, enabled: Boolean) {
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = LocalFocusManager.current
+    val guide=LocalUsageGuide.current
+    var wasGuideSearch by remember { mutableStateOf(false) }
+    LaunchedEffect(guide?.stage) {
+        if(wasGuideSearch && guide?.stage!=GuideStage.SEARCH) {
+            focus.clearFocus(force=true);keyboard?.hide()
+        }
+        wasGuideSearch=guide?.stage==GuideStage.SEARCH
+    }
     val outside = LocalRoomSearchFocus.current
     val token = remember { Any() }
     DisposableEffect(outside, token) { onDispose { outside?.remove(token) } }
     val colors = MaterialTheme.colorScheme
     Box(modifier.height(48.dp), contentAlignment = Alignment.Center) {
-        Surface(Modifier.fillMaxWidth().height(36.dp).testTag("room_search_frame")
+        Surface(Modifier.fillMaxWidth().height(36.dp).guideTag("room_search_frame")
             .onGloballyPositioned { outside?.position(token, it.boundsInRoot()) }, shape = MaterialTheme.shapes.small,
             border = BorderStroke(1.dp, colors.outlineVariant)) {
             BasicTextField(query, onQuery, Modifier.fillMaxSize().testTag("room_search")
@@ -311,7 +324,7 @@ private fun CompactFilterAction(campus: Campus, count: Int, onClick: () -> Unit,
     val roles = themeRoles()
     Box(modifier.height(48.dp)) {
         Surface(onClick = onClick, enabled = enabled, color = Color.Transparent,
-            modifier = Modifier.fillMaxSize().testTag("extra_filters").semantics {
+            modifier = Modifier.fillMaxSize().guideTag("extra_filters").semantics {
                 contentDescription = "筛选教室，已选 $count 个词条"
             }) {
             Box(contentAlignment = Alignment.Center) {

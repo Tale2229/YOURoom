@@ -75,9 +75,9 @@ internal fun ExpectedRoomDialog(state: YOURoomState, selected: Set<String>,
         (MaterialTheme.typography.headlineMedium.lineHeight.toDp()+12.dp).coerceAtLeast(48.dp)*3.5f
     }
     val byId = remember(rooms) { rooms.associateBy { it.id } }
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    GuideDialog("expected",onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp), contentAlignment = Alignment.Center) {
-            Surface(Modifier.widthIn(max = 480.dp).fillMaxWidth().testTag("expected_room_dialog"),
+            Surface(Modifier.widthIn(max = 480.dp).fillMaxWidth().guideTag("expected_room_dialog"),
                 shape = MaterialTheme.shapes.small, tonalElevation = 0.dp) {
                 Column(Modifier.padding(horizontal = 12.dp, vertical = 12.dp)
                     .verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -126,7 +126,7 @@ internal fun ExpectedRoomDialog(state: YOURoomState, selected: Set<String>,
                         }
                     }
                     ThemeDivider()
-                    Row(Modifier.fillMaxWidth().testTag("expected_actions"), horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    Row(Modifier.fillMaxWidth().guideTag("expected_actions"), horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically) {
                         ExpectedDialogAction("清空期望教室",Modifier.weight(ColumnWeight).testTag("expected_clear"),
                             enabled = campusSelection.isNotEmpty(),onClick = { onSelected(selected-campusSelection.toSet()) }) {
@@ -141,7 +141,8 @@ internal fun ExpectedRoomDialog(state: YOURoomState, selected: Set<String>,
                                 Modifier.size(24.dp).graphicsLayer { rotationZ = ExpectedPinTilt }.testTag("expected_pin_icon"))
                         }
                         DialogExitAction(campusSelection.toSet()!=initialSelection,onDismiss,
-                            Modifier.weight(ColumnWeight).testTag("expected_close"))
+                            Modifier.weight(ColumnWeight).testTag("expected_close"),
+                            enabled=LocalUsageGuide.current?.stage!=GuideStage.EXPECT)
                     }
                 }
             }

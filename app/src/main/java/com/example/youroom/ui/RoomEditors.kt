@@ -32,10 +32,15 @@ fun RoomTagsDialog(room: RoomMatch, state: YOURoomState, onDismiss: () -> Unit,
     val initialCatalog = remember(room.classroom.id) { state.tagOrder.toList() }
     var editingTags by remember { mutableStateOf(false) }
     LaunchedEffect(room.profile) { draft = room.profile }
-    fun update(profile: RoomProfile) { draft = profile; onChange(profile) }
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    fun update(profile: RoomProfile) {
+        // Legacy/discovered terms are definitions too: deselection must not
+        // remove the last source that made a term visible in the catalog.
+        if(state.tagOrder!=state.tagCatalog.available()) onTagOrder(state.tagOrder)
+        draft = profile; onChange(profile)
+    }
+    GuideDialog("room-editor",onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxWidth().imePadding().padding(horizontal = 20.dp), contentAlignment = Alignment.Center) {
-            Surface(Modifier.widthIn(max = 480.dp).fillMaxWidth().testTag("room_tag_dialog"),
+            Surface(Modifier.widthIn(max = 480.dp).fillMaxWidth().guideTag("room_tag_dialog"),
                 shape = MaterialTheme.shapes.small, tonalElevation = 0.dp) {
                 Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -74,9 +79,9 @@ fun RoomNoteDialog(room: RoomMatch, onDismiss: () -> Unit, onChange: (RoomProfil
     LaunchedEffect(room.profile) { draft = room.profile.copy(note = RoomNotes.limit(room.profile.note)) }
     fun update(value: String) { draft = draft.copy(note = RoomNotes.limit(value)); onChange(draft) }
     val interaction=remember { MutableInteractionSource() }
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    GuideDialog("room-editor",onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.imePadding().widthIn(max = 480.dp).fillMaxWidth().padding(horizontal = 20.dp)
-            .testTag("room_note_dialog"), shape = MaterialTheme.shapes.small,
+            .guideTag("room_note_dialog"), shape = MaterialTheme.shapes.small,
             color = MaterialTheme.colorScheme.background) {
             Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp)) {

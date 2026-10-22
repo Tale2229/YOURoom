@@ -53,6 +53,8 @@ internal fun PlanningTimeControls(goal: PlanningDraft, addEnabled: Boolean, expe
     addAccepted: Boolean = false, addRejection: Int = 0, expectedAccepted: Boolean = false,
     onFullAdd: (() -> Unit)? = null, onImport: (() -> Unit)? = null, importing: Boolean = false) {
     val density = LocalDensity.current
+    val guide=LocalUsageGuide.current
+    val wheelsEnabled=LocalUsageGuide.current?.stage !in listOf(GuideStage.PAST,GuideStage.FROM_NOW,GuideStage.DURATION)
     val shake = remember { Animatable(0f) }
     LaunchedEffect(addRejection) {
         shake.snapTo(0f)
@@ -63,17 +65,17 @@ internal fun PlanningTimeControls(goal: PlanningDraft, addEnabled: Boolean, expe
     }
     Layout(modifier = Modifier.fillMaxWidth().testTag("planner_time_controls"), content = {
         CompositionLocalProvider(LocalDensity provides Density(density.density * PlanningWheelScale, density.fontScale)) {
-            Row(Modifier.testTag("planner_wheels"), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.guideTag("planner_wheels"), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 WheelTimePicker("开始时间", goal.start, "planner_start", Modifier.weight(1f),
-                    onMoving = onStartMoving, viewportRows = 3.5f, onTime = onStart)
+                    onMoving = onStartMoving, viewportRows = 3.5f, enabled=wheelsEnabled, onTime = onStart)
                 WheelTimePicker("结束时间", goal.end, "planner_end", Modifier.weight(1f),
-                    onMoving = onEndMoving, viewportRows = 3.5f, onTime = onEnd)
+                    onMoving = onEndMoving, viewportRows = 3.5f, enabled=wheelsEnabled, onTime = onEnd)
             }
         }
         Column(Modifier.testTag("planner_actions"), verticalArrangement = Arrangement.SpaceBetween) {
-            PlanningRailAction("添加时段", "planner_add_period", addEnabled && !addAccepted,
+            PlanningRailAction("添加时段", "planner_add_period", addEnabled && !addAccepted && guide?.stage!=GuideStage.IMPORT,
                 confirmation = if(addAccepted) "已添加" else null, briefFeedback = true, onClick = onAdd,
-                onDisabledClick=if(!addAccepted) onFullAdd else null,
+                onDisabledClick=if(!addAccepted && guide?.stage!=GuideStage.IMPORT) onFullAdd else null,
                 onLongClick = onImport,
                 modifier = Modifier.graphicsLayer { translationX = shake.value * 4.dp.toPx() }) {
                 Crossfade(importing, animationSpec = tween(120), label = "add import icon") { active ->
@@ -97,7 +99,7 @@ internal fun PlanningTimeControls(goal: PlanningDraft, addEnabled: Boolean, expe
                 if (pending) cancelEnabled else generateEnabled, primary = true,
                 pending = pending, onClick = if (pending) onCancel else onGenerate) {
                 Icon(if (pending) Icons.Filled.Stop else Icons.Filled.PlayArrow, null,
-                    Modifier.size(if (pending) 22.dp else 24.dp).testTag("${if(pending) "planner_stop" else "planner_play"}_icon"))
+                    Modifier.size(if (pending) 22.dp else 24.dp).guideTag("${if(pending) "planner_stop" else "planner_play"}_icon"))
             }
         }
     }) { measurables, constraints ->
@@ -140,7 +142,7 @@ internal fun PlanningRailAction(label: String, tag: String, enabled: Boolean, se
         onLongClick = onLongClick, onLongClickLabel = if (onLongClick != null) "导入时段组合" else null,
         role = Role.Button, interactionSource = interaction,
         indication = null, onClick = { if(enabled) onClick() else onDisabledClick?.invoke() })
-    Box(modifier.size(40.dp).testTag(tag).then(action).semantics {
+    Box(modifier.size(40.dp).guideTag(tag).then(action).semantics {
         contentDescription = label
         if(!enabled && onLongClick == null) disabled()
         if(!enabled && onLongClick != null) stateDescription = "无法继续添加，可长按导入时段组合"

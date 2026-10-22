@@ -24,6 +24,25 @@ class SecureSessionStoreTest {
         KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(alias)
     }
 
+    @Test fun uncheckedLoginKeepsOnlyEncryptedAccountMetadataForIdentityVerification() {
+        store().saveLogin("dummy-token-only",null,"dummy-account-only")
+        assertEquals("dummy-account-only",store().currentAccount())
+        assertNull(store().credentials())
+        assertFalse(preferences.all.values.joinToString().contains("dummy-account-only"))
+        store().save("renewed-token-only")
+        assertEquals("dummy-account-only",store().currentAccount())
+        store().clearToken()
+        assertNull(store().currentAccount())
+        assertFalse(preferences.contains("account_iv"))
+    }
+
+    @Test fun legacySavedCredentialsRemainAnIdentityFallbackWithoutMigrationWrites() {
+        store().saveLogin("dummy-token-only",dummy)
+        val before=preferences.all.toMap()
+        assertEquals(dummy.account,store().currentAccount())
+        assertEquals(before,preferences.all)
+    }
+
     @Test fun encryptsBothFieldsAndReopensWithoutPlaintext() {
         store().saveLogin("dummy-token-only", dummy)
         assertEquals("dummy-token-only", store().read())

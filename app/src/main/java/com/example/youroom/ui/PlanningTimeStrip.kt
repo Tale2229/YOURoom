@@ -50,7 +50,7 @@ internal fun PlanningTargetStrip(slots: List<LessonSlot>, windows: List<StudyWin
     val preferences=LocalPeriodStripPreferences.current
     val numberHeight=with(LocalDensity.current) { 10.sp.toDp() }
     PlanningRangeStrip(windows,slots,"planner_target_range","planner_target_range_lines",
-        modifier.fillMaxWidth().testTag("planner_target_strip")
+        modifier.fillMaxWidth().guideTag("planner_target_strip")
         .semantics(mergeDescendants=true) {
             contentDescription="已添加时段："+windows.joinToString("、") { "${planningTime(it.start)}–${planningTime(it.end)}" }
             stateDescription="当前时间 ${now.hour.toString().padStart(2,'0')}:${now.minute.toString().padStart(2,'0')}"
@@ -139,13 +139,21 @@ private fun PlanningRangeStrip(windows: List<StudyWindow>, slots: List<LessonSlo
             windows.forEachIndexed { index,window ->
                 val anchor=anchors[index]
                 var menu by remember(window) { mutableStateOf(false) }
+                val guide=LocalUsageGuide.current
+                LaunchedEffect(guide?.preparedStage,guide?.entry,actions?.enabled) {
+                    if(guide!=null) menu=index==0 && actions?.enabled==true &&
+                        ((guide.stage==GuideStage.PERIOD && guide.entry>0) ||
+                            (guide.stage==GuideStage.SAVE_TEMPLATE && guide.entry==0))
+                }
                 LaunchedEffect(actions?.enabled) { if (actions?.enabled != true) menu=false }
                 val action = if (actions != null) Modifier.clickable(enabled = actions.enabled, role = Role.Button,
                     interactionSource = remember { MutableInteractionSource() }, indication = null,
-                    onClickLabel = "编辑、删除或保存时段组合") { menu=true } else Modifier
+                    onClickLabel = "编辑、删除或保存时段组合") { menu=true;guide?.openedPeriod() } else Modifier
+                val canEdit=actions?.enabled==true && guide?.stage !in listOf(GuideStage.PERIOD,GuideStage.SAVE_TEMPLATE)
+                val canSave=actions?.enabled==true && guide?.stage!=GuideStage.PERIOD
                 Box(Modifier.background(paper)) {
                     Text("${planningTime(window.start)}–${planningTime(window.end)}",
-                        Modifier.width(IntrinsicSize.Max).testTag("${labelPrefix}_$index").then(action).semantics {
+                        Modifier.width(IntrinsicSize.Max).guideTag("${labelPrefix}_$index").then(action).semantics {
                         stateDescription=when {
                             !anchor.known -> "暂无节次数据"
                             anchor.outside && anchor.openStart -> "全部位于课前"
@@ -156,10 +164,10 @@ private fun PlanningRangeStrip(windows: List<StudyWindow>, slots: List<LessonSlo
                             else -> "起点、终点封闭"
                         }
                         if (actions != null) customActions=listOf(
-                            CustomAccessibilityAction("编辑时段") { if (actions.enabled) { actions.onEdit(index); true } else false },
-                            CustomAccessibilityAction("删除时段") { if (actions.enabled) { actions.onDelete(index); true } else false }) +
+                            CustomAccessibilityAction("编辑时段") { if (canEdit) { actions.onEdit(index); true } else false },
+                            CustomAccessibilityAction("删除时段") { if (canEdit) { actions.onDelete(index); true } else false }) +
                             if (actions.onSave != null) listOf(CustomAccessibilityAction("保存时段组合") {
-                                if (actions.enabled) { actions.onSave.invoke(); true } else false
+                                if (canSave) { actions.onSave.invoke(); true } else false
                             }) else emptyList()
                     }, style=textStyle,color=color,maxLines=1,softWrap=false)
                     if (actions != null) PlanningPeriodMenu(menu,actions.enabled,index,{ menu=false },
@@ -175,7 +183,7 @@ private fun PlanningRangeStrip(windows: List<StudyWindow>, slots: List<LessonSlo
         val bracketY=annotationHeight-2.dp.toPx()
         val capEnd=bracketY+6.dp.toPx()
         val lines=subcompose("lines") {
-            Canvas(Modifier.testTag(linesTag)) {
+            Canvas(Modifier.guideTag(linesTag)) {
                 fun x(value: Float)=if (rtl) size.width-value else value
                 fun point(value: Float, y: Float)=Offset(x(value),if (below) size.height-y else y)
                 val dash=PathEffect.dashPathEffect(floatArrayOf(1.5.dp.toPx(),2.5.dp.toPx()))

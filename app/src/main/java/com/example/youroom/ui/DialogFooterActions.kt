@@ -30,13 +30,13 @@ internal fun DialogFooterActions(hasSelection: Boolean, resetTag: String, closeT
             Modifier.semantics { selected=middleSelected;stateDescription=if(middleSelected) "编辑中" else "未编辑" }) {
             Icon(Icons.Outlined.Add, null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary)
         }
-        DialogExitAction(changed,onClose,Modifier.testTag(closeTag))
+        DialogExitAction(changed,onClose,Modifier.guideTag(closeTag))
     }
 }
 
 @Composable
 private fun FooterIcon(label: String, tag: String, onClick: () -> Unit, modifier: Modifier=Modifier, icon: @Composable () -> Unit) {
-    Box(modifier.size(48.dp).testTag(tag)
+    Box(modifier.size(48.dp).guideTag(tag)
         .clickable(role = Role.Button, interactionSource = remember { MutableInteractionSource() },
             indication = null, onClick = onClick)
         .semantics { contentDescription = label }, contentAlignment = Alignment.Center) { icon() }

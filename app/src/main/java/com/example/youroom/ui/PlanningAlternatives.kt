@@ -2,6 +2,12 @@ package com.example.youroom.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -66,19 +72,21 @@ internal fun PlanningWorkspace(execution: PlanningExecution?, campus: Campus, in
     val selectedIndices=groups.firstOrNull { it.direction.name==selectedGroup }?.optionIndices.orEmpty()
     val rank=selectedIndices.indexOf(selected).takeIf { it>=0 }?.plus(1) ?: 1
     var expanded by rememberSaveable { mutableStateOf(false) }
+    val guide=LocalUsageGuide.current
     val arrowFlip=animateFloatAsState(if(expanded) -1f else 1f,
         tween(180,easing=FastOutSlowInEasing),label="alternative disclosure flip")
-    LaunchedEffect(campus,execution?.id) { expanded=false }
+    LaunchedEffect(campus,execution?.id,guide?.preparedStage) { expanded=guide?.stage==GuideStage.ALTERNATIVES }
     BackHandler(available && expanded) { expanded=false }
     Column(Modifier.fillMaxSize().testTag("planner_workspace")) {
             if (available) {
                 Spacer(Modifier.fillMaxWidth().height(12.dp).testTag("planner_heading_spacing"))
                 // Inset only the painted band. Keep the original A typography,
                 // key, spacing, content anchors and 48dp height unchanged.
-                Box(Modifier.fillMaxWidth().heightIn(min=48.dp).testTag("planner_alternatives")
+                Box(Modifier.fillMaxWidth().heightIn(min=48.dp).guideTag("planner_alternatives")
                     .clickable(enabled=interactive,role=Role.Button,
                         interactionSource=remember { MutableInteractionSource() },indication=null) {
                         expanded=!expanded
+                        if(expanded) guide?.openedAlternatives()
                     }.semantics {
                         stateDescription=if (expanded) "已展开" else "已收起"
                     },contentAlignment=Alignment.Center) {
@@ -116,8 +124,10 @@ internal fun PlanningWorkspace(execution: PlanningExecution?, campus: Campus, in
                             tint=roles.planningHeadingEntry)
                     }
                 }
-                AnimatedVisibility(expanded) {
-                Column(Modifier.fillMaxWidth().testTag("planner_drawer")) {
+                AnimatedVisibility(expanded,
+                    enter=if(guide?.preparing==true) EnterTransition.None else fadeIn()+expandVertically(),
+                    exit=if(guide?.preparing==true) ExitTransition.None else shrinkVertically()+fadeOut()) {
+                Column(Modifier.fillMaxWidth().guideTag("planner_drawer")) {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal=16.dp)) {
                     groups.forEach { item ->
                         val active=item.direction==direction
@@ -148,7 +158,9 @@ internal fun PlanningWorkspace(execution: PlanningExecution?, campus: Campus, in
                                 if (interactive) {
                                     selectGroup(direction)
                                     execution?.let { onOption(it.id,index) }
-                                    expanded=false
+                                    // Keep the comparison spotlight and list available for
+                                    // repeated choices; ordinary use still closes the drawer.
+                                    expanded=guide?.stage==GuideStage.ALTERNATIVES
                                 }
                             }
                         }

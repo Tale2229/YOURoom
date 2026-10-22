@@ -57,10 +57,10 @@ private fun PlanningFeedback(feedback: PlanningResult, goal: PlanningDraft, cloc
     val actions: @Composable () -> Unit = {
         when(feedback.problem) {
             PlanningProblem.PAST_TIME -> PlanningFeedbackAction("从现在起","${tagPrefix}_from_now",88.dp,
-                active && PlanningTimeActions.startFromNow(goal,clock)!=null) {
+                active && LocalUsageGuide.current?.stage!=GuideStage.PAST && PlanningTimeActions.startFromNow(goal,clock)!=null) {
                 PlanningTimeActions.startFromNow(goal,clock)?.let(onGoal)
             }
-            PlanningProblem.INVALID_TIME, PlanningProblem.TOO_SHORT -> Row(Modifier.testTag("${tagPrefix}_duration_buttons"),
+            PlanningProblem.INVALID_TIME, PlanningProblem.TOO_SHORT -> Row(Modifier.guideTag("${tagPrefix}_duration_buttons"),
                 horizontalArrangement=Arrangement.spacedBy(4.dp)) {
                 listOf(1,2,4).forEach { hours ->
                     PlanningFeedbackAction("${hours}h","${tagPrefix}_duration_${hours}h",40.dp,
@@ -91,7 +91,7 @@ private fun PlanningFeedbackAction(label: String, tag: String, width: androidx.c
     enabled: Boolean, onClick: () -> Unit) {
     val faceHeight=with(LocalDensity.current) { (28.dp.toPx()+2f).toDp() }
     // Separate 40dp hit areas; a smaller face doesn't make adjacent shortcuts overlap.
-    Box(Modifier.width(width).height(40.dp).testTag(tag).clickable(enabled=enabled,role=Role.Button,
+    Box(Modifier.width(width).height(40.dp).guideTag(tag).clickable(enabled=enabled,role=Role.Button,
         interactionSource=remember { MutableInteractionSource() },indication=null,onClick=onClick),
         contentAlignment=Alignment.Center) {
         Surface(Modifier.width(width-4.dp).height(faceHeight).testTag("${tag}_face"),shape=MaterialTheme.shapes.small,

@@ -77,8 +77,9 @@ internal fun RoomActionButtons(profile: RoomProfile, onFavorite: () -> Unit, onT
             Triple(if (profile.excluded) Icons.Outlined.Refresh else Icons.Outlined.Block,
                 if (profile.excluded) "取消排除 ${profile.name}" else "排除 ${profile.name}", onExcluded))
         buttons.forEachIndexed { index, (icon, description, action) ->
-            IconButton(onClick = action, enabled = enabled, modifier = Modifier.width(if (compact) 40.dp else 48.dp).heightIn(min = 48.dp)
-                .testTag("room_action_${profile.roomId}_$index").semantics {
+            IconButton(onClick = action, enabled = enabled && LocalUsageGuide.current?.stage !in listOf(GuideStage.SWIPE,GuideStage.MARKS),
+                modifier = Modifier.width(if (compact) 40.dp else 48.dp).heightIn(min = 48.dp)
+                .guideTag("room_action_${profile.roomId}_$index").semantics {
                     if (index == 1) stateDescription = if (profile.outlets || profile.allTags.isNotEmpty()) "已有标签" else "无标签"
                     if (index == 2) stateDescription = if (profile.note.isNotBlank()) "已有备注" else "无备注"
                 }) {
@@ -124,7 +125,7 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
     active: Boolean, onExpanded: (Boolean) -> Unit, onFavorite: () -> Unit, onTags: () -> Unit,
     onNote: () -> Unit, onExcluded: () -> Unit, modifier: Modifier = Modifier, inspectionKey: Any? = null,
     interactionEnabled: Boolean = active, favoriteClosing: Boolean = false,
-    onActionPending: (Boolean) -> Unit = {}, editorOpen: Boolean = false) {
+    onActionPending: (Boolean) -> Unit = {}, editorOpen: Boolean = false,guideAutoReopen:Boolean=false) {
     val profile = match.profile
     val swipe = remember(profile.roomId) { AnchoredDraggableState(false) }
     val density = LocalDensity.current.density
@@ -137,13 +138,15 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
     val latestExpanded by rememberUpdatedState(onExpanded)
     val latestActive by rememberUpdatedState(active)
     val latestIntent by rememberUpdatedState(expanded)
+    val guidePreparing=LocalUsageGuide.current?.preparing==true
     // One owner animates toward the explicit request. Never feed an old settledValue
     // back into the parent while a newer drag or favorite-close is in progress.
-    LaunchedEffect(expanded, active, railWidth, dragging, settlement, favoriteClosing) {
+    LaunchedEffect(expanded, active, railWidth, dragging, settlement, favoriteClosing,guidePreparing) {
         val ownJob = currentCoroutineContext().job
         animation.job = ownJob
         try {
             if (!active) swipe.snapTo(false)
+            else if(guidePreparing) swipe.snapTo(expanded)
             else if (!dragging) swipe.animateTo(expanded,
                 tween(if (favoriteClosing && !expanded) FavoriteMotionTiming.Close else 160))
         } finally {
@@ -158,12 +161,31 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
     val flip = remember(profile.roomId) { RoomActionFlipMotion() }
     val actionScope = rememberCoroutineScope()
     var pendingAction by remember(profile.roomId) { mutableStateOf(false) }
+    val guideStage=LocalUsageGuide.current?.stage
+    var reopenRequest by remember(profile.roomId,guideStage) { mutableIntStateOf(0) }
+    var wasEditing by remember(profile.roomId,guideStage) { mutableStateOf(false) }
+    LaunchedEffect(editorOpen) {
+        if(wasEditing && !editorOpen && guideAutoReopen) reopenRequest++
+        wasEditing=editorOpen
+    }
     wave.Run()
     flip.Observe({ swipe.offset / density }, { animation.openingSpeed }, { dragging }, active)
     val labels = remember(profile, terms) { terms.filter { it != PersonalTags.favorite && profile.hasTerm(it) } }
     val metadata = remember(profile.roomId, inspectionKey) { RoomMetadataMotion(labels, RoomNotes.limit(profile.note)) }
     metadata.Run(labels, RoomNotes.limit(profile.note), editorOpen, active,
         { !swipe.offset.isNaN() && abs(swipe.offset) < .5f && !dragging })
+    val canReopen by rememberUpdatedState(guideAutoReopen && active && interactionEnabled && !favoriteClosing && !editorOpen)
+    val currentLabels by rememberUpdatedState(labels)
+    val currentNote by rememberUpdatedState(RoomNotes.limit(profile.note))
+    LaunchedEffect(reopenRequest,guideAutoReopen,guideStage) {
+        if(reopenRequest==0 || !guideAutoReopen) return@LaunchedEffect
+        // Observe actual motion completion, not a guessed timer. Favorite list
+        // placement/fades are represented by interactionEnabled/favoriteClosing.
+        withFrameNanos { }
+        snapshotFlow { canReopen && !pendingAction && !wave.isRunning && !dragging &&
+            !swipe.offset.isNaN() && abs(swipe.offset)<.5f && metadata.settled(currentLabels,currentNote) }.first { it }
+        latestExpanded(true)
+    }
     val colors = MaterialTheme.colorScheme
     val noteHeight = with(LocalDensity.current) { MaterialTheme.typography.bodySmall.lineHeight.toDp() }
     Column(modifier.fillMaxWidth().clipToBounds().background(colors.background).testTag("room_row_${profile.roomId}").semantics {
@@ -174,7 +196,7 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
             latestExpanded(!expanded); true
         })
     }) {
-    Box(Modifier.fillMaxWidth().heightIn(min = 58.dp).clipToBounds().testTag("room_swipe_${profile.roomId}")
+    Box(Modifier.fillMaxWidth().heightIn(min = 58.dp).clipToBounds().guideTag("room_swipe_${profile.roomId}")
         .pointerInput(swipe, active, interactionEnabled, railWidth, density, inspectionKey, pendingAction) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
@@ -243,7 +265,10 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
                     finally {
                         // Disposal cannot keep drawing a tail, but must not drop
                         // an accepted favorite/exclusion click when the row leaves.
-                        try { action() } finally { pendingAction = false; onActionPending(false) }
+                        try { action() } finally {
+                            pendingAction = false; onActionPending(false)
+                            if(guideAutoReopen) reopenRequest++
+                        }
                     }
                 }
             }

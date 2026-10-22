@@ -7,6 +7,7 @@ import com.example.youroom.data.SchoolApi
 import com.example.youroom.data.local.SecureSessionStore
 import com.example.youroom.data.local.SettingsStore
 import com.example.youroom.data.local.YOURoomDatabase
+import com.example.youroom.data.local.AndroidUserDataReset
 
 class YOURoomApplication : Application() {
     val container by lazy { AppContainer(this) }
@@ -17,4 +18,5 @@ class AppContainer(application: Application) {
         .addMigrations(YOURoomDatabase.MIGRATION_1_2).build()
     val repository = ClassroomRepository(SchoolApi(), database.dao(), SecureSessionStore(application))
     val settings = SettingsStore(application)
+    val userDataReset = AndroidUserDataReset(application)
 }

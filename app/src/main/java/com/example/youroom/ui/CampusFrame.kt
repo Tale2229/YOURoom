@@ -29,9 +29,11 @@ internal class CampusHeaderMotion(val pager: PagerState, private val desired: St
 internal fun rememberCampusHeaderMotion(campus: Campus): CampusHeaderMotion {
     val pager = rememberPagerState(initialPage = campus.ordinal) { Campus.entries.size }
     val desired = rememberUpdatedState(campus.ordinal)
-    LaunchedEffect(campus) {
+    val preparing=LocalUsageGuide.current?.preparing==true
+    LaunchedEffect(campus,preparing) {
         if (pager.currentPage != campus.ordinal || pager.currentPageOffsetFraction != 0f)
-            pager.animateScrollToPage(campus.ordinal, animationSpec = tween(320))
+            if(preparing) pager.scrollToPage(campus.ordinal)
+            else pager.animateScrollToPage(campus.ordinal, animationSpec = tween(320))
     }
     return remember(pager) { CampusHeaderMotion(pager, desired) }
 }
@@ -45,7 +47,9 @@ internal fun CampusHeaderPager(state: YOURoomState, motion: CampusHeaderMotion, 
         val visibleSemantics = if (motion.pager.currentPage == index) Modifier else Modifier.clearAndSetSemantics {}
         YOURoomTheme(campus = displayed, appearance = state.appearance) {
             Surface(Modifier.fillMaxWidth().then(visibleSemantics)) {
+                CompositionLocalProvider(LocalUsageGuide provides LocalUsageGuide.current?.takeIf { motion.pager.currentPage==index }) {
                 CampusHeader(state.copy(campus = displayed), onCampus)
+                }
             }
         }
     }
@@ -64,13 +68,14 @@ internal fun CampusFrame(state: YOURoomState, onCampus: (Campus) -> Unit, showHe
     val latestHeaderMoving by rememberUpdatedState(headerMoving)
     val pages = remember(state.demo) { mutableMapOf<Campus, YOURoomState>() }
     pages[state.campus] = state
+    val animate=animateBodyChange && LocalUsageGuide.current?.preparing!=true
     var animatedBodyCampus by remember { mutableStateOf(state.campus) }
-    val bodyCampus = if (animateBodyChange) animatedBodyCampus else state.campus
+    val bodyCampus = if (animate) animatedBodyCampus else state.campus
     val alpha = remember { Animatable(1f) }
     var replacing by remember { mutableStateOf(false) }
-    val moving = animateBodyChange && (headerMoving || replacing || bodyCampus != state.campus)
-    LaunchedEffect(state.campus, animateBodyChange) {
-        if (!animateBodyChange) {
+    val moving = animate && (headerMoving || replacing || bodyCampus != state.campus)
+    LaunchedEffect(state.campus, animate) {
+        if (!animate) {
             animatedBodyCampus = state.campus
             replacing = false
             alpha.snapTo(1f)
@@ -93,7 +98,7 @@ internal fun CampusFrame(state: YOURoomState, onCampus: (Campus) -> Unit, showHe
             CampusHeaderPager(state, localHeader, onCampus)
             CampusHeaderDivider()
         }
-        Box(Modifier.weight(1f).fillMaxWidth().clipToBounds().testTag(bodyTag)) {
+        Box(Modifier.weight(1f).fillMaxWidth().clipToBounds().guideTag(bodyTag)) {
             val campuses = if (keepBothCampuses) Campus.entries else listOf(bodyCampus)
             campuses.forEach { displayed ->
                 // No campus key for a single-body screen: its time controls remain mounted.
@@ -104,13 +109,13 @@ internal fun CampusFrame(state: YOURoomState, onCampus: (Campus) -> Unit, showHe
                         refreshing = false, error = null, selectedRoomId = null)
                     pages.putIfAbsent(displayed, observed)
                     val visible = displayed == bodyCampus
-                    val ready = visible && displayed == state.campus && (!animateBodyChange || !headerMoving)
+                    val ready = visible && displayed == state.campus && (!animate || !headerMoving)
                     var held by remember(displayed) { mutableStateOf(observed) }
                     val page = if (ready) observed else held
                     SideEffect { if (ready) held = observed }
                     val active = ready && !moving && interactive
                     YOURoomTheme(campus = displayed, appearance = state.appearance) {
-                        Surface(Modifier.fillMaxSize().testTag(if (bodyTag == "campus_body")
+                        Surface(Modifier.fillMaxSize().guideTag(if (bodyTag == "campus_body")
                             "campus_content_${displayed.dataKey}" else "${bodyTag}_content_${displayed.dataKey}")
                             .zIndex(if (visible) 1f else 0f)
                             .then(if (visible) Modifier else Modifier.clearAndSetSemantics {})
@@ -119,7 +124,9 @@ internal fun CampusFrame(state: YOURoomState, onCampus: (Campus) -> Unit, showHe
                                     while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
                                 }
                             }.graphicsLayer { this.alpha = if (visible) alpha.value else 0f }) {
-                            content(page, active, moving || !interactive, ready)
+                            CompositionLocalProvider(LocalUsageGuide provides LocalUsageGuide.current?.takeIf { visible }) {
+                                content(page, active, moving || !interactive, ready)
+                            }
                         }
                     }
                 }

@@ -121,14 +121,31 @@ private fun StudyPlanningContent(state: YOURoomState, goal: PlanningDraft, execu
     val displayedUses=remember(displayedPlan,execution?.input?.snapshot) {
         displayedPlan?.let { PlanningDisplay.rooms(it,execution?.input?.snapshot) }.orEmpty()
     }
+    val guide=LocalUsageGuide.current
+    LaunchedEffect(guide?.preparedStage,guide?.demonstration,guide?.entry,interactive) {
+        if(guide==null || !interactive || guide.preparedStage!=guide.stage) return@LaunchedEffect
+        expectedDialog=guide.stage==GuideStage.EXPECT && guide.entry>0
+        val needsImport=guide.stage in listOf(GuideStage.IMPORT_PICK,GuideStage.REPLACE) ||
+            (guide.stage==GuideStage.IMPORT && guide.entry>0)
+        if(needsImport) {
+            if(!importDialog) importDialog=true
+        } else importDialog=false
+        templateSeed=if(guide.stage==GuideStage.SAVE_TEMPLATE && guide.entry>0) goal.savedWindows else null
+        templateManager=false
+        additionError=if((guide.stage==GuideStage.FROM_NOW && guide.entry==0) ||
+            (guide.stage==GuideStage.DURATION && guide.entry==1) ||
+            (guide.stage==GuideStage.PAST && guide.entry>0)) PlanningSchedule.add(guide.goal,600).error else null
+        withFrameNanos { }
+        editorScroll.scrollTo(0)
+    }
 
     if (expectedDialog) ExpectedRoomDialog(state, goal.expectedRooms,
         { onGoal(goal.copy(expectedRooms = it)) }, { expectedDialog = false })
     if (templateSeed != null) TimeTemplateEditor(state.campus, null, templateSeed.orEmpty(),
         "组合${state.planningPreferences.forCampus(state.campus).templates.size+1}", { template ->
             val preferences=state.planningPreferences.forCampus(state.campus)
-            onPlanningPreferences(preferences.copy(templates=preferences.templates+template));templateSeed=null
-        }, { templateSeed=null })
+            onPlanningPreferences(preferences.copy(templates=preferences.templates+template));templateSeed=null;guide?.closedTemplate()
+        }, { templateSeed=null;guide?.closedTemplate() })
     else if (templateManager) TimeTemplateManager(state.campus, state.planningPreferences.forCampus(state.campus),
         onPlanningPreferences, { templateManager = false })
     else if (importDialog) TimeTemplateImportDialog(state.campus,
@@ -155,7 +172,8 @@ private fun StudyPlanningContent(state: YOURoomState, goal: PlanningDraft, execu
                         addEnabled = interactive && !startMoving && !endMoving && !pending && goal.savedWindows.size < PlanningPolicy.periodLimit,
                         expectedEnabled = interactive && snapshot != null && !stale,
                         flexibleEnabled = interactive && !pending,
-                        generateEnabled = interactive && !pending && !startMoving && !endMoving && confirmedGoal != null && snapshot != null && !stale,
+                        generateEnabled = interactive && !pending && !startMoving && !endMoving && confirmedGoal != null && snapshot != null && !stale &&
+                            (guide==null || guide.stage==GuideStage.GENERATE),
                         expectedCount = expectedCount, pending = pending,
                         onStartMoving = { startMoving = it }, onEndMoving = { endMoving = it },
                         onStart = { wheelGoal = wheelGoal.copy(start = it); onGoal(wheelGoal) },
@@ -171,9 +189,10 @@ private fun StudyPlanningContent(state: YOURoomState, goal: PlanningDraft, execu
                                     onGoal(addition.goal)
                                 } else {
                                     additionError=addition.error; addRejection++
+                                    guide?.rejectedPeriod(addition.error?.problem)
                                 }
                             }
-                        }, onExpected = { if (!expectedAccepted) { expectedAccepted=true;expectedDialog=true } },
+                        }, onExpected = { if (!expectedAccepted) { expectedAccepted=true;expectedDialog=true;guide?.openedExpected() } },
                         onFlexible = {
                             val enabled=!goal.flexible
                             additionError=null
@@ -194,7 +213,8 @@ private fun StudyPlanningContent(state: YOURoomState, goal: PlanningDraft, execu
                                 }
                             }
                         }) else null,
-                        onImport = if (interactive && !pending && !startMoving && !endMoving) ({ importDialog = true }) else null,
+                        onImport = if (interactive && !pending && !startMoving && !endMoving && guide?.stage!=GuideStage.ADD)
+                            ({ importDialog = true;guide?.openedImport() }) else null,
                         importing = importDialog || templateManager)
                     if (snapshot == null || stale) TextButton(onClick = onRefresh,
                         enabled = !state.refreshing && !state.demo, shape = MaterialTheme.shapes.small) { Text("获取今日数据") }
@@ -204,12 +224,12 @@ private fun StudyPlanningContent(state: YOURoomState, goal: PlanningDraft, execu
         Spacer(Modifier.fillMaxWidth().height(1.dp).testTag("planner_input_spacing"))
         Column(Modifier.weight(1f).fillMaxWidth().testTag("planner_results_area")) {
             PlanningTargetStrip(displaySlots,goal.savedWindows,clock, actions = PlanningRangeActions(
-                enabled = interactive && !pending && !startMoving && !endMoving,
+                enabled = interactive && !pending && !startMoving && !endMoving && guide?.stage!=GuideStage.ADD,
                 onEdit = { index ->
                     onGoal(PlanningSchedule.remove(goal,index))
                     scope.launch { editorScroll.animateScrollTo(0) }
                 }, onDelete = { index -> onGoal(PlanningSchedule.remove(goal,index)) },
-                onSave = { templateSeed=goal.savedWindows.toList() }))
+                onSave = { templateSeed=goal.savedWindows.toList();guide?.openedTemplate() }))
             // Keep feedback between the target strip and the plan heading, even
             // after a route exists or its details have been scrolled down.
             key(state.campus) {

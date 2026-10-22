@@ -1,6 +1,8 @@
 package com.example.youroom.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -29,25 +31,30 @@ internal fun PlanningPeriodMenu(expanded: Boolean, enabled: Boolean, index: Int,
     val visibility=remember { MutableTransitionState(false) }
     visibility.targetState=expanded
     val density=LocalDensity.current
+    val guide=LocalUsageGuide.current
+    val editEnabled=enabled && expanded && guide?.stage !in listOf(GuideStage.PERIOD,GuideStage.SAVE_TEMPLATE)
+    val saveEnabled=enabled && expanded && guide?.stage!=GuideStage.PERIOD
     val position=remember(density) { PlanningPeriodMenuPosition(with(density) { 8.dp.roundToPx() },with(density) { 4.dp.roundToPx() }) }
-    if(visibility.currentState || visibility.targetState) Popup(position,onDismiss,
+    if(visibility.currentState || visibility.targetState) GuidePopup(position,onDismiss,
         properties=PopupProperties(focusable=true)) {
-        AnimatedVisibility(visibility,enter=fadeIn(tween(100)),exit=fadeOut(tween(80))) {
-            Box(Modifier.size(if (onSave != null) 132.dp else 88.dp,48.dp).testTag("planner_period_actions_$index"),contentAlignment=Alignment.Center) {
+        AnimatedVisibility(visibility,
+            enter=if(guide?.preparing==true) EnterTransition.None else fadeIn(tween(100)),
+            exit=if(guide?.preparing==true) ExitTransition.None else fadeOut(tween(80))) {
+            Box(Modifier.size(if (onSave != null) 132.dp else 88.dp,48.dp).guideTag("planner_period_actions_$index"),contentAlignment=Alignment.Center) {
                 Surface(Modifier.fillMaxWidth().height(37.dp).testTag("planner_period_actions_face_$index"),
                     shape=MaterialTheme.shapes.small,color=MaterialTheme.colorScheme.surface,
                     shadowElevation=2.dp) {}
                 Row {
-                    IconButton(onClick=onEdit,enabled=enabled && expanded,
+                    IconButton(onClick=onEdit,enabled=editEnabled,
                         modifier=Modifier.width(44.dp).height(48.dp).testTag("planner_edit_period_$index")) {
                         Icon(Icons.Outlined.Edit,"编辑时段",Modifier.size(22.dp),tint=MaterialTheme.colorScheme.primary)
                     }
-                    IconButton(onClick=onDelete,enabled=enabled && expanded,
+                    IconButton(onClick=onDelete,enabled=editEnabled,
                         modifier=Modifier.width(44.dp).height(48.dp).testTag("planner_remove_period_$index").semantics { contentDescription="删除时段" }) {
-                        AnimatedTrashIcon(enabled && expanded,Modifier.size(22.dp))
+                        AnimatedTrashIcon(editEnabled,Modifier.size(22.dp))
                     }
-                    if (onSave != null) IconButton(onClick=onSave,enabled=enabled && expanded,
-                        modifier=Modifier.width(44.dp).height(48.dp).testTag("planner_save_periods_$index")) {
+                    if (onSave != null) IconButton(onClick=onSave,enabled=saveEnabled,
+                        modifier=Modifier.width(44.dp).height(48.dp).guideTag("planner_save_periods_$index")) {
                         Icon(Icons.Filled.Save,"保存时段组合",Modifier.size(22.dp),tint=MaterialTheme.colorScheme.primary)
                     }
                 }

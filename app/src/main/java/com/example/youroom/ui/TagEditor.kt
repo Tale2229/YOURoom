@@ -51,7 +51,7 @@ fun TagEditor(state: YOURoomState, onFilters: (SearchFilters) -> Unit, onAdd: (S
     }
     val angle = if (editing && manageCatalog) rememberInfiniteTransition(label = "tag_editing").animateFloat(-1.3f, 1.3f,
         infiniteRepeatable(tween(110, easing = LinearEasing), RepeatMode.Reverse), label = "tag_wiggle") else null
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.guideTag("tag_editor"),verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Box(Modifier.fillMaxWidth().onGloballyPositioned { geometry.origin = it.positionInRoot() }) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 order.forEach { tag -> key(tag) {

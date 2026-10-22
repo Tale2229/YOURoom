@@ -51,7 +51,7 @@ internal fun ColumnScope.AboutContent(version: String) {
                 Text(version, Modifier.testTag("settings_about_version"), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text("北邮空闲教室查询与自习规划", Modifier.testTag("settings_about_description"), style = MaterialTheme.typography.bodySmall)
+            Text("北邮空闲教室查询与自习规划", Modifier.guideTag("settings_about_description"), style = MaterialTheme.typography.bodySmall)
             Text("非学校官方应用", style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -66,6 +66,7 @@ internal fun ColumnScope.AboutContent(version: String) {
             AboutSection("本地与登录", Icons.Outlined.Lock, "settings_about_local", listOf(
                 "   - 教室标记与设置保存在设备上，可能参与系统备份",
                 "   - 退出登录清除登录状态，保留已记住的账号密码、教室标记与设置",
+                "   - 清除缓存需联网校验当前账号；清除全部本地数据后应用关闭，指引状态也会重置",
             ))
         }
         Row(Modifier.fillMaxWidth().testTag("settings_about_author"), horizontalArrangement = Arrangement.End,
@@ -99,7 +100,7 @@ private fun AboutSection(title: String, icon: ImageVector, tag: String, paragrap
 @Composable
 private fun AboutLink(title: String, icon: ImageVector, tag: String, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).testTag(tag)
-        .clickable(role = Role.Button, interactionSource = remember { MutableInteractionSource() },
+        .clickable(enabled=LocalUsageGuide.current?.stage!=GuideStage.ABOUT,role = Role.Button, interactionSource = remember { MutableInteractionSource() },
             indication = null, onClick = onClick).padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Icon(icon, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)

@@ -106,7 +106,7 @@ internal fun WheelTimePicker(title: String, minuteOfDay: Int, tag: String,
     modifier: Modifier = Modifier, onMoving: (Boolean) -> Unit = {},
     titleHeight: Dp? = null, titleAction: (@Composable () -> Unit)? = null,
     viewportRows: Float = 4.5f, titleSpacing: Dp = 8.dp,
-    matchPlanningTitleGap: Boolean = false, bottomInset: Dp = 0.dp, onTime: (Int) -> Unit) {
+    matchPlanningTitleGap: Boolean = false, bottomInset: Dp = 0.dp, enabled:Boolean = true, onTime: (Int) -> Unit) {
     var settledHour by remember { mutableIntStateOf(minuteOfDay / 60) }
     var settledMinute by remember { mutableIntStateOf(minuteOfDay % 60) }
     var lastExternal by remember { mutableIntStateOf(minuteOfDay) }
@@ -139,16 +139,17 @@ internal fun WheelTimePicker(title: String, minuteOfDay: Int, tag: String,
         }
         // Share the cylinder's empty caps with the title/footer without cropping
         // its face, changing the hit list, or scaling any projected digit.
-        Row(Modifier.fillMaxWidth().layout { measurable,constraints ->
+        Box(Modifier.fillMaxWidth().layout { measurable,constraints ->
             val wheel=measurable.measure(constraints)
             val top=visualTitleSpacing.roundToPx()
             val bottom=bottomInset.roundToPx().coerceAtLeast(0)
             layout(wheel.width,(wheel.height+top-bottom).coerceAtLeast(0)) { wheel.placeRelative(0,top) }
-        }, verticalAlignment = Alignment.CenterVertically) {
+        }) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             TimeWheel("小时", 24, minuteOfDay / 60, "${tag}_hour_wheel", Modifier.weight(1f), {
                 settledHour = it
                 currentOnTime(settledHour * 60 + settledMinute)
-            }, { hourMoving = it; currentOnMoving(hourMoving || minuteMoving) }, viewportRows)
+            }, { hourMoving = it; currentOnMoving(hourMoving || minuteMoving) }, viewportRows, enabled)
             Text(":", Modifier.offset { IntOffset(0, -2) }.width(12.dp)
                 .testTag("${tag}_colon").clearAndSetSemantics {},
                 style = MaterialTheme.typography.headlineMedium.copy(
@@ -157,17 +158,21 @@ internal fun WheelTimePicker(title: String, minuteOfDay: Int, tag: String,
             TimeWheel("分钟", 60, minuteOfDay % 60, "${tag}_minute_wheel", Modifier.weight(1f), {
                 settledMinute = it
                 currentOnTime(settledHour * 60 + settledMinute)
-            }, { minuteMoving = it; currentOnMoving(hourMoving || minuteMoving) }, viewportRows)
+            }, { minuteMoving = it; currentOnMoving(hourMoving || minuteMoving) }, viewportRows, enabled)
+        }
+        // A geometry-only guide anchor follows the real center bands, including
+        // the colon. It never owns input or changes the cylinder's layout.
+        Box(Modifier.align(Alignment.Center).fillMaxWidth().height(rowHeight).guideTag("${tag}_center"))
         }
     }
 }
 
 @Composable
 private fun TimeWheel(unit: String, count: Int, value: Int, tag: String, modifier: Modifier,
-    onValue: (Int) -> Unit, onMoving: (Boolean) -> Unit, viewportRows: Float) {
+    onValue: (Int) -> Unit, onMoving: (Boolean) -> Unit, viewportRows: Float, enabled:Boolean) {
     val labels = remember(count) { List(count) { "%02d".format(java.util.Locale.ROOT, it) } }
     CylinderWheel(unit, labels, value, tag, modifier, cyclic = true, viewportRows = viewportRows,
-        onValue = onValue, onMoving = onMoving)
+        onValue = onValue, onMoving = onMoving, enabled=enabled)
 }
 
 /** The same curved projection and inertia serve time and finite classroom selectors. */
@@ -176,7 +181,7 @@ internal fun CylinderWheel(unit: String, labels: List<String>, value: Int, tag: 
     modifier: Modifier = Modifier, cyclic: Boolean = false, viewportRows: Float = 3.5f,
     textStyle: TextStyle = MaterialTheme.typography.headlineMedium, labelLines: Int = 1,
     fittingLabels: List<String> = labels,
-    onMoving: (Boolean) -> Unit = {}, onValue: (Int) -> Unit) {
+    onMoving: (Boolean) -> Unit = {}, enabled:Boolean = true, onValue: (Int) -> Unit) {
     require(labels.isNotEmpty())
     val count = labels.size
     val initial = remember(count, cyclic) { if (cyclic) timeWheelInitialIndex(value, count) else value }
@@ -229,14 +234,16 @@ internal fun CylinderWheel(unit: String, labels: List<String>, value: Int, tag: 
         }
     }
     val colors = MaterialTheme.colorScheme
-    LaunchedEffect(value, rowPx) {
+    val preparing=LocalUsageGuide.current?.preparing==true
+    val currentPreparing by rememberUpdatedState(preparing)
+    LaunchedEffect(value, rowPx,preparing) {
         if (indexValue(centered) != value) {
             val target = targetIndex(value, centered)
             externalAnimation = true
             try {
                 // A low-stiffness, lightly damped spring accelerates, coasts and settles with a
                 // small inertial tail. New targets or direct dragging cancel this motion safely.
-                list.animateScrollBy((target - position) * rowPx,
+                if(!preparing) list.animateScrollBy((target - position) * rowPx,
                     spring(dampingRatio = .88f, stiffness = 85f, visibilityThreshold = .1f))
                 list.scrollToItem(target)
             } finally {
@@ -253,7 +260,7 @@ internal fun CylinderWheel(unit: String, labels: List<String>, value: Int, tag: 
         var wasMoving = false
         snapshotFlow { list.layoutInfo.centerPosition(initial) to list.isScrollInProgress }
             .distinctUntilChanged().collect { (next, moving) ->
-                if (moving || wasMoving) repeat(timeWheelCenterCrossings(previous, next)) {
+                if (!currentPreparing && (moving || wasMoving)) repeat(timeWheelCenterCrossings(previous, next)) {
                     currentHaptic.performHapticFeedback(HapticFeedbackType.SegmentFrequentTick)
                 }
                 previous = next
@@ -305,6 +312,7 @@ internal fun CylinderWheel(unit: String, labels: List<String>, value: Int, tag: 
         }
     }
     fun select(index: Int) {
+        if(!enabled) return
         scope.launch {
             val target=index.coerceIn(0,itemCount-1)
             list.animateScrollBy((target-position)*rowPx,tween(160,easing=LinearOutSlowInEasing))
@@ -326,25 +334,26 @@ internal fun CylinderWheel(unit: String, labels: List<String>, value: Int, tag: 
             .background(themeRoles().wheelCenter, MaterialTheme.shapes.small).testTag("${tag}_center_band"))
         // Invisible list owns touch/velocity and accessibility. Visible digits are separately
         // projected, so outer rows remain on the curved face throughout the gesture.
-        LazyColumn(state = list, flingBehavior = fling,
+        LazyColumn(state = list, flingBehavior = fling, userScrollEnabled=enabled,
             contentPadding = PaddingValues(vertical = rowHeight * ((viewportRows - 1f) / 2f)),
             modifier = Modifier.fillMaxSize().testTag(tag).semantics {
                 contentDescription = unit
                 stateDescription = labels[indexValue(centered)]
                 progressBarRangeInfo = ProgressBarRangeInfo(indexValue(centered).toFloat(),
                     0f..(count - 1).toFloat(), (count - 2).coerceAtLeast(0))
+                if(!enabled) disabled()
                 setProgress { requested ->
-                    select(targetIndex(requested.roundToInt().coerceIn(0, count - 1), centered)); true
+                    if(enabled) { select(targetIndex(requested.roundToInt().coerceIn(0, count - 1), centered)); true } else false
                 }
-                customActions = listOf(
+                customActions = if(!enabled) emptyList() else listOf(
                     CustomAccessibilityAction("上一$unit") { select(centered - 1); true },
                     CustomAccessibilityAction("下一$unit") { select(centered + 1); true })
             }.onKeyEvent {
-                if (it.type == KeyEventType.KeyDown && (it.key == Key.DirectionUp || it.key == Key.DirectionDown)) {
+                if (enabled && it.type == KeyEventType.KeyDown && (it.key == Key.DirectionUp || it.key == Key.DirectionDown)) {
                     select(centered + if (it.key == Key.DirectionUp) -1 else 1); true
                 } else false
-            }.focusable().pointerInput(rowPx) {
-                detectTapGestures { tap ->
+            }.focusable(enabled=enabled).pointerInput(rowPx,enabled) {
+                if(enabled) detectTapGestures { tap ->
                     select(centered + timeWheelTappedOffset((tap.y - size.height / 2f) / rowPx))
                 }
             }) {

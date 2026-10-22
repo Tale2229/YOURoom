@@ -29,7 +29,9 @@ class RoomActionMotionUiTest {
     private fun renderFlip() {
         compose.setContent {
             SideEffect { compositions++ }
-            YOURoomTheme {
+            // Pixel assertions below compare with the explicit light palette,
+            // independent of the emulator's system night schedule.
+            YOURoomTheme(darkTheme=false) {
                 motionScope=rememberCoroutineScope()
                 flip.Observe({offset},{2200f},{true},enabled)
                 slow.Observe({offset},{100f},{true},enabled)

@@ -9,10 +9,16 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.*
 import java.io.IOException
 
 interface FilterSettings {
+    suspend fun matchesActiveAccount(account:String):Boolean? = null
+    // Unavailable by default for sources with no progress storage (including previews).
+    val guideHistory: Flow<GuideHistory> get() = kotlinx.coroutines.flow.flowOf(GuideHistory())
+    suspend fun guideAccountIdentity(account: String): String? = null
+    suspend fun saveGuideRecord(identity: String, record: GuideRecord) = Unit
     val planningPreferences: Flow<PlanningPreferences> get() = kotlinx.coroutines.flow.flowOf(PlanningPreferences())
     suspend fun savePlanningPreferences(value: PlanningPreferences) { error("Planning preference storage is unavailable") }
     val appearance: Flow<AppearancePreferences> get() = kotlinx.coroutines.flow.flowOf(AppearancePreferences())
@@ -69,6 +75,16 @@ class SettingsStore internal constructor(private val store: androidx.datastore.c
     constructor(context: Context) : this(context.yourRoomSettings)
     private val values = store.data.catch { error ->
         if (error is IOException) emit(emptyPreferences()) else throw error
+    }
+    override val guideHistory = values.map(GuidePreferenceKeys::read).distinctUntilChanged()
+    override suspend fun matchesActiveAccount(account:String):Boolean? = GuidePreferenceKeys.matchesActiveAccount(values.first(),account)
+    override suspend fun guideAccountIdentity(account: String): String {
+        var identity = ""
+        store.edit { identity = GuidePreferenceKeys.account(it, account) }
+        return identity
+    }
+    override suspend fun saveGuideRecord(identity: String, record: GuideRecord) {
+        store.edit { GuidePreferenceKeys.write(it, identity, record) }
     }
     override val filters = values.map(SharedFilterPreferences::read).distinctUntilChanged()
     override val planningPreferences = values.map(PlanningPreferenceKeys::read).distinctUntilChanged()

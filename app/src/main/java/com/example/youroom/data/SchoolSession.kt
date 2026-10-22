@@ -31,6 +31,24 @@ internal class SchoolSession(
         lock.withLock { store.credentials() }
     }
 
+    suspend fun currentAccount() = withContext(Dispatchers.IO) { lock.withLock { store.currentAccount() } }
+
+    suspend fun verifyCacheClearCredentials(account:String,password:String) {
+        val attempt=withContext(Dispatchers.IO) {
+            lock.withLock {
+                val owner=store.currentAccount()
+                if(owner!=null && owner!=account) throw SchoolLoginRejected("请使用当前登录账号进行身份校验。")
+                generation
+            }
+        }
+        // The returned token is deliberately discarded. Failure must not clear,
+        // replace or save any part of the original local session.
+        api.login(account,password)
+        withContext(Dispatchers.IO) {
+            lock.withLock { current(attempt);currentCoroutineContext().ensureActive() }
+        }
+    }
+
     suspend fun login(account: String, password: String, remember: Boolean) {
         val attempt = withContext(Dispatchers.IO) {
             lock.withLock {
@@ -45,7 +63,7 @@ internal class SchoolSession(
             lock.withLock {
                 current(attempt)
                 currentCoroutineContext().ensureActive()
-                store.saveLogin(token, if (remember) RememberedCredentials(account, password) else null)
+                store.saveLogin(token, if (remember) RememberedCredentials(account, password) else null,account)
             }
         }
     }

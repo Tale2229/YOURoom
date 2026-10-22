@@ -59,14 +59,14 @@ fun WorkspaceNavigation(tab: Int, onTab: (Int) -> Unit) {
     Surface(color = roles.navigation) {
         Column(Modifier.navigationBarsPadding()) {
             ThemeDivider()
-            Row(Modifier.fillMaxWidth().selectableGroup()) {
+            Row(Modifier.fillMaxWidth().selectableGroup().guideTag("workspace_navigation")) {
                 listOf(Triple("找教室","tab_rooms",NavigationIcons.building),
                     Triple("自习规划","tab_planner",NavigationIcons.route),
                     Triple("设置","tab_settings",Icons.Outlined.Settings)).forEachIndexed { index, (label, tag, icon) ->
                     val selected = index == tab
                     val background by animateThemeColorAsState(if(selected) roles.navigationSelected else roles.navigation,tween(140),label="navigation face")
                     val foreground by animateThemeColorAsState(if(selected) roles.onNavigationSelected else roles.navigationIdle,tween(140),label="navigation icon")
-                    Box(Modifier.weight(1f).height(56.dp).testTag(tag)
+                    Box(Modifier.weight(1f).height(56.dp).guideTag(tag)
                         .selectable(selected, role = Role.Tab, interactionSource=remember { MutableInteractionSource() },
                             indication=null,onClick = { onTab(index) }).semantics { contentDescription=label },
                         contentAlignment=Alignment.Center) {
