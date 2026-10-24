@@ -331,7 +331,10 @@ internal fun CylinderWheel(unit: String, labels: List<String>, value: Int, tag: 
                 lineHeight = if (textStyle.lineHeight == TextUnit.Unspecified) textStyle.lineHeight else textStyle.lineHeight*scale)
         }
         Box(Modifier.align(Alignment.Center).fillMaxWidth().height(rowHeight)
-            .background(themeRoles().wheelCenter, MaterialTheme.shapes.small).testTag("${tag}_center_band"))
+            .background(if (LocalDialogDesign.current != null) androidx.compose.ui.graphics.lerp(
+                MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.primary, .055f) else themeRoles().wheelCenter,
+                if (LocalDialogDesign.current == DialogDesign.B) androidx.compose.ui.graphics.RectangleShape else MaterialTheme.shapes.small)
+            .testTag("${tag}_center_band"))
         // Invisible list owns touch/velocity and accessibility. Visible digits are separately
         // projected, so outer rows remain on the curved face throughout the gesture.
         LazyColumn(state = list, flingBehavior = fling, userScrollEnabled=enabled,

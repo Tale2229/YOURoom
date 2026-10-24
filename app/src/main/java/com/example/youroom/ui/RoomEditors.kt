@@ -40,16 +40,16 @@ fun RoomTagsDialog(room: RoomMatch, state: YOURoomState, onDismiss: () -> Unit,
     }
     GuideDialog("room-editor",onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxWidth().imePadding().padding(horizontal = 20.dp), contentAlignment = Alignment.Center) {
-            Surface(Modifier.widthIn(max = 480.dp).fillMaxWidth().guideTag("room_tag_dialog"),
-                shape = MaterialTheme.shapes.small, tonalElevation = 0.dp) {
-                Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text("教室标签", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                        Text(state.campus.label, style = MaterialTheme.typography.bodySmall)
+            DialogPanel(DialogDesign.A, Modifier.widthIn(max = 480.dp).fillMaxWidth().guideTag("room_tag_dialog")) {
+                Column {
+                    DialogHeading {
+                        Text("教室标签", Modifier.weight(1f))
+                        Text(state.campus.label, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Text(room.classroom.name, Modifier.padding(top = 8.dp, bottom = 12.dp),
+                    Text(room.classroom.name, Modifier.padding(horizontal = 20.dp).padding(top = 8.dp, bottom = 12.dp),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Column(Modifier.weight(1f, fill = false).heightIn(max = 480.dp).fillMaxWidth()
+                    Column(Modifier.weight(1f, fill = false).padding(horizontal = 20.dp).heightIn(max = 480.dp).fillMaxWidth()
                         .verticalScroll(rememberScrollState())) {
                         TagEditor(state.copy(filters = draft.tagSelection()),
                             { update(draft.withTagSelection(it)) }, { name ->
@@ -57,13 +57,15 @@ fun RoomTagsDialog(room: RoomMatch, state: YOURoomState, onDismiss: () -> Unit,
                             }, onRemoveTag, onTagOrder, showFavorite = false,
                             editing = editingTags, onCancelEdit = { editingTags=false })
                     }
-                    ThemeDivider(Modifier.padding(top = 12.dp))
+                    ThemeDivider(Modifier.padding(horizontal = 20.dp).padding(top = 12.dp))
+                    DialogFooter {
                     DialogFooterActions(draft.allTags.isNotEmpty() || draft.outlets, "reset_room_tags", "close_room_tags",
                         { update(draft.withoutPersonalTags()) }, onDismiss,
                         middleTag = "edit_tags", middleDescription = if (editingTags) "结束词条编辑" else "添加词条",
                         middleSelected = editingTags, onMiddle = { editingTags = !editingTags },
                         resetIconOffsetY = (-1).dp,
                         changed = draft.tagSelection()!=initial || state.tagOrder!=initialCatalog)
+                    }
                 }
             }
         }
@@ -80,9 +82,8 @@ fun RoomNoteDialog(room: RoomMatch, onDismiss: () -> Unit, onChange: (RoomProfil
     fun update(value: String) { draft = draft.copy(note = RoomNotes.limit(value)); onChange(draft) }
     val interaction=remember { MutableInteractionSource() }
     GuideDialog("room-editor",onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.imePadding().widthIn(max = 480.dp).fillMaxWidth().padding(horizontal = 20.dp)
-            .guideTag("room_note_dialog"), shape = MaterialTheme.shapes.small,
-            color = MaterialTheme.colorScheme.background) {
+        DialogPanel(DialogDesign.A, Modifier.imePadding().widthIn(max = 480.dp).fillMaxWidth().padding(horizontal = 20.dp)
+            .guideTag("room_note_dialog")) {
             Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text("${room.classroom.name} · 备注", style = MaterialTheme.typography.titleMedium)
@@ -122,9 +123,9 @@ fun RoomNoteDialog(room: RoomMatch, onDismiss: () -> Unit, onChange: (RoomProfil
 @Composable
 fun RoomActionsDialog(room: RoomMatch, onDismiss: () -> Unit, onFavorite: () -> Unit,
     onTags: () -> Unit, onNote: () -> Unit, onExcluded: () -> Unit) {
-    AlertDialog(onDismissRequest = onDismiss, shape = MaterialTheme.shapes.small,
+    DesignedAlertDialog(onDismissRequest = onDismiss,
         modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth().padding(horizontal = 20.dp).testTag("room_actions_dialog"),
-        properties = DialogProperties(usePlatformDefaultWidth = false), containerColor = MaterialTheme.colorScheme.background,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
         title = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(room.classroom.name, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.titleLarge)
@@ -134,5 +135,5 @@ fun RoomActionsDialog(room: RoomMatch, onDismiss: () -> Unit, onFavorite: () -> 
         text = { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
             RoomActionButtons(room.profile, onFavorite, onTags, onNote, onExcluded)
         } },
-        confirmButton = { TextButton(onClick = onDismiss, modifier = Modifier.testTag("close_room_actions")) { Text("关闭") } })
+        confirmButton = { DialogConfirmButton(onClick = onDismiss, modifier = Modifier.testTag("close_room_actions")) { Text("关闭") } })
 }

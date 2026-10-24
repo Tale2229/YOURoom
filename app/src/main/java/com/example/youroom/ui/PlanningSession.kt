@@ -24,6 +24,8 @@ class PlanningSession(private val scope: CoroutineScope,
         val context = currentCoroutineContext()
         StudyPlanner.portfolio(input.snapshot,input.campus,input.today,input.profiles,input.goal) { context.ensureActive() }
     }) {
+    /** Accepted, normal completions only; cancelled/stale workers must never enter history. */
+    var onCompleted: ((PlanningExecution) -> Unit)? = null
     private val mutableExecutions = MutableStateFlow<Map<Campus,PlanningExecution>>(emptyMap())
     val executions = mutableExecutions.asStateFlow()
     private val jobs = mutableMapOf<Campus,Job>()
@@ -42,16 +44,19 @@ class PlanningSession(private val scope: CoroutineScope,
         jobs.remove(state.campus)?.cancel()
         mutableExecutions.update { it + (input.campus to PlanningExecution(id,input, defaultDirection = defaultDirection)) }
         jobs[input.campus] = scope.launch {
+            var failed = false
             val result = try { withContext(dispatcher) { calculate(input) } }
             catch (error: CancellationException) { throw error }
-            catch (_: Exception) { PlanningResult(message = "规划未完成，请重新生成。") }
+            catch (_: Exception) { failed = true; PlanningResult(message = "规划未完成，请重新生成。") }
             withContext(Dispatchers.Main.immediate) {
+                var accepted: PlanningExecution? = null
                 mutableExecutions.update { current ->
                     if (current[input.campus]?.let { it.id == id && it.pending } == true)
                         current + (input.campus to result.defaultSelection(defaultDirection).let {
-                            PlanningExecution(id,input,result, selectedOption = it.index, defaultDirection = it.direction)
-                        }) else current
+                            PlanningExecution(id,input,result, selectedOption = it.index, defaultDirection = it.direction).also { completed -> accepted = completed }
+                        }) else current.also { accepted = null }
                 }
+                if (!failed) accepted?.let { onCompleted?.invoke(it) }
             }
         }
         return true

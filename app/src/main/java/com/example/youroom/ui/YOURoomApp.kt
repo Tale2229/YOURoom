@@ -155,6 +155,9 @@ private fun WorkspacePages(state: YOURoomState, tab: Int, model: YOURoomViewMode
     editRoom: (String, RoomEditor) -> Unit, manageRoom: (String?) -> Unit,
     onTone: (com.example.youroom.domain.Campus, com.example.youroom.domain.CampusTone) -> Unit) {
     val guide=LocalUsageGuide.current
+    val history by model.planningHistory.collectAsStateWithLifecycle()
+    val historyNotice by model.historyNotice.collectAsStateWithLifecycle()
+    val utilities = remember(state.demo, state.training) { PlannerUtilityState() }
     fun changeCampus(campus:com.example.youroom.domain.Campus) {
         guide?.recordAction(GuideStage.CAMPUS);model.setCampus(campus)
     }
@@ -188,8 +191,14 @@ private fun WorkspacePages(state: YOURoomState, tab: Int, model: YOURoomViewMode
                             showHeader = false, sharedHeaderMoving = headerMoving, interactive = active)
                         1 -> StudyPlanningScreen(state, goal, plans, onGoal, onGenerate, model::setCampus,
                             model::refresh, manageRoom, { campus,id,index -> model.planning.select(campus,id,index) },showHeader = false,
-                            sharedHeaderMoving = headerMoving, interactive = active, onCancel = model::cancelPlanning,
+                            // The incoming planner is actionable immediately. Waiting for the
+                            // spring transition made every control appear disabled on tab entry.
+                            // CampusFrame still guards campus replacement and the outgoing page.
+                            sharedHeaderMoving = headerMoving, interactive = page == (if(preparing) guide!!.page else tab),
+                            onCancel = model::cancelPlanning,
                             onPlanningPreferences = model::setPlanningPreferences,
+                            history = history, historyNotice = historyNotice.takeUnless { state.demo || state.training },
+                            utilityState = utilities,
                             clock = LocalUsageGuide.current?.clock ?: java.time.Clock.system(com.example.youroom.domain.SchoolZone))
                         else -> SettingsScreen(state, manageRoom, model::clearProfile,
                             { if(guide!=null) guide.signal("logout") else model.logout() },

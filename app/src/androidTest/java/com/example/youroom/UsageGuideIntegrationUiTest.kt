@@ -66,7 +66,8 @@ class UsageGuideIntegrationUiTest {
         compose.onNodeWithTag("tab_settings").performClick()
         compose.onNodeWithTag("settings_list").performScrollToNode(hasTestTag("settings_usage_guide"))
         compose.onNodeWithTag("settings_usage_guide").performClick()
-        compose.onNodeWithTag("guide_chapter_3").performClick()
+        compose.onNodeWithTag("guide_chapter_3").performScrollTo().performClick()
+        compose.onNodeWithTag("guide_enter_step").performClick()
         compose.onNodeWithTag("guide_pause").assertDoesNotExist()
         compose.onAllNodesWithTag("tab_settings").onLast().performTouchInput { click() }
         compose.onAllNodesWithTag("settings_theme_next").onLast().performClick()

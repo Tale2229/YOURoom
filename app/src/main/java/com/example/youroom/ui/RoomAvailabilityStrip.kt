@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.window.PopupPositionProvider
 import com.example.youroom.domain.LessonSlot
 import com.example.youroom.domain.PeriodStripGeometry
@@ -64,7 +65,7 @@ internal class PeriodStripTooltipPositionProvider(private val index: Int, privat
 @Composable
 internal fun RoomAvailabilityStrip(roomId: String, freeSlots: Set<Int>, slots: List<LessonSlot>,
     enabled: Boolean, modifier: Modifier = Modifier, inspectionKey: Any? = null,
-    wave: RoomPeriodWave? = null, onInspection: () -> Unit = {}) {
+    wave: RoomPeriodWave? = null, bottomPadding: Dp = 16.dp, onInspection: () -> Unit = {}) {
     val inspectionEnabled = enabled && wave?.isRunning != true
     val preferences=LocalPeriodStripPreferences.current
     // Reset transient inspection when the room, response/date, or real period times change.
@@ -137,7 +138,7 @@ internal fun RoomAvailabilityStrip(roomId: String, freeSlots: Set<Int>, slots: L
             }
         }) {
         PeriodBarsRow(slots,preferences.layout,
-            Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = PeriodStripTopPadding, bottom = 16.dp)) {
+            Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = PeriodStripTopPadding, bottom = bottomPadding)) {
             slots.forEachIndexed { index, slot -> key(slot.number) {
                 val shown = inspectionEnabled && inspected == slot.number
                 val color = availabilityColor(slot.number in freeSlots)

@@ -18,6 +18,7 @@ import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -83,6 +84,8 @@ internal fun RoomActionButtons(profile: RoomProfile, onFavorite: () -> Unit, onT
                     if (index == 1) stateDescription = if (profile.outlets || profile.allTags.isNotEmpty()) "已有标签" else "无标签"
                     if (index == 2) stateDescription = if (profile.note.isNotBlank()) "已有备注" else "无备注"
                 }) {
+                if (!onRail && LocalDialogDesign.current != null) Box(Modifier.size(44.dp).background(
+                    MaterialTheme.colorScheme.surfaceContainerLow, androidx.compose.foundation.shape.RoundedCornerShape(9.dp)))
                 Icon(icon, description, Modifier.size(22.dp).testTag("room_action_icon_${profile.roomId}_$index")
                     .graphicsLayer {
                         // A perspective flip around the vertical axis, never a flat spin.
@@ -125,7 +128,8 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
     active: Boolean, onExpanded: (Boolean) -> Unit, onFavorite: () -> Unit, onTags: () -> Unit,
     onNote: () -> Unit, onExcluded: () -> Unit, modifier: Modifier = Modifier, inspectionKey: Any? = null,
     interactionEnabled: Boolean = active, favoriteClosing: Boolean = false,
-    onActionPending: (Boolean) -> Unit = {}, editorOpen: Boolean = false,guideAutoReopen:Boolean=false) {
+    onActionPending: (Boolean) -> Unit = {}, editorOpen: Boolean = false,guideAutoReopen:Boolean=false,
+    rowColor: Color? = null, showDivider: Boolean = true, balancedBandInsets: Boolean = false) {
     val profile = match.profile
     val swipe = remember(profile.roomId) { AnchoredDraggableState(false) }
     val density = LocalDensity.current.density
@@ -188,7 +192,8 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
     }
     val colors = MaterialTheme.colorScheme
     val noteHeight = with(LocalDensity.current) { MaterialTheme.typography.bodySmall.lineHeight.toDp() }
-    Column(modifier.fillMaxWidth().clipToBounds().background(colors.background).testTag("room_row_${profile.roomId}").semantics {
+    val paper = rowColor ?: colors.background
+    Column(modifier.fillMaxWidth().clipToBounds().background(paper).testTag("room_row_${profile.roomId}").semantics {
         stateDescription = listOfNotNull(if (profile.favorite) "已收藏" else null,
             if (profile.excluded) "已排除" else null).joinToString("，")
         if (active && interactionEnabled && !pendingAction) customActions = listOf(CustomAccessibilityAction(if (expanded) "收起教室操作" else "展开教室操作") {
@@ -196,6 +201,10 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
             latestExpanded(!expanded); true
         })
     }) {
+    // Transfer 14dp of the old trailing whitespace to the top of each band.
+    // Row height and distances between titles/period bars stay unchanged.
+    // Compared with the 24dp inset, both band edges move down by 10dp.
+    if (balancedBandInsets) Spacer(Modifier.height(14.dp))
     Box(Modifier.fillMaxWidth().heightIn(min = 58.dp).clipToBounds().guideTag("room_swipe_${profile.roomId}")
         .pointerInput(swipe, active, interactionEnabled, railWidth, density, inspectionKey, pendingAction) {
         awaitEachGesture {
@@ -280,7 +289,7 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
         }
         Box(Modifier.fillMaxWidth().absoluteOffset {
             IntOffset(if (swipe.offset.isNaN()) 0 else swipe.requireOffset().roundToInt(), 0)
-        }.background(colors.background, RectangleShape).testTag("room_face_${profile.roomId}")
+        }.background(paper, RectangleShape).testTag("room_face_${profile.roomId}")
             .then(if (expanded) Modifier.clickable(enabled = interactionEnabled && !pendingAction) {
                 wave.play(); latestExpanded(false)
             } else Modifier)) {
@@ -307,9 +316,11 @@ internal fun SwipeRoomRow(match: RoomMatch, slots: List<LessonSlot>, terms: List
         }
     }
         RoomAvailabilityStrip(profile.roomId, match.freeSlots, slots, active && interactionEnabled,
-            inspectionKey = inspectionKey, wave = wave)
-        ListDivider(Modifier.padding(horizontal = 24.dp).testTag("room_divider_${profile.roomId}"))
-        Spacer(Modifier.height(16.dp))
+            inspectionKey = inspectionKey, wave = wave, bottomPadding = if (balancedBandInsets) 18.dp else 16.dp)
+        val divider = Modifier.padding(horizontal = 24.dp).testTag("room_divider_${profile.roomId}")
+        if (showDivider) ListDivider(divider)
+        else Spacer(divider.fillMaxWidth().height(DividerDefaults.Thickness))
+        if (!balancedBandInsets) Spacer(Modifier.height(16.dp))
     }
 }
 

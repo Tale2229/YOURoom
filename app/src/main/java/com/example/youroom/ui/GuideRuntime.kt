@@ -84,7 +84,6 @@ internal class GuideRuntime(val position: MutableIntState, appearance: Appearanc
         stage==GuideStage.FILTER_TAGS && entry==0 -> "edit_tags"
         stage==GuideStage.PLANNING && entry==0 -> "settings_planning"
         stage==GuideStage.TEMPLATES && entry==0 -> "planning_templates_entry"
-        stage==GuideStage.ABOUT && entry==0 -> "settings_about"
         stage==GuideStage.TAGS && entry==0 -> "room_action_01:2-201_1"
         stage==GuideStage.NOTE && entry==0 -> "room_action_01:2-201_2"
         stage==GuideStage.MARKS && entry==0 -> "tab_settings"
@@ -98,7 +97,7 @@ internal class GuideRuntime(val position: MutableIntState, appearance: Appearanc
         stage==GuideStage.EXPECT && entry>0 -> "expected_room_dialog"
         else -> stage.target
     }
-    val window get() = if((stage in listOf(GuideStage.TAGS,GuideStage.NOTE,GuideStage.PLANNING,GuideStage.ABOUT) && entry==0) ||
+    val window get() = if((stage in listOf(GuideStage.TAGS,GuideStage.NOTE,GuideStage.PLANNING) && entry==0) ||
         (stage==GuideStage.MARKS && entry<2) || (stage==GuideStage.PERIOD && entry==0)) "root"
         else if(stage==GuideStage.SAVE_TEMPLATE && entry==0) "period"
         else if(stage==GuideStage.IMPORT && entry>0) "sheet"
@@ -169,7 +168,6 @@ internal class GuideRuntime(val position: MutableIntState, appearance: Appearanc
     fun editingFilterTags(editing:Boolean) { if(stage==GuideStage.FILTER_TAGS) entry=if(editing) 1 else 0 }
     fun enteredPlanning() { if(stage==GuideStage.PLANNING) entry=1 }
     fun enteredTemplates() { if(stage==GuideStage.TEMPLATES) entry=1 }
-    fun enteredAbout() { if(stage==GuideStage.ABOUT) entry=1 }
     fun exitedTemplates() { if(stage==GuideStage.TEMPLATES) entry=0 }
     fun pickedImportTemplate(id:String) {
         if(stage==GuideStage.IMPORT_PICK) { importTemplateId=id;select(GuideStage.REPLACE.ordinal) }
@@ -287,7 +285,6 @@ internal class GuideRuntime(val position: MutableIntState, appearance: Appearanc
             GuideStage.FILTER_TAGS -> editingFilterTags(true)
             GuideStage.PLANNING -> enteredPlanning()
             GuideStage.TEMPLATES -> enteredTemplates()
-            GuideStage.ABOUT -> enteredAbout()
             GuideStage.WHEELS -> if(entry==0) {
                 enteredPlannerPage()
             } else goal=goal.copy(start=630,end=750)

@@ -27,14 +27,15 @@ fun FilterDialog(state: YOURoomState, onDismiss: () -> Unit, onFilters: (SearchF
     }
     GuideDialog("filter",onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp), contentAlignment = Alignment.Center) {
-            Surface(Modifier.widthIn(max = 480.dp).fillMaxWidth().testTag("filter_dialog"),
-                shape = MaterialTheme.shapes.small, tonalElevation = 0.dp) {
-                Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
-                    Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("筛选教室", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                        Text(state.campus.label, Modifier.testTag("filter_campus"), style = MaterialTheme.typography.bodySmall)
+            DialogPanel(DialogDesign.B, Modifier.widthIn(max = 480.dp).fillMaxWidth().testTag("filter_dialog")) {
+                Column {
+                    DialogHeading {
+                        Text("筛选教室", Modifier.weight(1f))
+                        Text(state.campus.label, Modifier.testTag("filter_campus"), style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Column(Modifier.weight(1f, fill = false).fillMaxWidth().heightIn(max = 480.dp).guideTag("filter_choices")
+                    Column(Modifier.weight(1f, fill = false).padding(horizontal = 20.dp, vertical = 12.dp)
+                        .fillMaxWidth().heightIn(max = 480.dp).guideTag("filter_choices")
                         .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         BuildingFilterRows(state, buildings, onFilters)
@@ -42,12 +43,13 @@ fun FilterDialog(state: YOURoomState, onDismiss: () -> Unit, onFilters: (SearchF
                         TagEditor(state, onFilters, onAddTag, onRemoveTag, onTagOrder,
                             editing = editingTags, onCancelEdit = { editingTags=false;guide?.editingFilterTags(false) })
                     }
-                    ThemeDivider(Modifier.padding(top = 12.dp))
+                    DialogFooter {
                     DialogFooterActions(state.filters.badgeCount > 0, "reset_filters", "close_filters",
                         { onFilters(SearchFilters(selectedSlots = state.filters.selectedSlots, query = state.filters.query)) }, onDismiss,
                         middleTag = "edit_tags", middleDescription = if (editingTags) "结束词条编辑" else "添加和整理词条",
                         middleSelected = editingTags, onMiddle = { editingTags = !editingTags;guide?.editingFilterTags(editingTags) },
                         resetIconOffsetY = (-1).dp)
+                    }
                 }
             }
         }

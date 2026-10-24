@@ -147,7 +147,7 @@ class SettingsNavigationUiTest {
         val version=context.packageManager.getPackageInfo(context.packageName,0).versionName
         compose.onNodeWithTag("settings_about_version").assertTextEquals(version.orEmpty())
         compose.onNodeWithText("非学校官方应用").assertIsDisplayed()
-        compose.onNodeWithText("开发者  23级 软工 小嚎猪").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("settings_about_author_name").performScrollTo().assertIsDisplayed()
         assertEquals(Campus.XITUCHENG,campus)
         assertTrue(cleared.isEmpty());assertEquals(0,logouts)
     }

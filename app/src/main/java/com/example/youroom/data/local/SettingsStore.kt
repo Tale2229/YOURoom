@@ -10,10 +10,15 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.Dispatchers
 import kotlinx.serialization.json.*
 import java.io.IOException
 
 interface FilterSettings {
+    val planningHistory: Flow<List<PlanningHistoryRecord>> get() = kotlinx.coroutines.flow.flowOf(emptyList())
+    suspend fun savePlanningHistory(record: PlanningHistoryRecord, date: java.time.LocalDate) = Unit
+    suspend fun prunePlanningHistory(date: java.time.LocalDate) = Unit
     suspend fun matchesActiveAccount(account:String):Boolean? = null
     // Unavailable by default for sources with no progress storage (including previews).
     val guideHistory: Flow<GuideHistory> get() = kotlinx.coroutines.flow.flowOf(GuideHistory())
@@ -75,6 +80,21 @@ class SettingsStore internal constructor(private val store: androidx.datastore.c
     constructor(context: Context) : this(context.yourRoomSettings)
     private val values = store.data.catch { error ->
         if (error is IOException) emit(emptyPreferences()) else throw error
+    }
+    private val historyKey = stringPreferencesKey("planning.history.v1")
+    override val planningHistory = values.map { it[historyKey] }.distinctUntilChanged()
+        .map { PlanningHistoryCodec.read(it) }.flowOn(Dispatchers.Default)
+    override suspend fun savePlanningHistory(record: PlanningHistoryRecord, date: java.time.LocalDate) {
+        require(record.owner.startsWith("account:"))
+        store.edit { it[historyKey] = PlanningHistoryCodec.write(PlanningHistoryPolicy.current(
+            listOf(record) + PlanningHistoryCodec.read(it[historyKey]), date)) }
+    }
+    override suspend fun prunePlanningHistory(date: java.time.LocalDate) {
+        store.edit {
+            val records = PlanningHistoryCodec.read(it[historyKey])
+            val current = PlanningHistoryPolicy.current(records, date)
+            if (records != current) it[historyKey] = PlanningHistoryCodec.write(current)
+        }
     }
     override val guideHistory = values.map(GuidePreferenceKeys::read).distinctUntilChanged()
     override suspend fun matchesActiveAccount(account:String):Boolean? = GuidePreferenceKeys.matchesActiveAccount(values.first(),account)

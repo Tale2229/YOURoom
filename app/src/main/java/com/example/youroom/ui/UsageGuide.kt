@@ -1,6 +1,5 @@
 package com.example.youroom.ui
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.tween
@@ -142,16 +141,7 @@ internal class GuideModal(val window:String,val stage:GuideStage,
 @Composable internal fun GuideAlertDialog(onDismissRequest: () -> Unit, confirmButton: @Composable () -> Unit,
     dismissButton: (@Composable () -> Unit)? = null, title: (@Composable () -> Unit)? = null,
     text: (@Composable () -> Unit)? = null) {
-    if(LocalUsageGuide.current==null) AlertDialog(onDismissRequest,confirmButton=confirmButton,
-        dismissButton=dismissButton,title=title,text=text)
-    else GuideDialog("alert",onDismissRequest,DialogProperties(usePlatformDefaultWidth=false)) {
-        Surface(Modifier.padding(24.dp).widthIn(max=480.dp).fillMaxWidth(),shape=MaterialTheme.shapes.small) {
-            Column(Modifier.padding(24.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
-                title?.invoke();text?.invoke()
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) { dismissButton?.invoke();confirmButton() }
-            }
-        }
-    }
+    DesignedAlertDialog(onDismissRequest,confirmButton,dismissButton,title,text,guideHosted=true)
 }
 
 @Composable internal fun UsageGuideExperience(request: GuideRequest, original: YOURoomState,
@@ -182,8 +172,7 @@ internal class GuideModal(val window:String,val stage:GuideStage,
         usePlatformDefaultWidth=false,decorFitsSystemWindows=false)) {
         YOURoomTheme(campus=practice.campus,appearance=practice.appearance) {
             CompositionLocalProvider(LocalUsageGuide provides runtime) {
-                GuideWindowHost("root",Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing),
-                    directoryMessage=if(request.resume) "可以继续上次的练习，也可以选择章节重新开始" else "选择一个章节，或从头开始") {
+                GuideWindowHost("root",Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).testTag("guide_workspace")) {
                         YOURoomApp(runtime.model,enableGuide=false)
                     }
@@ -199,7 +188,6 @@ private fun GuideRuntime.preparationFrame()=GuidePreparationFrame(stage,prepared
     layoutReady,goal,spotlightTargets.map { anchors[it] })
 
 @Composable private fun GuideWindowHost(window: String, modifier: Modifier=Modifier.fillMaxSize(),
-    directoryMessage:String,
     content: @Composable BoxScope.() -> Unit) {
     val guide=LocalUsageGuide.current ?: return
     CompositionLocalProvider(LocalGuideWindow provides window) {
@@ -209,14 +197,7 @@ private fun GuideRuntime.preparationFrame()=GuidePreparationFrame(stage,prepared
                 CompositionLocalProvider(modal.locals.value) {
                     CompositionLocalProvider(LocalGuideWindow provides modal.window) {
                         BoxWithConstraints(Modifier.fillMaxSize().testTag("guide_modal_${modal.window}")) {
-                            if(guide.stage==GuideStage.ABOUT && guide.entry>0) {
-                                // Reserve the measured guide panel rather than pushing it
-                                // into a tiny remainder under a centered 560dp sheet.
-                                val reserve=with(LocalDensity.current) { guide.panelHeightPx.toDp() }+24.dp
-                                val available=(maxHeight-reserve).coerceAtLeast(0.dp)
-                                Box(Modifier.fillMaxWidth().height(available).padding(top=8.dp),
-                                    contentAlignment=Alignment.BottomCenter) { modal.content.value() }
-                            } else Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) { modal.content.value() }
+                            Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center) { modal.content.value() }
                         }
                     }
                 }
@@ -225,22 +206,10 @@ private fun GuideRuntime.preparationFrame()=GuidePreparationFrame(stage,prepared
             // platform window animations or dim-layer hand-offs during setup.
             GuideLayer(guide,guide.presentedWindow)
             if(guide.menu) {
-                BackHandler { guide.menu=false }
-                Surface(Modifier.align(Alignment.Center).padding(24.dp).widthIn(max=480.dp).fillMaxWidth(),
-                    shape=MaterialTheme.shapes.extraLarge,color=MaterialTheme.colorScheme.surfaceContainerHigh) {
-                    Column(Modifier.padding(24.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                        Text("使用指引",style=MaterialTheme.typography.headlineSmall)
-                        Text(directoryMessage,style=MaterialTheme.typography.bodySmall)
-                        GuideChapters.forEachIndexed { chapter,label -> TextButton({
-                            guide.select(GuideStage.entries.indexOfFirst { it.chapter==chapter })
-                            guide.menu=false
-                        },Modifier.fillMaxWidth().testTag("guide_chapter_$chapter")) { Text(label) } }
-                        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End) {
-                            TextButton({guide.onFinish(GuideOutcome.SKIPPED)},Modifier.testTag("guide_menu_skip")) { Text("跳过全部") }
-                            TextButton({guide.menu=false},Modifier.testTag("guide_continue")) { Text("继续指引") }
-                        }
-                    }
-                }
+                val practice by guide.model.state.collectAsState()
+                GuideDirectory(guide.position.intValue,practice.campus,
+                    onClose={guide.menu=false},onSkip={guide.onFinish(GuideOutcome.SKIPPED)},
+                    onEnter={guide.select(it);guide.menu=false})
             }
         }
     }
@@ -314,8 +283,7 @@ internal fun guideMultipleBlockers(width:Float,height:Float,holes:List<Rect>):Li
         // Every lesson stays bottom-anchored, including in native dialogs. Fit
         // below the spotlight where possible; full-height targets must not make
         // the scrolling guide disappear or remove access to its controls.
-        val panelMaximum=if(guide.stage==GuideStage.ABOUT && guide.entry>0) maxHeight*.46f
-            else if(aboveButton && placementHole!=null)
+        val panelMaximum=if(aboveButton && placementHole!=null)
             minOf(maxHeight*.46f,(with(density) { placementHole.top.toDp() }-24.dp).coerceAtLeast(128.dp))
             else if(!navigationTarget && holes.isNotEmpty())
             minOf(maxHeight*.46f,(with(density) { (height-holes.maxOf { it.bottom }).toDp() }-bottomPadding-8.dp).coerceAtLeast(128.dp))
@@ -376,10 +344,10 @@ internal fun guideMultipleBlockers(width:Float,height:Float,holes:List<Rect>):Li
 }
 
 /** Long shaft, compact 4dp arrowhead; retain the surrounding 48dp touch target. */
-@Composable private fun GuideArrow(forward:Boolean,description:String) {
-    val color=LocalContentColor.current
+@Composable internal fun GuideArrow(forward:Boolean,description:String?,modifier:Modifier=Modifier,
+    color:Color=LocalContentColor.current) {
     val pointsRight=forward==(LocalLayoutDirection.current==LayoutDirection.Ltr)
-    Canvas(Modifier.size(24.dp).semantics { contentDescription=description }) {
+    Canvas(modifier.size(24.dp).then(if(description!=null) Modifier.semantics { contentDescription=description } else Modifier)) {
         fun x(value:Float)=if(pointsRight) value.dp.toPx() else size.width-value.dp.toPx()
         val middle=size.height/2
         drawLine(color,Offset(x(3f),middle),Offset(x(21f),middle),2.dp.toPx(),StrokeCap.Round)

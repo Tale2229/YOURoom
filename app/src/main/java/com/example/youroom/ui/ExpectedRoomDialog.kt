@@ -77,15 +77,15 @@ internal fun ExpectedRoomDialog(state: YOURoomState, selected: Set<String>,
     val byId = remember(rooms) { rooms.associateBy { it.id } }
     GuideDialog("expected",onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp), contentAlignment = Alignment.Center) {
-            Surface(Modifier.widthIn(max = 480.dp).fillMaxWidth().guideTag("expected_room_dialog"),
-                shape = MaterialTheme.shapes.small, tonalElevation = 0.dp) {
-                Column(Modifier.padding(horizontal = 12.dp, vertical = 12.dp)
+            DialogPanel(DialogDesign.B, Modifier.widthIn(max = 480.dp).fillMaxWidth().guideTag("expected_room_dialog")) {
+                Column(Modifier
                     .verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text("期望教室", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                        Text(state.campus.label, style = MaterialTheme.typography.bodySmall)
+                    DialogHeading(12.dp) {
+                        Text("期望教室", Modifier.weight(1f))
+                        Text(state.campus.label, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             ExpectedColumnTitle("教学楼",Modifier.weight(ColumnWeight))
                             ExpectedColumnTitle("教室",Modifier.weight(ColumnWeight))
@@ -125,7 +125,7 @@ internal fun ExpectedRoomDialog(state: YOURoomState, selected: Set<String>,
                             }
                         }
                     }
-                    ThemeDivider()
+                    DialogFooter(12.dp) {
                     Row(Modifier.fillMaxWidth().guideTag("expected_actions"), horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically) {
                         ExpectedDialogAction("清空期望教室",Modifier.weight(ColumnWeight).testTag("expected_clear"),
@@ -143,6 +143,7 @@ internal fun ExpectedRoomDialog(state: YOURoomState, selected: Set<String>,
                         DialogExitAction(campusSelection.toSet()!=initialSelection,onDismiss,
                             Modifier.weight(ColumnWeight).testTag("expected_close"),
                             enabled=LocalUsageGuide.current?.stage!=GuideStage.EXPECT)
+                    }
                     }
                 }
             }

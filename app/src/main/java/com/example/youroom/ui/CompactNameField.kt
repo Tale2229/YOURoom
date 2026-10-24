@@ -29,7 +29,7 @@ internal fun CompactNameField(value: String,onValue: (String)->Unit,label: Strin
                 isError=isError,label={ Text(label,labelModifier,style=MaterialTheme.typography.bodySmall) },
                 contentPadding=PaddingValues(horizontal=12.dp,vertical=4.dp),container={
                     OutlinedTextFieldDefaults.Container(true,isError,interaction,
-                        colors=OutlinedTextFieldDefaults.colors(),shape=MaterialTheme.shapes.small)
+                        colors=OutlinedTextFieldDefaults.colors(),shape=dialogFieldShape())
                 })
         })
 }

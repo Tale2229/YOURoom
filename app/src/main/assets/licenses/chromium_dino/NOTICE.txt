@@ -1,0 +1,33 @@
+Chromium Dino / T-Rex Runner
+Copyright 2015, 2024, 2025 The Chromium Authors
+BSD-style license: see LICENSE.txt in this directory.
+
+Source: https://chromium.googlesource.com/chromium/src/
+Pinned revision: 2e8c19f4f602c8756a42d6d5a5c5c37a69facfab (2026-10-24)
+Sprite blob: 2270e89ae5e58e45305d6a8ac47df62d69fe0d57
+
+Imported unmodified (base64-encoded for lossless source storage):
+components/neterror/resources/images/default_200_percent/offline/200-offline-sprite.png
+
+Reference / adapted definitions:
+components/neterror/resources/dino_game/offline_sprite_definitions.ts
+components/neterror/resources/dino_game/trex.ts
+components/neterror/resources/dino_game/distance_meter.ts
+components/neterror/resources/dino_game/game_over_panel.ts
+components/neterror/resources/dino_game/horizon_line.ts
+components/neterror/resources/dino_game/cloud.ts
+components/neterror/resources/dino_game/obstacle.ts
+
+YOURoom modifications (2026-10-24):
+- Native Kotlin/Compose rendering instead of Chromium's TypeScript browser runtime.
+- Local viewport scaling, pause/resume and time-based simulation integration.
+- Apply theme colors to the original gray/white sprite palette while rendering.
+- Use upstream running/crashed sprites, obstacle collision definitions, pixel score
+  glyphs, GAME OVER/restart sprites, cloud and two horizon strips.
+- Adapt progressive speed and obstacle gaps for the mobile planning panel.
+- Highest completed score is session-only; no persistent score, growth or network.
+- No game sound, browser UI, Google logo display, automatic theme/night switch,
+  online leaderboard, or claim of Google endorsement.
+
+Game resources are bundled offline. Calculation completion remains a separate,
+non-interrupting notification. No Chromium JavaScript/WebView runtime is embedded.

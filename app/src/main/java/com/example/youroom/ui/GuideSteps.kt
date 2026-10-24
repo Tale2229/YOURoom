@@ -42,8 +42,8 @@ internal enum class GuideStage(val chapter: Int, val page: Int, val target: Stri
     NUMBERS(3,2,"settings_strip_numbers", "节次编号", "开启后时段条显示节次数字，关闭则保持简洁"),
     PLANNING(3,2,"planning_default_direction_group", "规划偏好", "点击管理规划偏好，默认偏好影响优先展示的方案导向", "sheet"),
     TEMPLATES(3,2,"template_list", "管理常用时段", "点击管理常用时段组合", "sheet"),
-    ABOUT(3,2,"settings_about_dialog", "关于与帮助", "这里有代码库、问题反馈链接和相关说明", "sheet"),
     REPLAY(3,2,"settings_usage_guide", "随时重新查看", "以后在设置页点“使用指引”，可以重新查看或直接选择章节"),
+    ABOUT(3,2,"settings_about", "关于与帮助", "这里有代码库、问题反馈链接和相关说明"),
     LOGOUT(3,2,"settings_logout", "退出登录", "退出登录仍保留个人使用数据"),
     CLEAR_CACHE(3,2,"settings_clear_cache", "清除全部本地数据", "清除账号密码以及全部个人数据，需要使用登录的账号密码进行校验，此操作不可恢复，请谨慎选择"),
     FINISH(3,2,"", "可以开始使用了", "感谢使用本应用，希望能够帮助到您，祝您学习生活愉快顺利！");

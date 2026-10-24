@@ -102,10 +102,10 @@ internal fun TimeTemplateManager(campus: Campus, preferences: CampusPlanningPref
     }
     deleting?.takeUnless { readOnly }?.let { template -> GuideAlertDialog(onDismissRequest = { deleting = null },
         title = { Text("删除这个组合？") }, text = { Text(template.name) },
-        confirmButton = { TextButton({
+        confirmButton = { DialogConfirmButton({
             onChange(preferences.copy(templates = preferences.templates.filterNot { it.id == template.id })); deleting = null
-        }, Modifier.testTag("template_delete_confirm")) { Text("删除") } },
-        dismissButton = { TextButton({ deleting = null }) { Text("取消") } }) }
+        }, Modifier.testTag("template_delete_confirm"), destructive = true) { Text("删除") } },
+        dismissButton = { DialogDismissButton({ deleting = null }) { Text("取消") } }) }
 }
 
 @Composable
@@ -295,7 +295,7 @@ internal fun TimeTemplateImportDialog(campus: Campus, templates: List<TimeTempla
     }
     replacing?.takeIf { guide==null || guide.stage==GuideStage.REPLACE }?.let { template -> GuideAlertDialog(onDismissRequest = { replacing = null },
         title = { Text("替换当前时段？") }, text = { Text("仅替换已添加的时段，保留期望教室与已有方案") },
-        confirmButton = { TextButton({ replacing = null;if(apply(template)) guide?.importedTemplate() }, enabled = enabled,
+        confirmButton = { DialogConfirmButton({ replacing = null;if(apply(template)) guide?.importedTemplate() }, enabled = enabled,
             modifier = Modifier.guideTag("template_replace_confirm")) { Text("替换") } },
-        dismissButton = { TextButton({ replacing = null }) { Text("取消") } }) }
+        dismissButton = { DialogDismissButton({ replacing = null }) { Text("取消") } }) }
 }

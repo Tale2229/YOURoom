@@ -76,7 +76,7 @@ internal fun PlanningWorkspace(execution: PlanningExecution?, campus: Campus, in
     val arrowFlip=animateFloatAsState(if(expanded) -1f else 1f,
         tween(180,easing=FastOutSlowInEasing),label="alternative disclosure flip")
     LaunchedEffect(campus,execution?.id,guide?.preparedStage) { expanded=guide?.stage==GuideStage.ALTERNATIVES }
-    BackHandler(available && expanded) { expanded=false }
+    BackHandler(interactive && available && expanded) { expanded=false }
     Column(Modifier.fillMaxSize().testTag("planner_workspace")) {
             if (available) {
                 Spacer(Modifier.fillMaxWidth().height(12.dp).testTag("planner_heading_spacing"))
@@ -91,7 +91,7 @@ internal fun PlanningWorkspace(execution: PlanningExecution?, campus: Campus, in
                         stateDescription=if (expanded) "已展开" else "已收起"
                     },contentAlignment=Alignment.Center) {
                     Box(Modifier.matchParentSize().padding(horizontal=16.dp)
-                        .background(roles.planningHeading).testTag("planner_alternatives_face"))
+                        .background(roles.planningHeading, RoundedCornerShape(4.dp)).testTag("planner_alternatives_face"))
                     Row(Modifier.fillMaxWidth().heightIn(min=48.dp).padding(horizontal=24.dp),
                         verticalAlignment=Alignment.CenterVertically) {
                         Box(Modifier.width(3.dp).height(22.dp).background(roles.planningHeadingKey)

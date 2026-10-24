@@ -9,6 +9,7 @@ import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
@@ -96,6 +97,7 @@ internal class SlotTimeTooltipPositionProvider(private val gap: Int, private val
 internal fun SlotTimeTooltip(slot: LessonSlot, tagPrefix: String = "slot_time",
     positionOverride: PopupPositionProvider? = null, smoothPosition: Boolean = false, visible: Boolean = true) {
     val density = LocalDensity.current
+    val tooltipRule = MaterialTheme.colorScheme.outline
     val position = remember(density) {
         with(density) { SlotTimeTooltipPositionProvider(gap = 28.dp.roundToPx(), margin = 8.dp.roundToPx()) }
     }
@@ -111,10 +113,14 @@ internal fun SlotTimeTooltip(slot: LessonSlot, tagPrefix: String = "slot_time",
         Surface(Modifier.graphicsLayer { alpha = if (visible) 1f else 0f }
             .then(if (visible) Modifier.testTag("${tagPrefix}_tooltip").semantics { liveRegion = LiveRegionMode.Polite }
                 else Modifier.clearAndSetSemantics {}),
-            shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.background,
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.background,
             contentColor = MaterialTheme.colorScheme.primary, tonalElevation = 0.dp, shadowElevation = 0.dp) {
             Text("${slot.number} · ${slot.timeLabel}",
-                Modifier.padding(horizontal = 12.dp, vertical = 6.dp).testTag("${tagPrefix}_label_${slot.number}"),
+                Modifier.drawBehind {
+                    val stroke = 2.dp.toPx()
+                    drawLine(tooltipRule, androidx.compose.ui.geometry.Offset(0f,size.height-stroke/2),
+                        androidx.compose.ui.geometry.Offset(size.width,size.height-stroke/2),stroke)
+                }.padding(horizontal = 12.dp, vertical = 6.dp).testTag("${tagPrefix}_label_${slot.number}"),
                 style = MaterialTheme.typography.bodyMedium, maxLines = 1, softWrap = false)
         }
     }

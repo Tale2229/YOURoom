@@ -6,7 +6,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.background
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -104,12 +105,13 @@ private fun ClassroomPage(state: YOURoomState, listState: LazyListState, active:
         guideRailPrepared=true
     }
     if (showFilters && active) FilterDialog(state, { showFilters = false }, onFilters, onAddTag, onRemoveTag, onTagOrder)
-    LazyColumn(Modifier.fillMaxSize().testTag("room_list"), state = listState,
+    val colors = MaterialTheme.colorScheme
+    LazyColumn(Modifier.fillMaxSize().background(colors.surface).testTag("room_list"), state = listState,
         userScrollEnabled = active, contentPadding = PaddingValues(bottom = 24.dp)) {
         if (state.demo) item { StatusNotice("演示数据 · 空闲安排为虚构，个人标记仅本次有效。") }
         if (state.stale) item { StatusNotice("缓存已跨日，刷新后才能筛选今天的教室。", isError = true) }
         item {
-            BoxWithConstraints(Modifier.fillMaxWidth()) {
+            BoxWithConstraints(Modifier.fillMaxWidth().background(colors.surface).testTag("room_query_surface")) {
                 // Keep six columns and 48dp targets even on a 320dp-wide phone.
                 val gutter = ((maxWidth - 308.dp) / 2).coerceIn(0.dp, 24.dp)
                 Box(Modifier.padding(horizontal = gutter, vertical = 14.dp)) {
@@ -122,8 +124,12 @@ private fun ClassroomPage(state: YOURoomState, listState: LazyListState, active:
             }
         }
         item {
-            ListDivider(Modifier.padding(horizontal = 24.dp))
-            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
+            // Retain the former rule's height, but let two paper tones separate sections.
+            Spacer(Modifier.fillMaxWidth().height(DividerDefaults.Thickness).background(colors.surfaceContainerLow))
+            Row(Modifier.fillMaxWidth().background(colors.surfaceContainerLow).testTag("room_results_heading")
+                // Start the bands 14dp earlier, compensating their new 14dp top
+                // inset so room titles, markers and time bars do not move down.
+                .padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 10.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("可选教室", style = MaterialTheme.typography.titleMedium)
@@ -151,7 +157,7 @@ private fun ClassroomPage(state: YOURoomState, listState: LazyListState, active:
                     shape = MaterialTheme.shapes.small, enabled = active) { Text("清除额外筛选") }
             }
         }
-        items(displayedRooms, key = { it.classroom.id }) { room ->
+        itemsIndexed(displayedRooms, key = { _, room -> room.classroom.id }) { index, room ->
             val id = room.classroom.id
             val current = room.copy(profile = state.profiles[id] ?: room.classroom.emptyProfile())
             val isMovingFavorite = favorites.roomId == id
@@ -180,7 +186,9 @@ private fun ClassroomPage(state: YOURoomState, listState: LazyListState, active:
                 onActionPending = { pending ->
                     if (pending) pendingActionRoom = id else if (pendingActionRoom == id) pendingActionRoom = null
                 }, editorOpen = state.selectedRoomId == id,
-                guideAutoReopen = guide?.stage in listOf(GuideStage.FAVORITE,GuideStage.TAGS,GuideStage.NOTE,GuideStage.EXCLUDE) && id=="01:2-201")
+                guideAutoReopen = guide?.stage in listOf(GuideStage.FAVORITE,GuideStage.TAGS,GuideStage.NOTE,GuideStage.EXCLUDE) && id=="01:2-201",
+                rowColor = mainPageRowColor(colors, tinted = index % 2 == 1), showDivider = false,
+                balancedBandInsets = true)
         }
     }
 }

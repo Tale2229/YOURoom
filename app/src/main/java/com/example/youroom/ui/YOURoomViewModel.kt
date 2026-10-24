@@ -100,6 +100,14 @@ class YOURoomViewModel(
     val state: StateFlow<YOURoomState> = mutableState.asStateFlow()
     val planning = if (trainingCalculation == null) PlanningSession(viewModelScope,planningDispatcher)
         else PlanningSession(viewModelScope,planningDispatcher,trainingCalculation)
+    private val mutablePlanningHistory = MutableStateFlow<List<PlanningHistoryRecord>>(emptyList())
+    val planningHistory = mutablePlanningHistory.asStateFlow()
+    private var storedPlanningHistory = emptyList<PlanningHistoryRecord>()
+    private val pendingPlanningHistory = linkedMapOf<String, PlanningHistoryRecord>()
+    private var temporaryPlanningHistory = emptyList<PlanningHistoryRecord>()
+    private val historyWrites = Channel<PlanningHistoryRecord?>(Channel.UNLIMITED)
+    private val mutableHistoryNotice = MutableStateFlow<String?>(null)
+    val historyNotice = mutableHistoryNotice.asStateFlow()
     private var guideHistory = GuideHistory()
     private var guideAccount: String? = null
     private var guideSerial = 0L
@@ -198,6 +206,42 @@ class YOURoomViewModel(
         updateToday()
         planning.generate(state.value,draft)
     }
+    private fun publishPlanningHistory() {
+        val current = state.value
+        val owner = if (current.demo) "demo" else if (training) "guide"
+            else if (current.loggedIn) guideAccount else null
+        val source = if (current.demo || training) temporaryPlanningHistory else pendingPlanningHistory.values.toList() + storedPlanningHistory
+        mutablePlanningHistory.value = if (owner == null) emptyList() else
+            PlanningHistoryPolicy.current(source, today()).filter { it.owner == owner }
+    }
+
+    private fun rememberPlanning(execution: PlanningExecution) {
+        updateToday()
+        if (execution.input.today != today()) return
+        val current = state.value
+        val temporary = current.demo || training
+        val owner = if (current.demo) "demo" else if (training) "guide"
+            else if (current.loggedIn) guideAccount else null
+        if (owner == null || (!temporary && !owner.startsWith("account:"))) {
+            mutableHistoryNotice.value = "重新登录后可保存规划历史"
+            return
+        }
+        val result = execution.result ?: return
+        if (result.problem != null) return
+        val usedRooms = result.options.flatMap { it.plan.steps }.flatMap { step -> when (step) {
+            is PlanningStep.Study -> listOf(step.classroom.id)
+            is PlanningStep.Transfer -> listOf(step.from.id, step.to.id)
+            is PlanningStep.Break -> emptyList()
+        } }.toSet()
+        val snapshot = execution.input.snapshot.copy(slots = execution.input.snapshot.slots.map { slot ->
+            slot.copy(classrooms = slot.classrooms.filter { it.id in usedRooms })
+        })
+        val record = PlanningHistoryRecord(java.util.UUID.randomUUID().toString(), owner, clock.instant(), today(),
+            execution.input.campus, execution.input.goal, snapshot, result, execution.selectedOption, execution.defaultDirection)
+        if (temporary) temporaryPlanningHistory = PlanningHistoryPolicy.current(listOf(record) + temporaryPlanningHistory, today())
+        else { pendingPlanningHistory[record.id] = record; historyWrites.trySend(record) }
+        publishPlanningHistory()
+    }
     private var realWorkspaces = Campus.entries.associateWith { CampusWorkspace() }
     private var demoWorkspaces = emptyMap<Campus, CampusWorkspace>()
     private var storedProfiles: Map<String, RoomProfile> = emptyMap()
@@ -274,9 +318,31 @@ class YOURoomViewModel(
     }
 
     init {
+        planning.onCompleted = ::rememberPlanning
+        viewModelScope.launch {
+            settings.planningHistory.catch { mutableHistoryNotice.value = "无法读取已保存记录"; emit(emptyList()) }.collect { records ->
+                storedPlanningHistory = records
+                val savedIds = records.map { it.id }.toSet()
+                pendingPlanningHistory.keys.removeAll(savedIds)
+                publishPlanningHistory()
+            }
+        }
+        viewModelScope.launch {
+            for (record in historyWrites) try {
+                kotlinx.coroutines.withContext(Dispatchers.IO) {
+                    if (record == null) settings.prunePlanningHistory(today())
+                    else settings.savePlanningHistory(record, today())
+                }
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                mutableHistoryNotice.value = "部分记录仅在本次打开期间保留"
+            }
+        }
+        if (!training) historyWrites.trySend(null)
         viewModelScope.launch {
             settings.guideHistory.catch { emit(GuideHistory()) }.collect { value ->
                 guideHistory = value.current()
+                publishPlanningHistory()
                 pendingGuides.entries.removeAll { (id, record) -> guideHistory.records[id] == record }
                 offerGuide()
             }
@@ -408,8 +474,11 @@ class YOURoomViewModel(
                 mutableState.update { it.copy(initializing = false, loggedIn = authenticated, rememberedAccount = remembered,
                     rememberedLogin = rememberedLogin,
                     cachedCampuses = realWorkspaces.filterValues { workspace -> workspace.snapshot != null }.keys) }
-                if (authenticated && guideHistory.activeAccount == null && remembered != null)
-                    guideAccount = runCatching { settings.guideAccountIdentity(remembered) }.getOrNull()
+                if (authenticated) {
+                    val owner = repository.currentAccount() ?: remembered
+                    if (owner != null) guideAccount = runCatching { settings.guideAccountIdentity(owner) }.getOrNull()
+                }
+                publishPlanningHistory()
                 offerGuide()
                 if (authenticated) refresh()
             } catch (error: Exception) {
@@ -419,7 +488,8 @@ class YOURoomViewModel(
         }
         viewModelScope.launch {
             while (true) {
-                delay(30_000)
+                val midnight = today().plusDays(1).atStartOfDay(SchoolZone).toInstant()
+                delay(minOf(30_000L, Duration.between(clock.instant(), midnight).toMillis().coerceAtLeast(1L)))
                 updateToday()
             }
         }
@@ -443,6 +513,7 @@ class YOURoomViewModel(
                 planning.clear()
                 mutableState.update { it.copy(loggedIn = true, loggingIn = false, viewingCache = false,
                     rememberedAccount = account.trim().takeIf { rememberPassword }) }
+                publishPlanningHistory()
                 offerGuide()
                 refresh()
             } catch (error: Exception) {
@@ -479,6 +550,7 @@ class YOURoomViewModel(
                         it.copy(loggedIn = false, viewingCache = false, selectedRoomId = null,
                             rememberedAccount = remembered?.account, rememberedLogin = remembered)
                     }
+                    publishPlanningHistory()
                 }
             }
         }
@@ -494,6 +566,7 @@ class YOURoomViewModel(
         if (state.value.initializing || state.value.loggingIn || state.value.demo) return
         cancelCacheClear()
         planning.clear()
+        temporaryPlanningHistory = emptyList()
         cancelRefresh()
         demoFilters = SearchFilters(setOf(1, 2))
         demoBuildings = Campus.entries.associateWith { emptySet() }
@@ -504,6 +577,7 @@ class YOURoomViewModel(
         mutableState.update { it.copy(demo = true, loggedIn = false, viewingCache = false, rememberedLogin = null,
             profiles = emptyMap(), tagCatalog = TagCatalog(), planningPreferences = DemoData.planningPreferences()) }
         restoreWorkspace(state.value.appearance.defaultCampus)
+        publishPlanningHistory()
         offerGuide()
     }
 
@@ -513,6 +587,7 @@ class YOURoomViewModel(
             ?: Campus.entries.firstOrNull { realWorkspaces.getValue(it).snapshot != null } ?: return
         restoreWorkspace(campus)
         mutableState.update { it.copy(viewingCache = true, fromCache = true, error = null) }
+        publishPlanningHistory()
     }
 
     fun openLogin() {
@@ -520,6 +595,7 @@ class YOURoomViewModel(
         loginGeneration++
         loginJob?.cancel()
         planning.clear()
+        temporaryPlanningHistory = emptyList()
         cancelRefresh()
         demoWorkspaces = emptyMap()
         mutableState.update { it.copy(demo = false, loggedIn = false, loggingIn = false, viewingCache = false,
@@ -530,6 +606,7 @@ class YOURoomViewModel(
             planningPreferences = pendingPlanning ?: persistedPlanning) }
         restoreWorkspace(state.value.appearance.defaultCampus)
         mutableState.update { it.copy(error = null) }
+        publishPlanningHistory()
     }
 
     fun setCampus(campus: Campus) {
@@ -725,6 +802,10 @@ class YOURoomViewModel(
         val date = today()
         if (state.value.today == date) return
         mutableState.update { it.copy(today = date) }
+        temporaryPlanningHistory = PlanningHistoryPolicy.current(temporaryPlanningHistory, date)
+        pendingPlanningHistory.entries.removeAll { it.value.date != date }
+        publishPlanningHistory()
+        if (!training) historyWrites.trySend(null)
         if (state.value.demo) {
             demoWorkspaces = demoWorkspaces.mapValues { (campus, workspace) ->
                 withSnapshot(workspace, DemoData.snapshot(campus, clock), false)

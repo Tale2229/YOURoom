@@ -1,6 +1,8 @@
 package com.example.youroom.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -74,7 +76,6 @@ private fun SettingsContent(state: YOURoomState, onRoom: (String?) -> Unit,
             GuideStage.MARKS -> if(guide.entry==2) "marks" else null
             GuideStage.PLANNING -> if(guide.entry>0) "planning" else null
             GuideStage.TEMPLATES -> if(guide.entry>0) "templates" else "planning"
-            GuideStage.ABOUT -> if(guide.entry>0) "about" else null
             else -> null
         }
         confirmExit=false
@@ -96,39 +97,61 @@ private fun SettingsContent(state: YOURoomState, onRoom: (String?) -> Unit,
     val profiles = remember(state.campusProfiles, state.tagOrder) { state.campusProfiles.filter {
         it.favorite || it.excluded || state.tagOrder.any(it::hasTerm) || it.note.isNotBlank()
     }.sortedWith(compareByDescending<RoomProfile> { it.favorite }.thenBy { it.name }) }
+    // Measure existing items rather than changing their 52dp rows to fit a mockup.
+    // Remember every height even after lazy disposal, so scrolling cannot move the fold.
+    val sectionHeights = remember(state.campus, state.demo, density) { mutableStateMapOf<String, Int>() }
+    val sectionKeys = listOf("theme", "dark", "appearance", "marks", "planning", "guide", "about") +
+        if (state.demo) listOf("demo") else emptyList()
+    fun Modifier.measureSection(key: String) = onSizeChanged { sectionHeights[key] = it.height }
+    val leadingInset = if (fixedPosition) 0.dp else 20.dp
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    val viewportPx = constraints.maxHeight
     LazyColumn(Modifier.fillMaxSize().testTag("settings_list").onSizeChanged { listHeightPx=it.height }, state = listState,
         userScrollEnabled = interactive && !fixedPosition,
         // Leave enough trailing space to keep item 2 at the same origin even
         // after collapsing options. Otherwise LazyColumn clamps its scroll range
         // and shifts the whole page down. This applies only to these two lessons.
-        contentPadding = PaddingValues(top=if(fixedPosition) 0.dp else 20.dp,
+        contentPadding = PaddingValues(top=leadingInset,
             bottom=if(fixedPosition) with(density) { listHeightPx.toDp() } else 20.dp)) {
-        item { ThemeImpressionPicker(state.campus,
-            (LocalThemePreview.current?.appearance ?: state.appearance).tone(state.campus), interactive, onTone) }
-        if (state.demo) item { Text("演示模式", Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp),
-            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        item { DarkModeSetting(state.appearance.isDark(isSystemInDarkTheme()), interactive, onDarkMode) }
-        item { AppearanceSettingChoices(state, interactive, onPeriodStrip, onDefaultCampus) }
-        item { SettingsEntry("教室标记", Icons.Outlined.StarBorder, "settings_room_marks", interactive,
-            value = profiles.size.toString()) { guide?.enteredMarks();sheet = "marks" } }
-        item { SettingsEntry("规划偏好", Icons.Outlined.Tune, "settings_planning", interactive) { guide?.enteredPlanning();sheet = "planning" } }
-        item { SettingsEntry("使用指引", Icons.AutoMirrored.Outlined.HelpOutline, "settings_usage_guide", interactive, onClick=onUsageGuide) }
-        item { SettingsEntry("关于", Icons.Outlined.Info, "settings_about", interactive) { guide?.enteredAbout();sheet = "about" } }
+        item { Box(Modifier.fillMaxWidth().measureSection("theme")) { ThemeImpressionPicker(state.campus,
+            (LocalThemePreview.current?.appearance ?: state.appearance).tone(state.campus), interactive, onTone) } }
+        if (state.demo) item { Box(Modifier.fillMaxWidth().measureSection("demo")) {
+            Text("演示模式", Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp),
+                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
+        item { Box(Modifier.fillMaxWidth().measureSection("dark")) {
+            DarkModeSetting(state.appearance.isDark(isSystemInDarkTheme()), interactive, onDarkMode) } }
+        item { Box(Modifier.fillMaxWidth().measureSection("appearance")) {
+            AppearanceSettingChoices(state, interactive, onPeriodStrip, onDefaultCampus) } }
+        item { Box(Modifier.fillMaxWidth().measureSection("marks")) {
+            SettingsEntry("教室标记", Icons.Outlined.StarBorder, "settings_room_marks", interactive,
+                value = profiles.size.toString()) { guide?.enteredMarks();sheet = "marks" } } }
+        item { Box(Modifier.fillMaxWidth().measureSection("planning")) {
+            SettingsEntry("规划偏好", Icons.Outlined.Tune, "settings_planning", interactive) { guide?.enteredPlanning();sheet = "planning" } } }
+        item { Box(Modifier.fillMaxWidth().measureSection("guide")) {
+            SettingsEntry("使用指引", Icons.AutoMirrored.Outlined.HelpOutline, "settings_usage_guide", interactive, onClick=onUsageGuide) } }
+        item { Box(Modifier.fillMaxWidth().measureSection("about")) {
+            SettingsEntry("关于", Icons.Outlined.Info, "settings_about", interactive && guide?.stage!=GuideStage.ABOUT) { sheet = "about" } } }
         item {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 10.dp),
-                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                ListDivider(Modifier.testTag("settings_footer_divider"))
-                TextButton(onClick={if(guide==null) onClearCache()},enabled=interactive,
-                    modifier=Modifier.heightIn(min=48.dp).guideTag("settings_clear_cache"),
-                    colors=ButtonDefaults.textButtonColors(contentColor=MaterialTheme.colorScheme.error)) { Text("清除缓存") }
-                TextButton(onClick = { confirmExit = true }, enabled = interactive && guide?.stage!=GuideStage.LOGOUT,
-                    modifier = Modifier.heightIn(min = 48.dp).guideTag("settings_logout")) {
-                    Text(if (state.demo) "结束演示" else if (state.viewingCache) "返回登录" else "退出登录")
+            Column(Modifier.fillMaxWidth()) {
+                // Guide positioning already scrolls directly to this item. Do not put
+                // its read-only danger lessons behind an extra screen of empty space.
+                if (guide == null) {
+                    val gap = if (sectionKeys.all { it in sectionHeights }) settingsFooterGapPx(viewportPx,
+                        with(density) { leadingInset.roundToPx() }, sectionKeys.sumOf { sectionHeights[it] ?: 0 },
+                        with(density) { 48.dp.roundToPx() }) else viewportPx
+                    Spacer(Modifier.height(with(density) { gap.toDp() }))
+                    Box(Modifier.fillMaxWidth().height(48.dp).testTag("settings_footer_handle"),
+                        contentAlignment = Alignment.Center) {
+                        Box(Modifier.size(30.dp, 3.dp).background(MaterialTheme.colorScheme.outline.copy(alpha = .6f),
+                            RoundedCornerShape(4.dp)))
+                    }
                 }
-                Text("YOURoom $version", style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                SettingsAccountPanel(version, state.demo, state.viewingCache, interactive,
+                    allowLogout = guide?.stage != GuideStage.LOGOUT,
+                    onClearCache = { if (guide == null) onClearCache() }, onLogout = { confirmExit = true })
             }
         }
+    }
     }
     when (sheet) {
         "marks" -> RoomMarksSheet(state, profiles, onRoom, onClear) { sheet = null;guide?.exitedMarks() }
@@ -136,10 +159,7 @@ private fun SettingsContent(state: YOURoomState, onRoom: (String?) -> Unit,
             onPlanningPreferences, { guide?.enteredTemplates();sheet = "templates" }, { sheet = null })
         "templates" -> TimeTemplateManager(state.campus, state.planningPreferences.forCampus(state.campus),
             onPlanningPreferences, { guide?.exitedTemplates();sheet = "planning" })
-        "about" -> SettingsSheet("关于", null, { sheet = null }, showTitle = false,
-            modifier=Modifier.guideTag("settings_about_dialog")) {
-            AboutContent(version)
-        }
+        "about" -> AboutSheet(version, state.campus) { sheet = null }
     }
     if (confirmExit) GuideAlertDialog(onDismissRequest = { confirmExit = false },
         title = { Text(if (state.demo) "结束演示？" else "返回登录页？") },
@@ -148,8 +168,26 @@ private fun SettingsContent(state: YOURoomState, onRoom: (String?) -> Unit,
             state.viewingCache -> "本地收藏、备注与教室缓存会保留。"
             else -> "本次登录状态将清除，本地收藏和备注会保留；已勾选记住的账号密码也会保留。"
         }) },
-        confirmButton = { TextButton(onClick = { confirmExit = false; onLogout() },modifier=Modifier.guideTag("settings_logout_confirm")) { Text("确认") } },
-        dismissButton = { TextButton(onClick = { confirmExit = false }) { Text("取消") } })
+        confirmButton = { DialogConfirmButton(onClick = { confirmExit = false; onLogout() },modifier=Modifier.guideTag("settings_logout_confirm")) { Text("确认") } },
+        dismissButton = { DialogDismissButton(onClick = { confirmExit = false }) { Text("取消") } })
+}
+
+@Composable
+private fun SettingsAccountPanel(version: String, demo: Boolean, viewingCache: Boolean, enabled: Boolean,
+    allowLogout: Boolean, onClearCache: () -> Unit, onLogout: () -> Unit) {
+    Column(Modifier.fillMaxWidth().testTag("settings_account_panel").padding(horizontal = 24.dp, vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        ListDivider(Modifier.testTag("settings_footer_divider"))
+        TextButton(onClick = onClearCache, enabled = enabled,
+            modifier = Modifier.heightIn(min = 48.dp).guideTag("settings_clear_cache"),
+            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("清除缓存") }
+        TextButton(onClick = onLogout, enabled = enabled && allowLogout,
+            modifier = Modifier.heightIn(min = 48.dp).guideTag("settings_logout")) {
+            Text(if (demo) "结束演示" else if (viewingCache) "返回登录" else "退出登录")
+        }
+        Text("YOURoom $version", Modifier.testTag("settings_version"), style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
 }
 
 @Composable
@@ -194,16 +232,21 @@ internal fun SettingsSheet(title: String, campus: Campus?, onDismiss: () -> Unit
     GuideDialog("sheet",onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         // Dialog creates a new Android owner: keep the page's text scale and link handler.
         CompositionLocalProvider(LocalDensity provides density, LocalUriHandler provides browser) {
-        Surface(modifier.then(if (avoidIme) Modifier.imePadding() else Modifier)
-            .widthIn(max = 420.dp).fillMaxWidth(.9f).heightIn(max = 560.dp), shape = MaterialTheme.shapes.small) {
-            Column(Modifier.padding(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                if (showTitle) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(title, Modifier.weight(1f).testTag("settings_sheet_title"), style = titleStyle ?: MaterialTheme.typography.titleSmall.copy(fontSize = 13.sp))
-                    if (campus != null) Text(campus.label, Modifier.testTag("settings_sheet_campus"), style = MaterialTheme.typography.bodySmall)
+        DialogPanel(DialogDesign.B, modifier.then(if (avoidIme) Modifier.imePadding() else Modifier)
+            .widthIn(max = 420.dp).fillMaxWidth(.9f).heightIn(max = 560.dp)) {
+            Column {
+                if (showTitle) DialogHeading(18.dp) {
+                    Text(title, Modifier.weight(1f).testTag("settings_sheet_title"),
+                        style = (titleStyle ?: MaterialTheme.typography.titleMedium).copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold))
+                    if (campus != null) Text(campus.label, Modifier.testTag("settings_sheet_campus"), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                content()
-                if (footer != null) footer() else {
-                    DialogExitAction(changed,onDismiss,Modifier.align(Alignment.End).testTag("settings_sheet_close"),enabled=exitEnabled)
+                Column(Modifier.weight(1f, fill = false).padding(horizontal = 18.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp), content = content)
+                DialogFooter(18.dp) {
+                    if (footer != null) footer() else {
+                        DialogExitAction(changed,onDismiss,Modifier.align(Alignment.End).testTag("settings_sheet_close"),enabled=exitEnabled)
+                    }
                 }
             }
         }
@@ -247,9 +290,9 @@ private fun RoomMarksSheet(state: YOURoomState, profiles: List<RoomProfile>, onR
             }
         }
     }
-    clearId?.let { id -> AlertDialog(onDismissRequest = { clearId = null },
+    clearId?.let { id -> DesignedAlertDialog(onDismissRequest = { clearId = null },
         title = { Text("清除此教室的个人标记？") },
         text = { Text("收藏、排除、标签和备注都会清除，学校数据不受影响。") },
-        confirmButton = { TextButton(onClick = { onClear(id); clearId = null }) { Text("清除") } },
-        dismissButton = { TextButton(onClick = { clearId = null }) { Text("取消") } }) }
+        confirmButton = { DialogConfirmButton(onClick = { onClear(id); clearId = null }, destructive = true) { Text("清除") } },
+        dismissButton = { DialogDismissButton(onClick = { clearId = null }) { Text("取消") } }) }
 }

@@ -17,6 +17,22 @@ import java.time.LocalDate
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class UsageGuideTest {
+    @Test fun replayAndAboutSwapPreservesProgressAndOutcomes() {
+        assertEquals(38,GuideStage.REPLAY.ordinal)
+        assertEquals(39,GuideStage.ABOUT.ordinal)
+        assertEquals("settings_about",GuideStage.ABOUT.target)
+        assertEquals("root",GuideStage.ABOUT.window)
+        assertFalse(GuideStage.ABOUT.practice)
+        for(old in 0..42) for(outcome in GuideOutcome.entries) {
+            val record=GuideRecord(old,outcome,3).current()
+            assertEquals(when(old) {38->39;39->38;else->old},record.step)
+            assertEquals(outcome,record.outcome)
+            assertEquals(GuideHistory.Version,record.version)
+            assertEquals(record,record.current())
+            assertEquals(outcome==GuideOutcome.IN_PROGRESS,
+                GuideHistory(records=mapOf("test" to record)).shouldOffer("test"))
+        }
+    }
     private fun reveal(runtime:GuideRuntime) {
         runtime.spotlightTargets.forEach { runtime.anchors[it]=GuideAnchor("root",Rect(10f,10f,100f,100f),Any()) }
         runtime.finishPreparation(runtime.stage)
@@ -121,9 +137,10 @@ class UsageGuideTest {
             assertEquals("planning_templates_entry",runtime.target)
             runtime.select(GuideStage.ABOUT.ordinal);runtime.prepare()
             assertEquals("settings_about",runtime.target);assertEquals("root",runtime.window)
-            runtime.enteredAbout()
-            assertEquals("settings_about_dialog",runtime.target);assertEquals("sheet",runtime.window)
-            assertEquals(38,runtime.position.intValue)
+            runtime.demonstrate()
+            assertEquals("settings_about",runtime.target);assertEquals("root",runtime.window)
+            assertEquals(0,runtime.entry)
+            assertEquals(39,runtime.position.intValue)
             assertEquals(43,GuideStage.entries.size)
         } finally { runtime.close();Dispatchers.resetMain() }
     }
@@ -215,7 +232,8 @@ class UsageGuideTest {
     @Test fun bothLegacyLayoutsMergeExpectedRoomsAndKeepAllLaterLessonIdentities() {
         for(old in 0..43) {
             val updated=GuideRecord(old,version=2).current()
-            assertEquals(if(old>25) old-1 else old,updated.step)
+            val merged=if(old>25) old-1 else old
+            assertEquals(when(merged) {38->39;39->38;else->merged},updated.step)
             assertEquals(GuideHistory.Version,updated.version)
             assertEquals(updated,updated.current())
         }
@@ -274,7 +292,8 @@ class UsageGuideTest {
     @Test fun legacyProgressFollowsTheSameLessonWithoutReplayingCompletedGuides() {
         for(old in 0..44) {
             val previous=when(old) {35->36;36->35;42->41;43->42;44->43;else->old}
-            val expected=if(previous>25) previous-1 else previous
+            val merged=if(previous>25) previous-1 else previous
+            val expected=when(merged) {38->39;39->38;else->merged}
             val updated=GuideRecord(old,version=1).current()
             assertEquals(expected,updated.step)
             assertEquals(GuideHistory.Version,updated.version)

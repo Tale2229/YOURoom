@@ -292,24 +292,26 @@ class UsageGuideUiTest {
         shot("preferences-sheet-reused")
     }
 
-    @Test fun aboutRequiresItsEntryAndThePracticeSheetFitsAboveTheInstructionPanel() {
-        render(GuideStage.ABOUT);visit(GuideStage.ABOUT,openEntry=false)
-        assertEquals("settings_about",runtime.target)
-        compose.onNodeWithTag("settings_about_dialog").assertDoesNotExist()
-        compose.onNodeWithTag("settings_about").performTouchInput { click() }
-        compose.waitUntil(10_000) { runtime.entry==1 && runtime.ready }
-        compose.waitForIdle()
-        val dialog=compose.onNodeWithTag("settings_about_dialog").fetchSemanticsNode().boundsInRoot
-        val panel=compose.onNodeWithTag("guide_panel").fetchSemanticsNode().boundsInRoot
-        val mask=compose.onNodeWithTag("guide_scrim").fetchSemanticsNode().boundsInRoot
-        assertTrue("About must not overlap or shrink the instruction panel",dialog.bottom<panel.top)
-        assertTrue("About must sit close above the instruction panel",panel.top-dialog.bottom in
-            with(compose.density) { 8.dp.toPx() }..with(compose.density) { 20.dp.toPx() })
-        compose.onNodeWithTag("guide_instruction_area").assertIsDisplayed()
-        compose.onNodeWithTag("guide_next").assertIsDisplayed()
-        compose.onNodeWithTag("settings_about_content").performTouchInput { swipeUp() }
-        compose.onNodeWithTag("settings_sheet_close").assertIsDisplayed()
-        shot("about-above-guide-panel")
+    @Test fun replayThenAboutAreReadOnlyRowsWithoutOpeningModalsInEitherDirection() {
+        render(GuideStage.REPLAY);visit(GuideStage.REPLAY)
+        repeat(3) {
+            compose.onNodeWithTag("guide_progress").assertTextEquals("设置与帮助 · 39/43")
+            compose.onNodeWithTag("settings_usage_guide").performTouchInput { click() }
+            assertNull(runtime.model.state.value.guideRequest)
+            compose.onNodeWithTag("guide_next").performClick()
+            compose.waitUntil(10_000) { runtime.stage==GuideStage.ABOUT && !runtime.preparing }
+            compose.onNodeWithTag("guide_progress").assertTextEquals("设置与帮助 · 40/43")
+            assertEquals(listOf("settings_about"),runtime.spotlightTargets)
+            compose.onNodeWithTag("settings_about").assertIsDisplayed().assertIsNotEnabled()
+                .performTouchInput { click() }
+            compose.onNodeWithTag("settings_about_dialog").assertDoesNotExist()
+            assertEquals("root",runtime.presentedWindow)
+            assertEquals(0,runtime.entry)
+            assertTrue(runtime.visibleDialogs.isEmpty())
+            shot("about-read-only-row")
+            compose.onNodeWithTag("guide_previous").performClick()
+            compose.waitUntil(10_000) { runtime.stage==GuideStage.REPLAY && !runtime.preparing }
+        }
     }
 
     @Test fun plannerAndSettingsLessonsRequireTheirBottomNavigationEntrances() {
@@ -409,7 +411,8 @@ class UsageGuideUiTest {
         compose.mainClock.advanceTimeBy(12_000)
         assertEquals(GuideStage.INTRO,runtime.stage)
         compose.onNodeWithTag("guide_directory").performClick()
-        compose.onNodeWithTag("guide_chapter_2").performClick()
+        compose.onNodeWithTag("guide_chapter_2").performScrollTo().performClick()
+        compose.onNodeWithTag("guide_enter_step").performClick()
         compose.waitUntil(10_000) { runtime.stage==GuideStage.WHEELS && runtime.ready }
         compose.onNodeWithTag("guide_pause").assertDoesNotExist()
         compose.mainClock.advanceTimeBy(15_000)
@@ -501,7 +504,7 @@ class UsageGuideUiTest {
             compose.waitUntil(10_000) { runtime.entry==1 && runtime.ready }
             compose.waitForIdle()
         }
-        if(openEntry && stage in listOf(GuideStage.PLANNING,GuideStage.TEMPLATES,GuideStage.WHEELS,GuideStage.THEME,GuideStage.ABOUT) && runtime.entry==0) {
+        if(openEntry && stage in listOf(GuideStage.PLANNING,GuideStage.TEMPLATES,GuideStage.WHEELS,GuideStage.THEME) && runtime.entry==0) {
             compose.onNodeWithTag(runtime.target).performTouchInput { click() }
             compose.waitUntil(10_000) { runtime.entry==1 && runtime.ready }
             compose.waitForIdle()
@@ -892,14 +895,25 @@ class UsageGuideUiTest {
         compose.waitUntil(10_000) { runtime.model.planning.executions.value[Campus.XITUCHENG]?.cancelled==true }
     }
 
+    @Test fun directoryCrossExitsPracticeAsSkippedWithoutChangingItsStep() {
+        render(manual=true)
+        compose.onNodeWithTag("guide_menu_skip").assertDoesNotExist()
+        compose.onNodeWithTag("guide_menu_close").assertContentDescriptionEquals("跳过指引").performClick()
+        compose.onNodeWithTag("guide_workspace").assertDoesNotExist()
+        assertEquals(0,records.last().first)
+        assertEquals(GuideOutcome.SKIPPED,records.last().second)
+    }
+
     @Test fun manualDirectorySkipAndReplayDoNotStartAnotherGuideInsidePractice() {
         render(manual=true)
-        compose.onNodeWithTag("guide_chapter_3").performClick()
+        compose.onNodeWithTag("guide_chapter_3").performScrollTo().performClick()
+        compose.onNodeWithTag("guide_enter_step").performClick()
         visit(GuideStage.REPLAY)
         compose.onNodeWithTag("settings_usage_guide").performTouchInput { click() }
         assertNull(runtime.model.state.value.guideRequest)
         compose.onNodeWithTag("guide_directory").performClick()
-        compose.onNodeWithTag("guide_chapter_2").performClick()
+        compose.onNodeWithTag("guide_chapter_2").performScrollTo().performClick()
+        compose.onNodeWithTag("guide_enter_step").performClick()
         visit(GuideStage.FROM_NOW)
         compose.onNodeWithTag("guide_skip").performClick()
         compose.onNodeWithTag("guide_panel").assertDoesNotExist()
@@ -1010,10 +1024,10 @@ class UsageGuideUiTest {
 
     @Test fun aboutIsFullyHighlightedAndDangerousSettingsStayInformationalAboveTheirButtons() {
         render(GuideStage.ABOUT);visit(GuideStage.ABOUT)
-        assertEquals(compose.onNodeWithTag("settings_about_dialog").fetchSemanticsNode().boundsInRoot,
-            runtime.anchors.getValue("settings_about_dialog").bounds)
-        for(tag in listOf("settings_about_project","settings_about_feedback"))
-            compose.onNodeWithTag(tag).assertIsNotEnabled().performTouchInput { click() }
+        assertEquals(compose.onNodeWithTag("settings_about").fetchSemanticsNode().boundsInRoot,
+            runtime.anchors.getValue("settings_about").bounds)
+        compose.onNodeWithTag("settings_about").assertIsNotEnabled().performTouchInput { click() }
+        compose.onNodeWithTag("settings_about_dialog").assertDoesNotExist()
         compose.onAllNodes(isDialog()).assertCountEquals(1)
         visit(GuideStage.LOGOUT)
         compose.onNodeWithTag("guide_progress").assertTextEquals("设置与帮助 · 41/43")
@@ -1257,7 +1271,8 @@ class UsageGuideUiTest {
         compose.onNodeWithTag("guide_directory").performScrollTo().performClick()
         assertEquals(scrim,compose.onNodeWithTag("guide_scrim").fetchSemanticsNode().id)
         compose.onAllNodes(isDialog()).assertCountEquals(1)
-        compose.onNodeWithTag("guide_chapter_3").performClick()
+        compose.onNodeWithTag("guide_chapter_3").performScrollTo().performClick()
+        compose.onNodeWithTag("guide_enter_step").performClick()
         compose.waitUntil(10_000) { !runtime.preparing }
         assertEquals(scrim,compose.onNodeWithTag("guide_scrim").fetchSemanticsNode().id)
         shot("single-window-stable-scrim")
@@ -1353,13 +1368,15 @@ class UsageGuideUiTest {
         compose.onNodeWithTag("guide_scrim").assertExists()
         compose.onNodeWithTag("guide_panel").assertDoesNotExist()
         shot("directory-with-scrim")
-        compose.onNodeWithTag("guide_chapter_3").performClick()
+        compose.onNodeWithTag("guide_chapter_3").performScrollTo().performClick()
+        compose.onNodeWithTag("guide_enter_step").performClick()
         compose.onNodeWithTag("guide_scrim").assertExists()
         visit(GuideStage.THEME)
         visit(GuideStage.TAGS)
         compose.onNodeWithTag("guide_directory").performClick()
         compose.onNodeWithTag("guide_scrim").assertExists()
-        compose.onNodeWithTag("guide_chapter_0").performClick()
+        compose.onNodeWithTag("guide_chapter_0").performScrollTo().performClick()
+        compose.onNodeWithTag("guide_enter_step").performClick()
         compose.onNodeWithTag("guide_scrim").assertExists()
         visit(GuideStage.INTRO)
     }

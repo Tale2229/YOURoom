@@ -27,7 +27,9 @@ internal fun CacheClearDialog(state:CacheClearState,onConfirm:()->Unit,onCancel:
     val focus=LocalFocusManager.current
     val information=state.phase==CacheClearPhase.INFORMATION
     val confirm=state.phase==CacheClearPhase.CONFIRM
-    AlertDialog(onDismissRequest={ if(!state.irreversible) onCancel() },
+    DesignedAlertDialog(onDismissRequest={ if(!state.irreversible) onCancel() },
+        design=cacheDialogDesign(state.phase),
+        showActions=!state.irreversible,
         modifier=Modifier.imePadding().testTag("cache_clear_dialog"),
         properties=DialogProperties(dismissOnBackPress=!state.irreversible,dismissOnClickOutside=!state.busy),
         title={ Text(when {
@@ -36,7 +38,7 @@ internal fun CacheClearDialog(state:CacheClearState,onConfirm:()->Unit,onCancel:
             state.phase==CacheClearPhase.REQUESTED -> "系统正在清除"
             else -> "身份校验"
         }) },
-        text={ Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+        text={ Column(Modifier.fillMaxWidth(),
             verticalArrangement=Arrangement.spacedBy(12.dp)) {
             when {
                 information -> Text("请先登录后使用。演示和使用指引不会清除正式数据。")
@@ -49,10 +51,10 @@ internal fun CacheClearDialog(state:CacheClearState,onConfirm:()->Unit,onCancel:
                 else -> {
                     Text("请输入当前登录账号和教务密码。校验通过后立即清除全部本地数据并关闭应用。")
                     OutlinedTextField(account,{account=it},Modifier.fillMaxWidth().testTag("cache_clear_account"),
-                        label={Text("当前登录账号")},singleLine=true,enabled=!state.busy,
+                        label={Text("当前登录账号")},singleLine=true,enabled=!state.busy,shape=dialogFieldShape(),
                         keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Ascii,imeAction=ImeAction.Next))
                     OutlinedTextField(password,{password=it},Modifier.fillMaxWidth().testTag("cache_clear_password"),
-                        label={Text("教务密码")},singleLine=true,enabled=!state.busy,
+                        label={Text("教务密码")},singleLine=true,enabled=!state.busy,shape=dialogFieldShape(),
                         visualTransformation=PasswordVisualTransformation(),
                         keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Password,imeAction=ImeAction.Done))
                     state.error?.let { Text(it,Modifier.testTag("cache_clear_error"),color=MaterialTheme.colorScheme.error) }
@@ -65,19 +67,18 @@ internal fun CacheClearDialog(state:CacheClearState,onConfirm:()->Unit,onCancel:
         } },
         confirmButton={
             when {
-                information -> TextButton(onCancel,Modifier.testTag("cache_clear_acknowledge")) { Text("知道了") }
-                confirm -> TextButton(onConfirm,Modifier.testTag("cache_clear_confirm")) { Text("确认并校验身份") }
-                !state.irreversible -> TextButton(onClick={
+                information -> DialogConfirmButton(onCancel,Modifier.testTag("cache_clear_acknowledge")) { Text("知道了") }
+                confirm -> DialogConfirmButton(onConfirm,Modifier.testTag("cache_clear_confirm")) { Text("确认并校验身份") }
+                !state.irreversible -> DialogConfirmButton(onClick={
                     focus.clearFocus()
                     val submitted=password
                     password=""
                     onVerify(account,submitted)
                 },enabled=!state.busy && account.isNotBlank() && password.isNotEmpty(),
-                    modifier=Modifier.testTag("cache_clear_submit"),
-                    colors=ButtonDefaults.textButtonColors(contentColor=MaterialTheme.colorScheme.error)) { Text("校验并清除") }
+                    modifier=Modifier.testTag("cache_clear_submit"),destructive=true) { Text("校验并清除") }
             }
         },
         dismissButton={ if(!information && !state.irreversible)
-            TextButton(onCancel,Modifier.testTag("cache_clear_cancel")) { Text(if(state.busy) "取消校验" else "取消") }
+            DialogDismissButton(onCancel,Modifier.testTag("cache_clear_cancel")) { Text(if(state.busy) "取消校验" else "取消") }
         })
 }

@@ -138,10 +138,10 @@ fun TagEditor(state: YOURoomState, onFilters: (SearchFilters) -> Unit, onAdd: (S
             error?.let { Text(it,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error) }
         }
     }
-    removal?.let { tag -> AlertDialog(onDismissRequest = { removal = null },
+    removal?.let { tag -> DesignedAlertDialog(onDismissRequest = { removal = null },
         title = { Text("删除“$tag”？") },
         text = { Text("取消该词条的筛选并隐藏标记。教室原标记保留，重新添加可恢复。") },
-        confirmButton = { TextButton(onClick = { onRemove(tag); removal = null },
+        confirmButton = { DialogConfirmButton(onClick = { onRemove(tag); removal = null }, destructive = true,
             modifier = Modifier.testTag("confirm_delete_tag")) { Text("删除") } },
-        dismissButton = { TextButton(onClick = { removal = null }) { Text("取消") } }) }
+        dismissButton = { DialogDismissButton(onClick = { removal = null }) { Text("取消") } }) }
 }

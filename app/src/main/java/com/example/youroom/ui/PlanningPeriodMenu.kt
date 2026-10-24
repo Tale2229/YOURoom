@@ -42,7 +42,8 @@ internal fun PlanningPeriodMenu(expanded: Boolean, enabled: Boolean, index: Int,
             exit=if(guide?.preparing==true) ExitTransition.None else fadeOut(tween(80))) {
             Box(Modifier.size(if (onSave != null) 132.dp else 88.dp,48.dp).guideTag("planner_period_actions_$index"),contentAlignment=Alignment.Center) {
                 Surface(Modifier.fillMaxWidth().height(37.dp).testTag("planner_period_actions_face_$index"),
-                    shape=MaterialTheme.shapes.small,color=MaterialTheme.colorScheme.surface,
+                    shape=androidx.compose.foundation.shape.RoundedCornerShape(10.dp),color=MaterialTheme.colorScheme.surface,
+                    border=androidx.compose.foundation.BorderStroke(1.dp,MaterialTheme.colorScheme.outlineVariant.copy(alpha=.65f)),
                     shadowElevation=2.dp) {}
                 Row {
                     IconButton(onClick=onEdit,enabled=editEnabled,

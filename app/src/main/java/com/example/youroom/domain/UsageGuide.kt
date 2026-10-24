@@ -5,7 +5,8 @@ enum class GuideOutcome { IN_PROGRESS, COMPLETED, SKIPPED }
 data class GuideRecord(val step: Int = 0, val outcome: GuideOutcome = GuideOutcome.IN_PROGRESS,
     val version: Int = GuideHistory.Version) {
     /** Migrate lesson identities, preserving completion/skip without a replay.
-     * v1: 45 steps; v2: 44 steps; v3 merges expected-room entry and pinning. */
+     * v1: 45 steps; v2: 44 steps; v3 merges expected-room entry and pinning;
+     * v4 swaps the informational replay/about lessons. */
     fun current():GuideRecord = when(version) {
         1 -> copy(step=when(step) {
             35 -> 36
@@ -17,7 +18,8 @@ data class GuideRecord(val step: Int = 0, val outcome: GuideOutcome = GuideOutco
         2 -> copy(step=when {
             step<=25 -> step.coerceAtLeast(0)
             else -> (step-1).coerceAtMost(42)
-        },version=3)
+        },version=3).current()
+        3 -> copy(step=when(step) { 38 -> 39; 39 -> 38; else -> step },version=4)
         else -> this
     }
 }
@@ -30,7 +32,7 @@ data class GuideHistory(val available: Boolean = false, val activeAccount: Strin
     } ?: true
 
     companion object {
-        const val Version = 3
+        const val Version = 4
         const val Guest = "guest"
         const val ExistingSession = "existing-session"
     }
