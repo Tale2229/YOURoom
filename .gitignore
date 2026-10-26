@@ -19,6 +19,9 @@ Desktop.ini
 /.tmp/
 /dist/
 /logs/
+# Signed release exports, including metadata and baseline profiles
+/release/
+/app/release/
 node_modules/
 *.apk
 *.aab
