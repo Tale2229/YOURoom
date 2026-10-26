@@ -5,7 +5,7 @@
 | 入口 | 用途 | 条件 |
 | --- | --- | --- |
 | `check_docs.py` | 检查本机文档链接与静态资源引用 | 标准库、本地 docs |
-| `prepare_launcher_icon.py` | 校验 / 生成启动图标 | Pillow、Inkscape、`docs/branding/g66.svg` |
+| `prepare_launcher_icon.py` | 校验 / 生成启动图标 | Pillow、Inkscape、`docs/branding/LOGO.svg` |
 | `prepare_theme_avatars.py` | 校验 / 生成十二主题头像资源 | Pillow、本地 `docs/colors/` 原图 |
 | `prepare_poetry_corpus.py` | 从固定资料版本生成诗文资源和来源记录 | 本地 `artifacts/poetry-source/` 输入 |
 | `prepare_poetry_font.py` | 裁剪并重命名诗文字体，保留 OFL | fonttools、固定版本上游字体及许可 |

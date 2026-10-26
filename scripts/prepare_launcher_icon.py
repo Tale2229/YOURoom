@@ -1,4 +1,4 @@
-"""Verify transparent g66 VectorDrawable and package fallback launcher icons.
+"""Verify transparent LOGO VectorDrawable and package fallback launcher icons.
 
 Requires Inkscape on PATH and Pillow. Normal Android builds need neither.
 Run --write to regenerate the themed mask and ten launcher WebPs; SVG is read-only.
@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 from PIL import Image, ImageChops, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "docs/branding/g66.svg"
+SOURCE = ROOT / "docs/branding/LOGO.svg"
 RES = ROOT / "app/src/main/res"
 OUT = ROOT / "app/build/launcher-verification"
 ANDROID = "{http://schemas.android.com/apk/res/android}"
@@ -71,7 +71,7 @@ def foreground(source, width, height, monochrome=False):
     group = ET.SubElement(root, SVG + "g", {"transform": f"translate({(108-width*scale)/2},{(108-height*scale)/2}) scale({scale})"})
     artwork = copy.deepcopy(source.find(SVG + "g"))
     if monochrome:
-        # g66 has one white highlight, not a cutout. Preserve all painted shapes,
+        # LOGO has one white highlight, not a cutout. Preserve all painted shapes,
         # their opacity, and the unpainted path in the optional silhouette.
         for path in artwork.iter(SVG + "path"):
             style = dict(item.split(":", 1) for item in path.attrib["style"].split(";") if item)

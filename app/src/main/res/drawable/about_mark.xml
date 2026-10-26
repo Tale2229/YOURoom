@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="133dp" android:height="154dp" android:viewportWidth="48.497475" android:viewportHeight="56.000008">
-    <!-- Monochrome g66.svg watermark, matching the approved HTML. -->
+    <!-- Monochrome LOGO.svg watermark, matching the approved HTML. -->
     <group android:translateX="-157.61655" android:translateY="-205.00007">
         <path android:fillColor="#FFFFFFFF" android:pathData="m 162.81277,229.00005 4.33013,2.5 v 3 l -4.33013,-2.5 z" />
         <path android:fillColor="#FFFFFFFF" android:pathData="m 181.86531,230.00003 -21.65063,-12.50001 -2.59808,1.5 v 3 l 21.65063,12.50001 v 24.99999 l 2.59808,1.5 2.59808,-1.5 v -24.99999 l 21.65063,-12.50001 v -3 l -2.59808,-1.5 z" />

@@ -2,7 +2,7 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="48dp" android:height="48dp"
     android:viewportWidth="72" android:viewportHeight="72">
-    <!-- Original g66.svg paths, fill colors and opacity; transparent background. -->
+    <!-- Original LOGO.svg paths, fill colors and opacity; transparent background. -->
     <group android:translateX="10.019213532969495" android:translateY="6"
         android:scaleX="1.0714284183673688" android:scaleY="1.0714284183673688">
         <group android:translateX="-157.61655" android:translateY="-205.00007">

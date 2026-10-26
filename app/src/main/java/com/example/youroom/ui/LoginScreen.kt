@@ -53,7 +53,7 @@ fun LoginScreen(state: YOURoomState, onLogin: (String, String) -> Unit,
             verticalAlignment = Alignment.CenterVertically) {
             WidthFittedText("YOURoom", Modifier.weight(1f).testTag("login_title").semantics(mergeDescendants = true) {},
                 style = MaterialTheme.typography.headlineLarge)
-            // Same untinted, transparent g66 vector as the installed launcher icon.
+            // Same untinted, transparent LOGO vector as the installed launcher icon.
             Image(painterResource(R.drawable.youroom_launcher), contentDescription = "YOURoom 标志",
                 modifier = Modifier.size(64.dp).testTag("login_logo"), contentScale = ContentScale.Fit)
         }
