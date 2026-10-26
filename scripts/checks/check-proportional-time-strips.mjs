@@ -1,0 +1,51 @@
+import auditPaths from './paths.cjs';
+auditPaths.enter();
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const tabs=await(await fetch('http://127.0.0.1:9336/json')).json();
+const tab=tabs.find(t=>t.type==='page'&&t.url.includes('proportional-time-strips.html'));
+assert(tab,'preview tab exists');
+const socket=new WebSocket(tab.webSocketDebuggerUrl);
+await new Promise(resolve=>socket.addEventListener('open',resolve,{once:true}));
+let id=0;const pending=new Map();const errors=[];
+socket.addEventListener('message',({data})=>{const message=JSON.parse(data);if(message.method==='Runtime.exceptionThrown')errors.push(message.params.exceptionDetails.text);if(message.id){const p=pending.get(message.id);pending.delete(message.id);message.error?p.reject(message.error):p.resolve(message.result)}});
+function call(method,params={}){return new Promise((resolve,reject)=>{const request=++id;pending.set(request,{resolve,reject});socket.send(JSON.stringify({id:request,method,params}))})}
+async function evaluate(expression){const r=await call('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(r.exceptionDetails)throw new Error(JSON.stringify(r.exceptionDetails));return r.result.value}
+const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+await call('Runtime.enable');await call('Page.enable');await call('Page.reload',{ignoreCache:true});await pause(300);
+const geometry=await evaluate(`(()=>{const d=window.stripDemo,s=d.slots;const scale=312/775;const x=m=>d.xAt(m,'time');return {count:s.length,widths:s.map(p=>x(p.end)-x(p.start)),gaps:s.slice(1).map((p,i)=>({minutes:p.start-s[i].end,width:x(p.start)-x(s[i].end)})),span:x(1255)-x(480),scale,equalGaps:s.slice(1).map((p,i)=>d.xAt(p.start,'equal')-d.xAt(s[i].end,'equal')),start:x(420),end:x(1338),svgs:document.querySelectorAll('.time-svg').length}})()`);
+assert.equal(geometry.count,14);assert.equal(geometry.span,312);assert.equal(geometry.start,24);assert.equal(geometry.end,336);
+geometry.widths.forEach(width=>assert(Math.abs(width-45*geometry.scale)<1e-8));
+geometry.gaps.forEach(gap=>assert(Math.abs(gap.width-gap.minutes*geometry.scale)<1e-8));
+geometry.equalGaps.forEach(gap=>assert(Math.abs(gap-3)<1e-8));assert.equal(geometry.svgs,18);
+for(const preset of ['breaks','outside','three']){
+ await evaluate(`document.querySelector('[data-preset="${preset}"]').click()`);
+ assert.equal(await evaluate('window.stripDemo.preset'),preset);
+ assert.equal(await evaluate(`document.querySelectorAll('#plan-time .now').length`),1);
+ assert(await evaluate(`Array.from(document.querySelectorAll('#plan-time svg')).every(s=>!s.outerHTML.includes('NaN'))`));
+}
+await evaluate(`document.querySelector('[data-theme="shahe"]').click()`);assert(await evaluate(`document.body.classList.contains('shahe')`));
+await evaluate(`document.querySelector('[data-theme="west"]').click();document.querySelector('#numbers').click()`);
+assert.equal(await evaluate(`document.querySelectorAll('.number').length`),0);
+await evaluate(`document.querySelector('#numbers').click();document.querySelector('#clock').value=780;document.querySelector('#clock').dispatchEvent(new Event('input'))`);
+assert.equal(await evaluate(`document.querySelector('#clock-value').value`),'13:00');
+await evaluate(`document.querySelector('#play').click()`);assert(await evaluate('window.stripDemo.playing'));
+await pause(380);assert(await evaluate(`Array.from(document.querySelectorAll('.wave-bar')).some(r=>+r.getAttribute('height')>5)`));
+await pause(650);assert.equal(await evaluate('window.stripDemo.playing'),false);
+assert(await evaluate(`Array.from(document.querySelectorAll('.wave-bar')).every(r=>+r.getAttribute('height')===5&&+r.getAttribute('y')===+r.dataset.baseline)`));
+await evaluate(`document.querySelector('#spatial').click();document.querySelector('#slow').click();document.querySelector('#play').click()`);
+await pause(650);assert(await evaluate('window.stripDemo.playing'));await pause(1500);assert.equal(await evaluate('window.stripDemo.playing'),false);
+await evaluate(`document.querySelector('#spatial').click();document.querySelector('#slow').click();document.querySelector('#clock').value=900;document.querySelector('#clock').dispatchEvent(new Event('input'))`);
+const dir=auditPaths.resolve("artifacts/qa/design-preview/");
+const metrics=await call('Page.getLayoutMetrics');
+const png=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:true,clip:{x:0,y:0,width:1100,height:metrics.cssContentSize.height,scale:1}});
+fs.writeFileSync(dir+'proportional-time-strips-desktop.png',Buffer.from(png.data,'base64'));
+await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:false});
+await pause(100);
+assert(await evaluate(`document.documentElement.scrollWidth<=390`),'no horizontal overflow on phone');
+const mobile=await call('Page.getLayoutMetrics');const image=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:true,clip:{x:0,y:0,width:390,height:mobile.cssContentSize.height,scale:1}});
+fs.writeFileSync(dir+'proportional-time-strips-mobile.png',Buffer.from(image.data,'base64'));
+await call('Emulation.clearDeviceMetricsOverride');
+assert.deepEqual(errors,[]);
+console.log('PASS: 14 periods; exact minute scale / all gaps / lunch / clamps; 18 SVG examples; three planning presets; themes; numbers; current time; ordinary + slow spatial wave; clean reset; desktop + mobile screenshots; no overflow or runtime errors.');
+await call('Browser.close');socket.close();

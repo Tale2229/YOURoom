@@ -13,9 +13,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -85,9 +82,10 @@ private object RunnerGeometry {
 private fun runnerScale(width: Float, height: Float, density: Float) =
     min(density, min(width / 240f, height / 184f)).coerceAtLeast(.01f)
 
-/** Scores and rounds belong only to the current workspace, never to persisted user data. */
+/** Rounds stay in the workspace; the caller restores / persists the installation's best score. */
 @Stable
-internal class DinosaurRun(private val random: Random = Random.Default) {
+internal class DinosaurRun(private val random: Random = Random.Default,
+    private val onBestScore: (Int) -> Unit = {}) {
     var phase by mutableStateOf(RunnerPhase.READY)
     var elapsed by mutableFloatStateOf(0f)
     var altitude by mutableFloatStateOf(0f)
@@ -108,7 +106,13 @@ internal class DinosaurRun(private val random: Random = Random.Default) {
 
     fun updateViewport(width: Float) { if (width.isFinite() && width > 120f) viewportWidth = width }
     private fun initialSpeed() = min(6f, 6f * viewportWidth / 600f * 1.2f).coerceAtLeast(3f) * 60f
-    fun pause() { if (phase == RunnerPhase.RUNNING) phase = RunnerPhase.PAUSED }
+    fun restoreBestScore(saved: Int) { bestScore=maxOf(bestScore,saved.coerceIn(0,99_999)) }
+    private fun rememberBestScore() {
+        if(score>bestScore) { bestScore=score;onBestScore(bestScore) }
+    }
+    fun pause() {
+        if (phase == RunnerPhase.RUNNING) { rememberBestScore();phase = RunnerPhase.PAUSED }
+    }
     fun jump() {
         if (phase == RunnerPhase.PAUSED) { phase = RunnerPhase.RUNNING; return }
         // A rapid second tap must not immediately hide the crashed pose and GAME OVER.
@@ -134,7 +138,8 @@ internal class DinosaurRun(private val random: Random = Random.Default) {
     private fun advance(dt: Float, width: Float) {
         // Chromium's 6px/frame base speed, 13px/frame cap and mobile-width adjustment.
         val mobileBase = initialSpeed()
-        currentSpeed = min(780f, mobileBase + elapsed * 3.6f)
+        // 1.5x the previous acceleration: new 40s == previous 60s, same base / cap.
+        currentSpeed = min(780f, mobileBase + elapsed * 5.4f)
         elapsed += dt
         distance += currentSpeed * dt
         scoreFlash = (scoreFlash - dt).coerceAtLeast(0f)
@@ -165,7 +170,7 @@ internal class DinosaurRun(private val random: Random = Random.Default) {
         val dino = RunnerGeometry.dino.map { it.offset(RunnerGeometry.dinoX, -altitude - RunnerGeometry.dinoHeight) }
         if (obstacles.any { o -> RunnerGeometry.obstacle(o).any { box -> dino.any { it.overlaps(box) } } }) {
             phase = RunnerPhase.OVER
-            bestScore = maxOf(bestScore, score)
+            rememberBestScore()
             scoreFlash = 0f
             crashedAt = System.nanoTime()
         }
@@ -175,6 +180,7 @@ internal class DinosaurRun(private val random: Random = Random.Default) {
 @Composable
 internal fun DinosaurRunner(run: DinosaurRun, active: Boolean, modifier: Modifier = Modifier,
     backgroundColor: Color = MaterialTheme.colorScheme.surface) {
+    val guide=LocalUsageGuide.current
     val sheet = rememberDinoSpriteSheet()
     val ink = MaterialTheme.colorScheme.primary
     val colors = remember(ink, backgroundColor) { dinoSpriteColors(ink, backgroundColor) }
@@ -202,23 +208,23 @@ internal fun DinosaurRunner(run: DinosaurRun, active: Boolean, modifier: Modifie
         }
     }
     Box(modifier.fillMaxSize().padding(horizontal = 16.dp).clipToBounds()) {
-        Canvas(Modifier.fillMaxSize().testTag("planner_dinosaur")
+        Canvas(Modifier.fillMaxSize().guideTag("planner_dinosaur")
             .onSizeChanged {
                 viewport = it.width / runnerScale(it.width.toFloat(), it.height.toFloat(), pixelDensity)
                 run.updateViewport(viewport)
             }
-            .pointerInput(active) { detectTapGestures(onTap = { if (active) run.jump() }) }
+            .pointerInput(active,guide) { detectTapGestures(onTap = { if (active) { run.jump();guide?.jumped() } }) }
             .onKeyEvent { event ->
-                if (active && event.type == KeyEventType.KeyDown && event.key in listOf(Key.Spacebar, Key.DirectionUp)) { run.jump(); true } else false
+                if (active && event.type == KeyEventType.KeyDown && event.key in listOf(Key.Spacebar, Key.DirectionUp)) { run.jump();guide?.jumped(); true } else false
             }.semantics {
                 contentDescription = "Google Dino，点击跳跃"
                 stateDescription = when (run.phase) {
                     RunnerPhase.READY -> "尚未开始"
                     RunnerPhase.RUNNING -> "进行中，得分 ${run.score}"
                     RunnerPhase.PAUSED -> "已暂停"
-                    RunnerPhase.OVER -> "GAME OVER，本局 ${run.score} 分，本次会话最高 ${run.bestScore} 分"
+                    RunnerPhase.OVER -> "GAME OVER，本局 ${run.score} 分，最高分 ${run.bestScore} 分"
                 }
-                onClick("跳跃或开始") { if (active) run.jump(); active }
+                onClick("跳跃或开始") { if (active) { run.jump();guide?.jumped() }; active }
             }.focusable(active)) {
             val scale = runnerScale(size.width, size.height, density)
             val width = size.width / scale
@@ -260,16 +266,8 @@ internal fun DinosaurRunner(run: DinosaurRun, active: Boolean, modifier: Modifie
                 drawDinoSprite(sheet, ChromiumDinoSprites.restart, (width - 36f) / 2f, textY + 24f, scale, colors)
             }
         }
-        if (run.phase != RunnerPhase.OVER) IconButton(
-            onClick = { if (run.phase == RunnerPhase.RUNNING) run.pause() else run.jump() },
-            modifier = Modifier.align(Alignment.TopStart).size(48.dp), enabled = active,
-        ) {
-            Icon(if (run.phase == RunnerPhase.RUNNING) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                if (run.phase == RunnerPhase.RUNNING) "暂停游戏" else if (run.phase == RunnerPhase.PAUSED) "继续游戏" else "开始游戏",
-                Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
         if (run.phase == RunnerPhase.READY || run.phase == RunnerPhase.PAUSED) Text(
-            if (run.phase == RunnerPhase.READY) "轻点开始" else "已暂停 · 轻点继续",
+            if (run.phase == RunnerPhase.READY) "轻点开始" else "轻点继续",
             Modifier.align(Alignment.Center), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
     }

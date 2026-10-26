@@ -1,0 +1,11 @@
+YOURoom offline classical quotations
+Source: hefengbao/jingmo-data (MIT), Copyright (c) 2024 贺丰宝
+Revision: dc3ed0bc8877512d8ac0b2b93cf6b2420237ec72
+Quotes: https://raw.githubusercontent.com/hefengbao/jingmo-data/dc3ed0bc8877512d8ac0b2b93cf6b2420237ec72/api/classicalliterature_sentence_v3_1.json
+Classics: https://raw.githubusercontent.com/hefengbao/jingmo-data/dc3ed0bc8877512d8ac0b2b93cf6b2420237ec72/api/classicalliterature_classicpoem_v3_1.json
+Only quotation text and attribution are included. Translations, modern
+commentaries, author biographies, audio and images are not included.
+YOURoom normalizes whitespace, removes duplicate text and supplements
+the quote list with intact sentences from the included Tang/Song classics.
+These are sourced excerpts, not AI-generated poems. Original data may
+contain errors; an entry is not certified as manually proofread.

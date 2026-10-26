@@ -9,11 +9,15 @@ import java.time.LocalDate
 
 /** A button-press snapshot. Later edits must not change a running or completed request. */
 data class PlanningInput(val snapshot: ClassroomSnapshot, val campus: Campus, val today: LocalDate,
-    val profiles: Map<String,RoomProfile>, val goal: PlanningGoal)
+    val profiles: Map<String,RoomProfile>, val goal: PlanningGoal) {
+    val key: String by lazy { PlanningRequestIdentity.of(snapshot,campus,today,profiles,goal) }
+}
 
 data class PlanningExecution(val id: Long, val input: PlanningInput, val result: PlanningResult? = null,
     val selectedOption: Int = 0, val cancelled: Boolean = false,
-    val defaultDirection: PlanningDirection = PlanningDirection.BALANCED) {
+    val defaultDirection: PlanningDirection = PlanningDirection.BALANCED,
+    val reusable: Boolean = result!=null && !cancelled && result.problem==null,
+    val reused: Boolean = false) {
     val pending get() = result == null && !cancelled
 }
 
@@ -32,16 +36,26 @@ class PlanningSession(private val scope: CoroutineScope,
     private var generation = 0L
 
     /** This method is called only by the explicit Generate button, never by a state observer. */
-    fun generate(state: YOURoomState, draft: PlanningDraft): Boolean {
+    fun generate(state: YOURoomState, draft: PlanningDraft, history: List<PlanningHistoryRecord> = emptyList()): Boolean {
         val snapshot = state.campusSnapshot?.takeIf { it.isCurrentOn(state.today) } ?: return false
         val goal = PlanningSchedule.confirmedGoal(draft) ?: return false
         val frozen = snapshot.copy(slots = snapshot.slots.map { it.copy(classrooms = it.classrooms.toList()) })
         val profiles = state.profiles.mapValues { (_,profile) -> profile.copy(tags = profile.tags.toSet()) }
         val input = PlanningInput(frozen,state.campus,state.today,profiles,
             goal.copy(savedWindows = goal.savedWindows.toList(),expectedRooms = goal.expectedRooms.toSet()))
+        val current=mutableExecutions.value[input.campus]
+        if(current!=null && (current.pending || current.reusable) && current.input.key==input.key) return false
         val id = ++generation
         val defaultDirection = state.planningPreferences.forCampus(state.campus).direction
         jobs.remove(state.campus)?.cancel()
+        val cached=history.firstOrNull { it.inputKey==input.key && it.date==input.today &&
+            it.snapshot.queryDate==input.today && it.campus==input.campus && it.result.problem==null }
+        if(cached!=null) {
+            val selection=cached.result.defaultSelection(defaultDirection)
+            mutableExecutions.update { it + (input.campus to PlanningExecution(id,input,cached.result,
+                selection.index,defaultDirection=selection.direction,reused=true)) }
+            return true
+        }
         mutableExecutions.update { it + (input.campus to PlanningExecution(id,input, defaultDirection = defaultDirection)) }
         jobs[input.campus] = scope.launch {
             var failed = false
@@ -53,7 +67,8 @@ class PlanningSession(private val scope: CoroutineScope,
                 mutableExecutions.update { current ->
                     if (current[input.campus]?.let { it.id == id && it.pending } == true)
                         current + (input.campus to result.defaultSelection(defaultDirection).let {
-                            PlanningExecution(id,input,result, selectedOption = it.index, defaultDirection = it.direction).also { completed -> accepted = completed }
+                            PlanningExecution(id,input,result, selectedOption = it.index, defaultDirection = it.direction,
+                                reusable=!failed && result.problem==null).also { completed -> accepted = completed }
                         }) else current.also { accepted = null }
                 }
                 if (!failed) accepted?.let { onCompleted?.invoke(it) }
@@ -80,6 +95,12 @@ class PlanningSession(private val scope: CoroutineScope,
             if (execution?.id != id || execution.result?.options?.indices?.contains(index) != true) current
             else current + (campus to execution.copy(selectedOption = index))
         }
+    }
+
+    /** Explicitly replacing a historical workspace with a newly confirmed period. */
+    fun discard(campus: Campus) {
+        jobs.remove(campus)?.cancel()
+        mutableExecutions.update { it-campus }
     }
 
     /** Account/data-source isolation only. Ordinary edits and date/campus changes never call this. */

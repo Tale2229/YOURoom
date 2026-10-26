@@ -50,6 +50,7 @@ data class YOURoomState(
     val periodStrip: PeriodStripPreferences = PeriodStripPreferences(),
     val appearance: AppearancePreferences = AppearancePreferences(),
     val planningPreferences: PlanningPreferences = PlanningPreferences(),
+    val dinosaurBestScore: Int = 0,
 ) {
     val tagOrder: List<String> by lazy(LazyThreadSafetyMode.PUBLICATION) {
         tagCatalog.available(profiles.values.flatMap { it.allTags })
@@ -115,6 +116,16 @@ class YOURoomViewModel(
     private val pendingGuides = mutableMapOf<String,GuideRecord>()
     private val guideWrites = Channel<Pair<String,GuideRecord>>(Channel.UNLIMITED)
     private var cacheClearJob:Job?=null
+    private val dinosaurBestWrites=Channel<Int>(Channel.CONFLATED)
+
+    fun recordDinosaurBestScore(score: Int) {
+        val current=state.value
+        if(training || current.demo || current.initializing || !current.showWorkspace) return
+        val best=score.coerceIn(0,99_999)
+        if(best<=current.dinosaurBestScore) return
+        mutableState.update { it.copy(dinosaurBestScore=maxOf(it.dinosaurBestScore,best)) }
+        dinosaurBestWrites.trySend(best)
+    }
 
     fun requestCacheClear() {
         if(state.value.initializing || state.value.cacheClear!=null || state.value.guideRequest!=null) return
@@ -204,7 +215,7 @@ class YOURoomViewModel(
 
     fun generatePlanning(draft: PlanningDraft) {
         updateToday()
-        planning.generate(state.value,draft)
+        planning.generate(state.value,draft,planningHistory.value)
     }
     private fun publishPlanningHistory() {
         val current = state.value
@@ -237,7 +248,8 @@ class YOURoomViewModel(
             slot.copy(classrooms = slot.classrooms.filter { it.id in usedRooms })
         })
         val record = PlanningHistoryRecord(java.util.UUID.randomUUID().toString(), owner, clock.instant(), today(),
-            execution.input.campus, execution.input.goal, snapshot, result, execution.selectedOption, execution.defaultDirection)
+            execution.input.campus, execution.input.goal, snapshot, result, execution.selectedOption, execution.defaultDirection,
+            execution.input.key)
         if (temporary) temporaryPlanningHistory = PlanningHistoryPolicy.current(listOf(record) + temporaryPlanningHistory, today())
         else { pendingPlanningHistory[record.id] = record; historyWrites.trySend(record) }
         publishPlanningHistory()
@@ -319,6 +331,22 @@ class YOURoomViewModel(
 
     init {
         planning.onCompleted = ::rememberPlanning
+        viewModelScope.launch {
+            settings.dinosaurBestScore.catch {
+                showError("无法读取游戏最高分，本次记录仍可继续累积")
+                emit(0)
+            }.collect { best ->
+                // A late disk emission must never replace a newer in-memory high score.
+                mutableState.update { it.copy(dinosaurBestScore=maxOf(it.dinosaurBestScore,best.coerceIn(0,99_999))) }
+            }
+        }
+        viewModelScope.launch {
+            for(best in dinosaurBestWrites) try { settings.saveDinosaurBestScore(best) }
+            catch(error: Exception) {
+                if(error is CancellationException) throw error
+                if(!state.value.demo) showError("游戏最高分暂未保存，本次打开期间仍保留")
+            }
+        }
         viewModelScope.launch {
             settings.planningHistory.catch { mutableHistoryNotice.value = "无法读取已保存记录"; emit(emptyList()) }.collect { records ->
                 storedPlanningHistory = records

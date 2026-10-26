@@ -50,7 +50,7 @@ class PlanningSessionTest {
         assertEquals(PlanningDirection.BALANCED,execution.defaultDirection); assertEquals(1,execution.selectedOption)
     }
 
-    @Test fun noRequestExistsUntilGenerateAndIdenticalExplicitClicksStillRunTwice() = runTest {
+    @Test fun noRequestExistsUntilGenerateAndIdenticalClicksReuseTheExistingRequest() = runTest {
         var calls=0
         val session=PlanningSession(backgroundScope,dispatcher) { calls++;result(it) }
         runCurrent()
@@ -60,11 +60,10 @@ class PlanningSessionTest {
         runCurrent()
         val first=session.executions.value.getValue(state.campus)
         assertEquals(1,calls)
-        assertTrue(session.generate(state,draft))
-        assertNull(session.executions.value.getValue(state.campus).result)
+        assertFalse(session.generate(state,draft))
         runCurrent()
-        assertEquals(2,calls)
-        assertTrue(session.executions.value.getValue(state.campus).id>first.id)
+        assertEquals(1,calls)
+        assertSame(first,session.executions.value.getValue(state.campus))
     }
 
     @Test fun theRequestCopiesProfilesTagsConfirmedWindowsAndSnapshotCollections() = runTest {
@@ -129,10 +128,66 @@ class PlanningSessionTest {
         assertEquals(1,session.executions.value.getValue(state.campus).selectedOption)
         assertEquals(1,calls)
         assertSame(first.result,session.executions.value.getValue(state.campus).result)
-        session.generate(state,draft);runCurrent()
+        session.generate(state,draft.copy(savedWindows=listOf(StudyWindow(600,720))));runCurrent()
         session.select(state.campus,first.id,1)
         session.select(state.campus,session.executions.value.getValue(state.campus).id,99)
         assertEquals(0,session.executions.value.getValue(state.campus).selectedOption)
+    }
+
+    @Test fun duplicatePendingClickDoesNotCancelOrRestartTheWorker() = runTest {
+        var calls=0
+        val gate=CompletableDeferred<Unit>()
+        val session=PlanningSession(backgroundScope,dispatcher) { calls++;gate.await();result(it) }
+        session.generate(state,draft);runCurrent()
+        val pending=session.executions.value.getValue(state.campus)
+        assertFalse(session.generate(state,draft));runCurrent()
+        assertSame(pending,session.executions.value.getValue(state.campus));assertEquals(1,calls)
+        gate.complete(Unit);runCurrent()
+        assertNotNull(session.executions.value.getValue(state.campus).result)
+    }
+
+    @Test fun storedFingerprintReusesWholePortfolioWithoutCalculationOrAnotherHistoryWrite() = runTest {
+        var calls=0;var completions=0
+        val session=PlanningSession(backgroundScope,dispatcher) { calls++;result(it) }
+        session.onCompleted={ completions++ }
+        session.generate(state,draft);runCurrent()
+        val first=session.executions.value.getValue(state.campus)
+        // Disk history intentionally stores only the rooms used by its result. Its full
+        // original input fingerprint, not this shortened snapshot, controls safe reuse.
+        val record=PlanningHistoryRecord("saved","account:test",data.fetchedAt,state.today,state.campus,
+            first.input.goal,data.copy(slots=emptyList()),first.result!!,0,first.defaultDirection,first.input.key)
+        val history=listOf(record.copy(snapshot=data.copy(slots=emptyList())))
+        session.discard(state.campus)
+        assertTrue(session.generate(state,draft,history));runCurrent()
+        val replay=session.executions.value.getValue(state.campus)
+        assertTrue(replay.reused);assertTrue(replay.reusable);assertSame(first.result,replay.result)
+        assertEquals(1,calls);assertEquals(1,completions)
+        session.discard(state.campus)
+        val room=data.classrooms.first()
+        session.generate(state.copy(profiles=mapOf(room.id to room.emptyProfile().copy(favorite=true))),draft,history)
+        runCurrent();assertEquals(2,calls);assertEquals(2,completions)
+    }
+
+    @Test fun discardedLateWorkerCannotResurrectTheResult() = runTest {
+        val gate=CompletableDeferred<Unit>()
+        val session=PlanningSession(backgroundScope,dispatcher) { withContext(NonCancellable) { gate.await() };result(it) }
+        session.generate(state,draft);runCurrent();session.discard(state.campus)
+        gate.complete(Unit);runCurrent()
+        assertNull(session.executions.value[state.campus])
+    }
+
+    @Test fun legacyOrExpiredRecordsAreNotGuessedForReuse() = runTest {
+        var calls=0
+        val session=PlanningSession(backgroundScope,dispatcher) { calls++;result(it) }
+        session.generate(state,draft);runCurrent()
+        val execution=session.executions.value.getValue(state.campus)
+        val record=PlanningHistoryRecord("legacy","account:test",data.fetchedAt,state.today,state.campus,
+            execution.input.goal,data,execution.result!!,0,PlanningDirection.BALANCED)
+        session.discard(state.campus)
+        session.generate(state,draft,listOf(record));runCurrent();assertEquals(2,calls)
+        session.discard(state.campus)
+        session.generate(state,draft,listOf(record.copy(date=state.today.minusDays(1),inputKey=execution.input.key)))
+        runCurrent();assertEquals(3,calls)
     }
 
     @Test fun aSupersededWorkerCannotOverwriteTheLatestExplicitRequest() = runTest {

@@ -6,7 +6,8 @@ data class GuideRecord(val step: Int = 0, val outcome: GuideOutcome = GuideOutco
     val version: Int = GuideHistory.Version) {
     /** Migrate lesson identities, preserving completion/skip without a replay.
      * v1: 45 steps; v2: 44 steps; v3 merges expected-room entry and pinning;
-     * v4 swaps the informational replay/about lessons. */
+     * v4 swaps the informational replay/about lessons;
+     * v5 adds four waiting and two history lessons, keeping existing outcomes. */
     fun current():GuideRecord = when(version) {
         1 -> copy(step=when(step) {
             35 -> 36
@@ -19,7 +20,12 @@ data class GuideRecord(val step: Int = 0, val outcome: GuideOutcome = GuideOutco
             step<=25 -> step.coerceAtLeast(0)
             else -> (step-1).coerceAtMost(42)
         },version=3).current()
-        3 -> copy(step=when(step) { 38 -> 39; 39 -> 38; else -> step },version=4)
+        3 -> copy(step=when(step) { 38 -> 39; 39 -> 38; else -> step },version=4).current()
+        4 -> copy(step=when {
+            step<=28 -> step.coerceAtLeast(0)
+            step<=30 -> step+4
+            else -> (step+6).coerceAtMost(48)
+        },version=5)
         else -> this
     }
 }
@@ -32,7 +38,7 @@ data class GuideHistory(val available: Boolean = false, val activeAccount: Strin
     } ?: true
 
     companion object {
-        const val Version = 4
+        const val Version = 5
         const val Guest = "guest"
         const val ExistingSession = "existing-session"
     }

@@ -16,8 +16,8 @@ android {
         applicationId = "com.example.youroom"
         minSdk = 26
         targetSdk = 36
-        versionCode = 147
-        versionName = "1.41.4"
+        versionCode = 166
+        versionName = "1.41.23"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -1,0 +1,6 @@
+YOURoom Poetry Regular is a renamed subset of LXGW WenKai Regular v1.530.
+Copyright 2021-2026 LXGW. Copyright 2020 The Klee Project Authors.
+Source: https://github.com/lxgw/LxgwWenKai/releases/tag/v1.530
+Licensed under SIL Open Font License 1.1; full license in OFL.txt.
+Modifications: subset for bundled poetry and attribution, renamed family/PostScript names.
+No glyph outline edits. Built with scripts/prepare_poetry_font.py.

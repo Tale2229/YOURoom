@@ -16,6 +16,8 @@ import kotlinx.serialization.json.*
 import java.io.IOException
 
 interface FilterSettings {
+    val dinosaurBestScore: Flow<Int> get() = kotlinx.coroutines.flow.flowOf(0)
+    suspend fun saveDinosaurBestScore(score: Int) = Unit
     val planningHistory: Flow<List<PlanningHistoryRecord>> get() = kotlinx.coroutines.flow.flowOf(emptyList())
     suspend fun savePlanningHistory(record: PlanningHistoryRecord, date: java.time.LocalDate) = Unit
     suspend fun prunePlanningHistory(date: java.time.LocalDate) = Unit
@@ -82,6 +84,14 @@ class SettingsStore internal constructor(private val store: androidx.datastore.c
         if (error is IOException) emit(emptyPreferences()) else throw error
     }
     private val historyKey = stringPreferencesKey("planning.history.v1")
+    // No date/account expiry, just like appearance and other installation-local preferences.
+    // The platform's authenticated clear-all-data path removes this DataStore as well.
+    private val dinosaurBestKey = intPreferencesKey("leisure.dinosaur.best_score.v1")
+    override val dinosaurBestScore = values.map { (it[dinosaurBestKey] ?: 0).coerceIn(0,99_999) }
+        .distinctUntilChanged()
+    override suspend fun saveDinosaurBestScore(score: Int) {
+        store.edit { it[dinosaurBestKey] = maxOf((it[dinosaurBestKey] ?: 0).coerceIn(0,99_999),score.coerceIn(0,99_999)) }
+    }
     override val planningHistory = values.map { it[historyKey] }.distinctUntilChanged()
         .map { PlanningHistoryCodec.read(it) }.flowOn(Dispatchers.Default)
     override suspend fun savePlanningHistory(record: PlanningHistoryRecord, date: java.time.LocalDate) {

@@ -33,8 +33,14 @@ internal enum class GuideStage(val chapter: Int, val page: Int, val target: Stri
     FLEXIBLE(2,1,"planner_adjust", "宽松模式", "允许小幅调整时段来寻找更合适的安排：每段前后平移不超过${PlanningPolicy.shiftLimit}分钟，单段最多缩短${PlanningPolicy.lossLimit}分钟、多段合计${PlanningPolicy.multiLossLimit}分钟"),
     GENERATE(2,1,"planner_generate", "开始规划", "点击启动按钮，根据已添加的时段与当前偏好生成方案，度过充实的一天吧~", practice=true),
     STOP(2,1,"planner_generate", "终止计算", "计算中同一位置变为停止按钮，可终止本次计算。这里特意保留计算中状态，方便试用"),
+    WAIT_CONTENT(2,1,"planner_leisure", "等待时也能看看别的", "计算时可点击右下角入口，看看内容或玩一会儿游戏，不会打断规划", practice=true),
+    READER(2,1,"planner_utility_panel", "随手一翻", "这里会随机展示诗文，点击刷新按钮或左右滑动来切换", practice=true),
+    DINO(2,1,"planner_game_switch", "Google Dino", "点击游戏图标，可以游玩经典的谷歌小恐龙", practice=true),
+    WAIT_RESULT(2,1,"planner_utility_panel", "完成后再去看结果", "计算完成会在上方提示，不会打断游戏，准备好后点击“查看结果”", practice=true),
     RESULTS(2,1,"planner_alternatives", "查看规划结果", "这里显示当前导向与方案编号，点击展开所有方案"),
     ALTERNATIVES(2,1,"planner_drawer", "比较其他方案", "展开后可切换五种导向，横向滑动来查看其他方案"),
+    HISTORY(2,1,"planner_history", "历史记录", "点击左下角查看当天计算过的历史记录，两个校区合计最多十条，次日自动清理", practice=true),
+    HISTORY_REPLAY(2,1,"history_guide-current", "回放一条记录", "点击记录查看完整方案", practice=true),
     THEME(3,2,"settings_theme_belt", "切换配色", "进入设置页面，点击左右箭头或者滑动来切换配色。合适的色彩能带来愉悦、共鸣，也是一种自我表达哦", practice=true),
     DARK(3,2,"settings_dark_mode", "深色模式", "深色模式应用于整个应用，包括两个校区"),
     STRIP(3,2,"settings_strip_layout_group", "时段条样式", "可切换两种时段条样式，“等间距”更清爽，“等比例”更符合直觉"),
@@ -44,8 +50,8 @@ internal enum class GuideStage(val chapter: Int, val page: Int, val target: Stri
     TEMPLATES(3,2,"template_list", "管理常用时段", "点击管理常用时段组合", "sheet"),
     REPLAY(3,2,"settings_usage_guide", "随时重新查看", "以后在设置页点“使用指引”，可以重新查看或直接选择章节"),
     ABOUT(3,2,"settings_about", "关于与帮助", "这里有代码库、问题反馈链接和相关说明"),
-    LOGOUT(3,2,"settings_logout", "退出登录", "退出登录仍保留个人使用数据"),
-    CLEAR_CACHE(3,2,"settings_clear_cache", "清除全部本地数据", "清除账号密码以及全部个人数据，需要使用登录的账号密码进行校验，此操作不可恢复，请谨慎选择"),
+    LOGOUT(3,2,"settings_logout", "退出登录", "退出登录仍保留个人使用数据和游戏最高分，规划历史仍会在次日清理"),
+    CLEAR_CACHE(3,2,"settings_clear_cache", "清除全部本地数据", "清除账号密码及全部个人数据，包括规划历史和游戏最高分，需要登录账密校验，不可恢复，请谨慎选择"),
     FINISH(3,2,"", "可以开始使用了", "感谢使用本应用，希望能够帮助到您，祝您学习生活愉快顺利！");
 
     val spotlightTargets:List<String> get() = listOf(target).filter { it.isNotEmpty() } + when(this) {

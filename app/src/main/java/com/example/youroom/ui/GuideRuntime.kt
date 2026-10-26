@@ -8,6 +8,8 @@ import com.example.youroom.domain.*
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.first
 
 internal data class GuideAnchor(val window: String, val bounds: Rect, val owner: Any)
 
@@ -20,8 +22,21 @@ internal class GuideRuntime(val position: MutableIntState, appearance: Appearanc
     val data = GuideData(clock)
     val settings = GuideSettings(appearance,strip)
     @Volatile var holdCalculation = false
+    @Volatile private var calculationGate: CompletableDeferred<Unit>? = null
+    val utilities=PlannerUtilityState()
+    var history by mutableStateOf<List<PlanningHistoryRecord>>(emptyList())
+        private set
+    private val fixtureScope=CoroutineScope(SupervisorJob()+Dispatchers.Main.immediate)
+    private var fixtureJob: Job?=null
+    private var completionReleaseJob: Job?=null
+    var completionOpening by mutableStateOf(false)
+        private set
+    private var previousStage: GuideStage?=null
+    private val waitingStages=setOf(GuideStage.WAIT_CONTENT,GuideStage.READER,GuideStage.DINO,GuideStage.WAIT_RESULT)
+    private val resultStages=setOf(GuideStage.RESULTS,GuideStage.ALTERNATIVES,GuideStage.HISTORY,GuideStage.HISTORY_REPLAY)
+    val utilityLesson get()=stage in waitingStages || stage in setOf(GuideStage.HISTORY,GuideStage.HISTORY_REPLAY)
     val model = YOURoomViewModel(data,settings,clock,training=true,trainingCalculation = { input ->
-        if (holdCalculation) awaitCancellation()
+        if (holdCalculation) calculationGate?.await() ?: awaitCancellation()
         val context = currentCoroutineContext()
         StudyPlanner.portfolio(input.snapshot,input.campus,input.today,input.profiles,input.goal) { context.ensureActive() }
     })
@@ -51,8 +66,9 @@ internal class GuideRuntime(val position: MutableIntState, appearance: Appearanc
     }.sortedBy { it.value.order }
     val presentedWindow get() = visibleDialogs.lastOrNull()?.value?.window ?: "root"
     var appearanceLayoutStage by mutableStateOf<GuideStage?>(null)
-    val layoutReady get() = stage !in listOf(GuideStage.STRIP,GuideStage.DEFAULT_CAMPUS,GuideStage.NUMBERS) ||
-        appearanceLayoutStage==stage
+    var utilityLayoutReady by mutableStateOf(true)
+    val layoutReady get() = (!utilityLesson || utilityLayoutReady) &&
+        (stage !in listOf(GuideStage.STRIP,GuideStage.DEFAULT_CAMPUS,GuideStage.NUMBERS) || appearanceLayoutStage==stage)
     var preparedStage by mutableStateOf<GuideStage?>(null)
     var preparing by mutableStateOf(true)
         private set
@@ -61,8 +77,19 @@ internal class GuideRuntime(val position: MutableIntState, appearance: Appearanc
     var retainedOpening by mutableStateOf<GuideAnchor?>(null)
         private set
     fun finishPreparation(expected:GuideStage) {
-        if(stage==expected && preparedStage==expected && ready && layoutReady && presentedWindow==window) {
+        if(preparing && stage==expected && preparedStage==expected && ready && layoutReady && presentedWindow==window) {
             preparing=false;retainedOpening=null
+            if(stage==GuideStage.WAIT_RESULT) {
+                completionOpening=true
+                val gate=calculationGate
+                completionReleaseJob?.cancel()
+                completionReleaseJob=fixtureScope.launch {
+                    // Let the shared cutout and panel finish moving before the notice arrives.
+                    delay(750)
+                    snapshotFlow { !menu && !preparing }.first { it }
+                    if(stage==GuideStage.WAIT_RESULT && calculationGate===gate) gate?.complete(Unit)
+                }
+            }
         }
     }
     var goal by mutableStateOf(PlanningDraft(start=660,end=720))
@@ -79,6 +106,11 @@ internal class GuideRuntime(val position: MutableIntState, appearance: Appearanc
         private set
     private var importedGoal:PlanningDraft?=null
     val target get() = when {
+        stage==GuideStage.WAIT_CONTENT && entry>0 -> "planner_utility_panel"
+        stage==GuideStage.DINO && entry>0 -> "planner_game_area"
+        stage==GuideStage.WAIT_RESULT -> "planner_wait_area"
+        stage==GuideStage.HISTORY && entry>0 -> "planner_utility_panel"
+        stage==GuideStage.HISTORY_REPLAY && entry>0 -> "planner_history_workspace"
         stage==GuideStage.WHEELS && entry==0 -> "tab_planner"
         stage==GuideStage.THEME && entry==0 -> "tab_settings"
         stage==GuideStage.FILTER_TAGS && entry==0 -> "edit_tags"
@@ -109,6 +141,7 @@ internal class GuideRuntime(val position: MutableIntState, appearance: Appearanc
         else -> stage.page
     }
     val spotlightTargets get() = when {
+        stage in setOf(GuideStage.READER,GuideStage.DINO,GuideStage.WAIT_RESULT,GuideStage.HISTORY,GuideStage.HISTORY_REPLAY) -> listOf(target)
         stage==GuideStage.ADD && entry>0 -> listOf(target,"planner_target_strip")
         stage==GuideStage.PAST -> listOf(target,"planner_start_center")
         stage==GuideStage.DURATION -> listOf(target,"planner_start_center","planner_end_center").distinct()
@@ -119,15 +152,34 @@ internal class GuideRuntime(val position: MutableIntState, appearance: Appearanc
     var initialTone = appearance.westTone
     private val signals = mutableStateListOf<String>()
     val stage get() = GuideStage.entries[position.intValue.coerceIn(0,GuideStage.entries.lastIndex)]
-    val ready get() = spotlightTargets.all { id -> anchors[id]?.let {
+    /** Synthetic openings are bounding rectangles, not a union with small protrusions. */
+    fun anchor(id: String): GuideAnchor? {
+        fun rectangle(vararg ids: String): GuideAnchor? {
+            val parts=ids.map { anchors[it] ?: return null }
+            if(parts.map { it.window }.distinct().size!=1) return null
+            return GuideAnchor(parts.first().window,Rect(parts.minOf { it.bounds.left },parts.minOf { it.bounds.top },
+                parts.maxOf { it.bounds.right },parts.maxOf { it.bounds.bottom }),this)
+        }
+        return when(id) {
+            "planner_game_area" -> rectangle("planner_dinosaur","planner_utility_footer")
+            "planner_wait_area" -> if(completionOpening) rectangle("planner_dinosaur","planner_utility_footer","planner_feedback_slot")
+                else rectangle("planner_dinosaur","planner_utility_footer")
+            "planner_history_workspace" -> rectangle("planner_target_strip","planner_room_01:2-201")
+            else -> anchors[id]
+        }
+    }
+    val ready get() = spotlightTargets.all { id -> anchor(id)?.let {
         it.window == window && it.bounds.width > 1 && it.bounds.height > 1
     } == true }
 
-    fun close() = store.clear()
+    fun close() { fixtureScope.cancel();utilities.runner.pause();store.clear() }
     fun signal(value: String) { if (value !in signals) { signals += value; events++ } }
     fun select(index: Int) {
         val next=index.coerceIn(0,GuideStage.entries.lastIndex)
         if(next!=position.intValue) {
+            previousStage=stage
+            fixtureJob?.cancel()
+            completionReleaseJob?.cancel()
             val footerStages=listOf(GuideStage.LOGOUT,GuideStage.CLEAR_CACHE)
             retainedPanelAnchor=when {
                 GuideStage.entries[next] !in footerStages -> null
@@ -137,6 +189,7 @@ internal class GuideRuntime(val position: MutableIntState, appearance: Appearanc
             }
             actedStage=null
             retainedOpening=when {
+                stage==GuideStage.DINO && GuideStage.entries[next]==GuideStage.WAIT_RESULT -> anchor("planner_game_area")
                 setOf(stage,GuideStage.entries[next])==setOf(GuideStage.SLOTS,GuideStage.INSPECT) ->
                     retainedOpening ?: anchors["slot_grid"]
                 stage==GuideStage.IMPORT && next==GuideStage.IMPORT_PICK.ordinal && entry>0 && presentedWindow=="sheet" ->
@@ -148,7 +201,7 @@ internal class GuideRuntime(val position: MutableIntState, appearance: Appearanc
             if(stage==GuideStage.DARK) model.setDarkMode(false)
             importedGoal=null
             if(next!=GuideStage.REPLACE.ordinal || stage!=GuideStage.IMPORT_PICK) importTemplateId="guide"
-            if(GuideStage.entries[next] !in listOf(GuideStage.RESULTS,GuideStage.ALTERNATIVES)) model.planning.clear()
+            if(GuideStage.entries[next] !in waitingStages+resultStages) model.planning.clear()
             appearanceLayoutStage=null
             preparing=true;entry=0
         }
@@ -191,6 +244,37 @@ internal class GuideRuntime(val position: MutableIntState, appearance: Appearanc
     fun openedImport() { if(stage==GuideStage.IMPORT) { recordAction(GuideStage.IMPORT);entry=1 } }
     fun openedExpected() { if(stage==GuideStage.EXPECT) entry=1 }
     fun openedAlternatives() { if(stage==GuideStage.RESULTS) select(GuideStage.ALTERNATIVES.ordinal) }
+    fun openedUtility(panel: PlannerPanel) {
+        if(stage==GuideStage.WAIT_CONTENT && panel==PlannerPanel.LEISURE) {
+            recordAction(stage);completed.value=completed.value+stage.name
+            select(GuideStage.READER.ordinal)
+        } else if(stage==GuideStage.HISTORY && panel==PlannerPanel.HISTORY) { recordAction(stage);entry=1 }
+    }
+    fun closedUtility() {
+        if(stage in setOf(GuideStage.WAIT_CONTENT,GuideStage.HISTORY)) entry=0
+    }
+    fun choseGame(game: Boolean) {
+        if(stage==GuideStage.DINO) { recordAction(stage);entry=if(game) 1 else 0 }
+    }
+    fun jumped() { if(stage==GuideStage.DINO) { recordAction(stage);signal("jump") } }
+    fun nextReaderItem(direction: Int = 1) {
+        if(stage!=GuideStage.READER) return
+        recordAction(stage);signal("reader")
+        utilities.item=previewReaderItem(direction)
+    }
+    fun previewReaderItem(direction: Int): LeisureItem {
+        require(direction==1 || direction==-1)
+        val verses=LeisureContent.items()
+        val index=verses.indexOfFirst { it.id==utilities.item?.id }
+        return verses[(index+direction).mod(verses.size)]
+    }
+    fun viewedPlanningResult() {
+        if(stage==GuideStage.WAIT_RESULT) {
+            completed.value=completed.value+stage.name
+            select(GuideStage.RESULTS.ordinal)
+        }
+    }
+    fun replayedHistory() { if(stage==GuideStage.HISTORY_REPLAY) { recordAction(stage);entry=1 } }
     fun rejectedPeriod(problem:PlanningProblem?) {
         if(stage==GuideStage.PAST && problem==PlanningProblem.PAST_TIME) select(GuideStage.FROM_NOW.ordinal)
         else if(stage==GuideStage.DURATION && problem in listOf(PlanningProblem.INVALID_TIME,PlanningProblem.TOO_SHORT)) entry=1
@@ -206,12 +290,16 @@ internal class GuideRuntime(val position: MutableIntState, appearance: Appearanc
     }
 
     fun prepare() {
-        val retainedResult=stage in listOf(GuideStage.RESULTS,GuideStage.ALTERNATIVES) &&
+        val retainedResult=stage in resultStages &&
             model.planning.executions.value[Campus.XITUCHENG]?.result?.options?.isNotEmpty()==true
+        val retainWaiting=stage in waitingStages && previousStage in waitingStages && calculationGate?.isCompleted==false &&
+            model.planning.executions.value[Campus.XITUCHENG]?.pending==true
         preparedStage=null
+        completionOpening=false
         signals.clear();demonstration=0;actedStage=null;entry=0
-        holdCalculation=false
-        if(!retainedResult) model.planning.clear()
+        holdCalculation=retainWaiting
+        if(!retainedResult && !retainWaiting) model.planning.clear()
+        if(!utilityLesson) { utilities.runner.pause();utilities.panel=PlannerPanel.RESULT;utilities.clearRecord() }
         if (stage != GuideStage.CAMPUS) model.setCampus(Campus.XITUCHENG)
         model.setFilters(SearchFilters())
         model.selectRoom(null)
@@ -247,8 +335,55 @@ internal class GuideRuntime(val position: MutableIntState, appearance: Appearanc
                 }
                 if (stage==GuideStage.STOP || (stage in listOf(GuideStage.RESULTS,GuideStage.ALTERNATIVES) && !retainedResult)) {
                     holdCalculation=stage==GuideStage.STOP
-                    model.generatePlanning(goal)
+                    calculationGate=null
+                    // Only the isolated guide bypasses its history cache for a pending fixture.
+                    model.planning.generate(model.state.value,goal)
                 }
+            }
+            GuideStage.WAIT_CONTENT,GuideStage.READER,GuideStage.DINO,GuideStage.WAIT_RESULT -> {
+                if(!retainWaiting) {
+                    goal=PlanningDraft(start=660,end=720,savedWindows=GuideData.windows,expectedRooms=setOf(room.id))
+                    calculationGate=CompletableDeferred();holdCalculation=true
+                    model.planning.generate(model.state.value,goal)
+                }
+                utilities.clearRecord()
+                utilities.panel=if(stage==GuideStage.WAIT_CONTENT) PlannerPanel.RESULT else PlannerPanel.LEISURE
+                if(stage in setOf(GuideStage.WAIT_CONTENT,GuideStage.READER)) {
+                    utilities.runner.pause();utilities.game=false
+                    utilities.item=LeisureContent.items().first()
+                } else if(stage==GuideStage.DINO) utilities.game=false
+                else utilities.game=true
+            }
+            GuideStage.HISTORY,GuideStage.HISTORY_REPLAY -> {
+                utilities.runner.pause();utilities.clearRecord();utilities.game=false
+                goal=PlanningDraft(start=660,end=720,savedWindows=GuideData.windows,expectedRooms=setOf(room.id))
+                if(!retainedResult) model.planning.generate(model.state.value,goal)
+                val expected=stage
+                fixtureJob=fixtureScope.launch {
+                    val execution=model.planning.executions.first { it[Campus.XITUCHENG]?.result!=null }.getValue(Campus.XITUCHENG)
+                    if(history.firstOrNull()?.inputKey==execution.input.key) {
+                        if(stage==expected) {
+                            utilities.panel=if(stage==GuideStage.HISTORY) PlannerPanel.RESULT else PlannerPanel.HISTORY
+                            preparedStage=expected
+                        }
+                        return@launch
+                    }
+                    val extraGoal=PlanningGoal(780,840,false)
+                    val extraInput=execution.input.copy(goal=extraGoal)
+                    val extraResult=withContext(Dispatchers.Default) {
+                        val context=currentCoroutineContext()
+                        StudyPlanner.portfolio(extraInput.snapshot,extraInput.campus,extraInput.today,extraInput.profiles,extraGoal) { context.ensureActive() }
+                    }
+                    fun record(id: String,input: PlanningInput,result: PlanningResult,seconds: Long)=
+                        PlanningHistoryRecord(id,"guide",clock.instant().plusSeconds(seconds),input.today,input.campus,
+                            input.goal,input.snapshot,result,0,PlanningDirection.BALANCED,input.key)
+                    if(stage!=expected) return@launch
+                    history=listOf(record("guide-current",execution.input,execution.result!!,0),
+                        record("guide-extra",extraInput,extraResult,-600))
+                    utilities.panel=if(stage==GuideStage.HISTORY) PlannerPanel.RESULT else PlannerPanel.HISTORY
+                    preparedStage=expected
+                }
+                return
             }
             else -> Unit
         }
@@ -257,6 +392,8 @@ internal class GuideRuntime(val position: MutableIntState, appearance: Appearanc
     }
 
     fun observe() {
+        if(stage==GuideStage.WAIT_RESULT && !preparing && preparedStage==stage && entry==0 &&
+            model.planning.executions.value[Campus.XITUCHENG]?.result!=null) entry=1
         if (!stage.practice || preparedStage!=stage || preparing || actedStage!=stage || done) return
         val state=model.state.value
         val performed = when(stage) {
@@ -269,6 +406,9 @@ internal class GuideRuntime(val position: MutableIntState, appearance: Appearanc
             GuideStage.IMPORT -> anchors["template_import_list"]?.window=="sheet"
             GuideStage.EXPECT -> entry>0 && goal.expectedRooms.isNotEmpty()
             GuideStage.GENERATE -> model.planning.executions.value[Campus.XITUCHENG]?.result!=null
+            GuideStage.WAIT_CONTENT,GuideStage.HISTORY,GuideStage.HISTORY_REPLAY -> entry>0
+            GuideStage.READER -> "reader" in signals
+            GuideStage.DINO -> "jump" in signals
             GuideStage.THEME -> state.appearance.westTone!=initialTone
             else -> false
         }
@@ -312,6 +452,15 @@ internal class GuideRuntime(val position: MutableIntState, appearance: Appearanc
             GuideStage.FLEXIBLE -> goal=goal.copy(flexible=!goal.flexible)
             GuideStage.GENERATE -> requestPlanning()
             GuideStage.STOP -> model.cancelPlanning()
+            GuideStage.WAIT_CONTENT -> { utilities.panel=PlannerPanel.LEISURE;openedUtility(PlannerPanel.LEISURE) }
+            GuideStage.READER -> nextReaderItem()
+            GuideStage.DINO -> if(entry==0) { utilities.game=true;choseGame(true) }
+                else { utilities.runner.jump();jumped() }
+            GuideStage.WAIT_RESULT -> if(entry>0) { utilities.closePanel();viewedPlanningResult() }
+            GuideStage.HISTORY -> { utilities.panel=PlannerPanel.HISTORY;openedUtility(PlannerPanel.HISTORY) }
+            GuideStage.HISTORY_REPLAY -> history.firstOrNull()?.let {
+                goal=goal.copy(savedWindows=emptyList());utilities.openRecord(it);replayedHistory()
+            }
             GuideStage.THEME -> {
                 enteredSettings()
                 model.setCampusTone(Campus.XITUCHENG,model.state.value.appearance.westTone.step(1))

@@ -28,45 +28,36 @@ import java.time.Clock
 
 internal data class PlanningFeedbackButton(val label: String, val tag: String, val onClick: () -> Unit)
 
-/** Keep the nullable host mounted so clearing feedback also plays its leftward exit. */
+/** Stable notice slot within its own layer; an overlay never reflows the result layer. */
 @Composable
 internal fun PlanningFeedbackHost(feedback: PlanningResult?, goal: PlanningDraft, clock: Clock,
     onGoal: (PlanningDraft) -> Unit, tagPrefix: String = "planner", horizontalPadding: Dp = 24.dp,
-    reserveSpace: Boolean = false, trailingAction: PlanningFeedbackButton? = null, enabled: Boolean = true) {
+    reserveSpace: Boolean = false, trailingAction: PlanningFeedbackButton? = null, enabled: Boolean = true,
+    initiallyVisible: Boolean = false) {
     var retained by remember { mutableStateOf(feedback) }
     var retainedAction by remember { mutableStateOf(trailingAction) }
     SideEffect { if (feedback!=null) { retained=feedback; retainedAction=trailingAction } }
     val shown=feedback ?: retained
     val shownAction=if (feedback!=null) trailingAction else retainedAction
-    val content: @Composable () -> Unit = {
-        if (reserveSpace) {
-            // A completed calculation replaces the pending message with its own leftward entrance.
-            // Selection / score / enabled-state changes must not replay this animation.
-            key(shown?.message,shown?.problem,shownAction?.label) {
-                val visibility=remember { MutableTransitionState(false) }
-                visibility.targetState=feedback!=null
-                AnimatedVisibility(visibility,Modifier.fillMaxWidth().clipToBounds().testTag("${tagPrefix}_feedback_host"),
-                    enter=slideInHorizontally(tween(240)) { -it } + fadeIn(tween(180)),
-                    exit=slideOutHorizontally(tween(200)) { -it } + fadeOut(tween(140)),label="reserved planning feedback") {
-                    if (shown!=null) PlanningFeedback(shown,goal,clock,feedback!=null && enabled,onGoal,
-                        tagPrefix,horizontalPadding,shownAction,announce=true)
-                }
-            }
-        } else AnimatedVisibility(feedback!=null,Modifier.fillMaxWidth().clipToBounds().testTag("${tagPrefix}_feedback_host"),
-            enter=slideInHorizontally(tween(240)) { -it } + fadeIn(tween(180)) + expandVertically(tween(240),Alignment.Top),
-            exit=slideOutHorizontally(tween(200)) { -it } + fadeOut(tween(140)) + shrinkVertically(tween(200),Alignment.Top),
-            label="planning feedback") {
-            if (shown!=null) PlanningFeedback(shown,goal,clock,feedback!=null && enabled,onGoal,tagPrefix,horizontalPadding,shownAction)
-        }
+    // Only an actual message change starts a new entrance. Reserving space or adding
+    // a result action on panel entry must not create a new transition / composition.
+    var mounted by remember { mutableStateOf(false) }
+    val visibility=key(shown?.message,shown?.problem) {
+        remember { MutableTransitionState(initiallyVisible && !mounted && feedback!=null) }
     }
-    if (!reserveSpace) { content(); return }
+    SideEffect { mounted=true }
+    visibility.targetState=feedback!=null
+    val enter=slideInHorizontally(tween(240)) { -it } + fadeIn(tween(180)) +
+        if(reserveSpace) EnterTransition.None else expandVertically(tween(240),Alignment.Top)
+    val exit=slideOutHorizontally(tween(200)) { -it } + fadeOut(tween(140)) +
+        if(reserveSpace) ExitTransition.None else shrinkVertically(tween(200),Alignment.Top)
 
-    // Measure the same typography and action layout before anything is shown. These samples
-    // are never placed, drawn or exposed to accessibility. No post-layout height state or
-    // animation can resize the game when a pending calculation becomes complete.
-    SubcomposeLayout(Modifier.fillMaxWidth().clipToBounds().testTag("${tagPrefix}_feedback_slot")) { constraints ->
+    // Always use the same subcomposition, even outside a utility panel. Reservation
+    // changes only the space beneath the existing notice; never its position or state.
+    SubcomposeLayout(Modifier.fillMaxWidth().clipToBounds().then(if(reserveSpace) Modifier.guideTag("${tagPrefix}_feedback_slot")
+        else Modifier.testTag("${tagPrefix}_feedback_slot"))) { constraints ->
         val childConstraints=Constraints.fixedWidth(constraints.maxWidth)
-        val reserved=subcompose("reservation") {
+        val reservedHeight=if(reserveSpace) subcompose("reservation") {
             PlanningFeedback(PlanningResult(problem=PlanningProblem.INVALID_TIME),goal,clock,false,{},
                 "${tagPrefix}_reserve_invalid",horizontalPadding)
             PlanningFeedback(PlanningResult(problem=PlanningProblem.PAST_TIME),goal,clock,false,{},
@@ -75,9 +66,17 @@ internal fun PlanningFeedbackHost(feedback: PlanningResult?, goal: PlanningDraft
                 "${tagPrefix}_reserve_complete",horizontalPadding,PlanningFeedbackButton("查看结果","reserve_view_result") {})
             PlanningFeedback(PlanningResult(message="正在计算，可继续浏览或游戏"),goal,clock,false,{},
                 "${tagPrefix}_reserve_pending",horizontalPadding)
-        }.map { it.measure(childConstraints) }
-        val visible=subcompose("visible") { Box(Modifier.fillMaxWidth()) { content() } }.single().measure(childConstraints)
-        val height=constraints.constrainHeight(maxOf(reserved.maxOf { it.height },visible.height))
+        }.maxOf { it.measure(childConstraints).height } else 0
+        val visible=subcompose("visible") {
+            Box(Modifier.fillMaxWidth()) {
+                AnimatedVisibility(visibility,Modifier.fillMaxWidth().clipToBounds().testTag("${tagPrefix}_feedback_host"),
+                    enter=enter,exit=exit,label="planning feedback") {
+                    if(shown!=null) PlanningFeedback(shown,goal,clock,feedback!=null && enabled,onGoal,
+                        tagPrefix,horizontalPadding,shownAction,announce=reserveSpace)
+                }
+            }
+        }.single().measure(childConstraints)
+        val height=constraints.constrainHeight(maxOf(reservedHeight,visible.height))
         layout(constraints.maxWidth,height) { visible.place(0,0) }
     }
 }

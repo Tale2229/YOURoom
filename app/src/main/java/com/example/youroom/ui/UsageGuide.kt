@@ -3,6 +3,8 @@ package com.example.youroom.ui
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -62,7 +64,9 @@ internal fun Modifier.guideTag(id: String): Modifier = composed {
     val window=LocalGuideWindow.current
     val dangerTarget=guide?.stage in listOf(GuideStage.LOGOUT,GuideStage.CLEAR_CACHE) &&
         id in listOf("settings_logout","settings_clear_cache")
-    if (guide==null || (id !in guide.spotlightTargets && id!="template_import_list" && !dangerTarget)) return@composed this.testTag(id)
+    val utilityPlacement=guide?.utilityLesson==true && id in listOf("planner_utility_panel","planner_feedback_slot",
+        "planner_dinosaur","planner_utility_footer","planner_target_strip","planner_workspace","planner_room_01:2-201")
+    if (guide==null || (id !in guide.spotlightTargets && id!="template_import_list" && !dangerTarget && !utilityPlacement)) return@composed this.testTag(id)
     val owner=remember { Any() }
     val bring=remember { BringIntoViewRequester() }
     var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -185,7 +189,7 @@ internal class GuideModal(val window:String,val stage:GuideStage,
 private data class GuidePreparationFrame(val stage:GuideStage,val prepared:GuideStage?,
     val window:String,val presented:String,val ready:Boolean,val layoutReady:Boolean,val goal:PlanningDraft,val anchors:List<GuideAnchor?>)
 private fun GuideRuntime.preparationFrame()=GuidePreparationFrame(stage,preparedStage,window,presentedWindow,ready,
-    layoutReady,goal,spotlightTargets.map { anchors[it] })
+    layoutReady,goal,spotlightTargets.map { anchor(it) })
 
 @Composable private fun GuideWindowHost(window: String, modifier: Modifier=Modifier.fillMaxSize(),
     content: @Composable BoxScope.() -> Unit) {
@@ -241,12 +245,18 @@ internal fun guideMultipleBlockers(width:Float,height:Float,holes:List<Rect>):Li
         val density=LocalDensity.current
         val width=constraints.maxWidth.toFloat();val height=constraints.maxHeight.toFloat()
         val visibleAnchors=if(guide.preparing) listOfNotNull(guide.retainedOpening)
-            else guide.spotlightTargets.mapNotNull { guide.anchors[it] }
-        val holes=visibleAnchors.mapNotNull { anchor ->
+            else guide.spotlightTargets.mapNotNull { guide.anchor(it) }
+        val rawHoles=visibleAnchors.mapNotNull { anchor ->
             anchor.takeIf { it.window==window }?.bounds?.translate(-origin)
                 ?.inflate(with(density) { 4.dp.toPx() })?.intersect(Rect(0f,0f,width,height))
                 ?.takeIf { it.width>0 && it.height>0 }
         }
+        val holes=if(guide.stage==GuideStage.WAIT_RESULT && rawHoles.size==1) {
+            // Mount at the first real rectangle on directory jumps, never animate
+            // from y=0 while setup has no opening. Adjacent game steps retain theirs.
+            val openingTop by animateFloatAsState(rawHoles.single().top,tween(260),label="guide_wait_opening_top")
+            listOf(rawHoles.single().let { Rect(it.left,openingTop,it.right,it.bottom) })
+        } else rawHoles
         val hole=holes.firstOrNull()
         Canvas(Modifier.fillMaxSize().testTag("guide_scrim")) {
             var openings=Path()
@@ -272,18 +282,28 @@ internal fun guideMultipleBlockers(width:Float,height:Float,holes:List<Rect>):Li
         // Keep the scrim mounted under the directory, including chapter changes.
         // Only the instructional panel is hidden by the directory dialog.
         if(guide.menu) return@BoxWithConstraints
-        val navigationTarget=guide.stage==GuideStage.NAV || guide.target.startsWith("tab_")
+        val navigationTarget=guide.stage==GuideStage.NAV || guide.target.startsWith("tab_") ||
+            (guide.utilityLesson && guide.target in listOf("planner_leisure","planner_history"))
         val aboveButton=guide.stage in listOf(GuideStage.LOGOUT,GuideStage.CLEAR_CACHE)
         // Layout attachment is independent of the visual cutouts: preparation
         // closes the holes but must not send the panel back to the screen bottom.
+        // Keep the new practice controls accessible. The panel remains bottom-anchored
+        // immediately above the opened utility surface, rather than covering its game/footer.
+        val utilityPlacement=if(guide.utilityLesson && guide.target !in listOf("planner_history","planner_leisure") &&
+            !(guide.stage==GuideStage.HISTORY_REPLAY && guide.entry>0))
+            (if(guide.stage==GuideStage.WAIT_RESULT && guide.completionOpening) guide.anchor("planner_wait_area")
+                else guide.anchors["planner_utility_panel"])
+                ?.bounds?.translate(-origin) else null
         val placementHole=if(aboveButton) (guide.anchors[guide.target] ?: guide.retainedPanelAnchor)
-            ?.bounds?.translate(-origin)?.inflate(with(density) { 4.dp.toPx() }) else hole
-        val bottomPadding=if((navigationTarget || aboveButton) && placementHole!=null)
+            ?.bounds?.translate(-origin)?.inflate(with(density) { 4.dp.toPx() }) else utilityPlacement ?: hole
+        val targetBottomPadding=if((navigationTarget || aboveButton || utilityPlacement!=null) && placementHole!=null)
             with(density) { (height-placementHole.top).coerceAtLeast(0f).toDp() }+8.dp else 12.dp
+        val bottomPadding by animateDpAsState(targetBottomPadding,
+            animationSpec=tween(if(guide.stage==GuideStage.WAIT_RESULT) 260 else 0),label="guide_wait_panel_position")
         // Every lesson stays bottom-anchored, including in native dialogs. Fit
         // below the spotlight where possible; full-height targets must not make
         // the scrolling guide disappear or remove access to its controls.
-        val panelMaximum=if(aboveButton && placementHole!=null)
+        val panelMaximum=if((aboveButton || utilityPlacement!=null) && placementHole!=null)
             minOf(maxHeight*.46f,(with(density) { placementHole.top.toDp() }-24.dp).coerceAtLeast(128.dp))
             else if(!navigationTarget && holes.isNotEmpty())
             minOf(maxHeight*.46f,(with(density) { (height-holes.maxOf { it.bottom }).toDp() }-bottomPadding-8.dp).coerceAtLeast(128.dp))

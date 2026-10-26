@@ -17,15 +17,30 @@ import java.time.LocalDate
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class UsageGuideTest {
+    private fun expandedStep(index: Int)=when { index<=28 -> index;index<=30 -> index+4;else -> index+6 }
+    @Test fun sixNewLessonsAndLegacyProgressUseTheApprovedFortyNineStepOrder() {
+        assertEquals(listOf(30,31,32,33,34,35,36,37,38),listOf(GuideStage.WAIT_CONTENT,GuideStage.READER,
+            GuideStage.DINO,GuideStage.WAIT_RESULT,GuideStage.RESULTS,GuideStage.ALTERNATIVES,
+            GuideStage.HISTORY,GuideStage.HISTORY_REPLAY,GuideStage.THEME).map { it.ordinal+1 })
+        assertEquals(49,GuideStage.entries.size)
+        for(old in 0..42) for(outcome in GuideOutcome.entries) {
+            val migrated=GuideRecord(old,outcome,4).current()
+            assertEquals(when { old<=28 -> old;old<=30 -> old+4;else -> old+6 },migrated.step)
+            assertEquals(outcome,migrated.outcome)
+            assertEquals(5,migrated.version)
+            assertEquals(outcome==GuideOutcome.IN_PROGRESS,GuideHistory(records=mapOf("test" to migrated)).shouldOffer("test"))
+        }
+    }
     @Test fun replayAndAboutSwapPreservesProgressAndOutcomes() {
-        assertEquals(38,GuideStage.REPLAY.ordinal)
-        assertEquals(39,GuideStage.ABOUT.ordinal)
+        assertEquals(44,GuideStage.REPLAY.ordinal)
+        assertEquals(45,GuideStage.ABOUT.ordinal)
         assertEquals("settings_about",GuideStage.ABOUT.target)
         assertEquals("root",GuideStage.ABOUT.window)
         assertFalse(GuideStage.ABOUT.practice)
         for(old in 0..42) for(outcome in GuideOutcome.entries) {
             val record=GuideRecord(old,outcome,3).current()
-            assertEquals(when(old) {38->39;39->38;else->old},record.step)
+            val swapped=when(old) {38->39;39->38;else->old}
+            assertEquals(when { swapped<=28 -> swapped;swapped<=30 -> swapped+4;else -> swapped+6 },record.step)
             assertEquals(outcome,record.outcome)
             assertEquals(GuideHistory.Version,record.version)
             assertEquals(record,record.current())
@@ -140,8 +155,8 @@ class UsageGuideTest {
             runtime.demonstrate()
             assertEquals("settings_about",runtime.target);assertEquals("root",runtime.window)
             assertEquals(0,runtime.entry)
-            assertEquals(39,runtime.position.intValue)
-            assertEquals(43,GuideStage.entries.size)
+            assertEquals(45,runtime.position.intValue)
+            assertEquals(49,GuideStage.entries.size)
         } finally { runtime.close();Dispatchers.resetMain() }
     }
 
@@ -159,8 +174,8 @@ class UsageGuideTest {
             assertEquals("tab_settings",runtime.target);assertEquals(1,runtime.page)
             runtime.enteredSettings()
             assertEquals("settings_theme_belt",runtime.target);assertEquals(2,runtime.page)
-            assertEquals(31,runtime.position.intValue)
-            assertEquals(43,GuideStage.entries.size)
+            assertEquals(37,runtime.position.intValue)
+            assertEquals(49,GuideStage.entries.size)
         } finally { runtime.close();Dispatchers.resetMain() }
     }
 
@@ -233,7 +248,7 @@ class UsageGuideTest {
         for(old in 0..43) {
             val updated=GuideRecord(old,version=2).current()
             val merged=if(old>25) old-1 else old
-            assertEquals(when(merged) {38->39;39->38;else->merged},updated.step)
+            assertEquals(expandedStep(when(merged) {38->39;39->38;else->merged}),updated.step)
             assertEquals(GuideHistory.Version,updated.version)
             assertEquals(updated,updated.current())
         }
@@ -268,11 +283,11 @@ class UsageGuideTest {
     }
 
     @Test fun settingsStepOrderCopyAndDeletedConfirmationAreFinalized() {
-        assertEquals(43,GuideStage.entries.size)
-        assertEquals(GuideStage.DEFAULT_CAMPUS,GuideStage.entries[34])
-        assertEquals(GuideStage.NUMBERS,GuideStage.entries[35])
-        assertEquals(GuideStage.CLEAR_CACHE,GuideStage.entries[41])
-        assertEquals(GuideStage.FINISH,GuideStage.entries[42])
+        assertEquals(49,GuideStage.entries.size)
+        assertEquals(GuideStage.DEFAULT_CAMPUS,GuideStage.entries[40])
+        assertEquals(GuideStage.NUMBERS,GuideStage.entries[41])
+        assertEquals(GuideStage.CLEAR_CACHE,GuideStage.entries[47])
+        assertEquals(GuideStage.FINISH,GuideStage.entries[48])
         assertFalse(GuideStage.entries.any { it.name=="LOGOUT_CONFIRM" })
         assertEquals("切换配色",GuideStage.THEME.title)
         assertEquals("进入设置页面，点击左右箭头或者滑动来切换配色。合适的色彩能带来愉悦、共鸣，也是一种自我表达哦",GuideStage.THEME.instruction)
@@ -284,8 +299,8 @@ class UsageGuideTest {
         assertEquals("点击管理常用时段组合",GuideStage.TEMPLATES.instruction)
         assertEquals("这里有代码库、问题反馈链接和相关说明",GuideStage.ABOUT.instruction)
         assertEquals("退出登录",GuideStage.LOGOUT.title)
-        assertEquals("退出登录仍保留个人使用数据",GuideStage.LOGOUT.instruction)
-        assertEquals("清除账号密码以及全部个人数据，需要使用登录的账号密码进行校验，此操作不可恢复，请谨慎选择",GuideStage.CLEAR_CACHE.instruction)
+        assertEquals("退出登录仍保留个人使用数据和游戏最高分，规划历史仍会在次日清理",GuideStage.LOGOUT.instruction)
+        assertEquals("清除账号密码及全部个人数据，包括规划历史和游戏最高分，需要登录账密校验，不可恢复，请谨慎选择",GuideStage.CLEAR_CACHE.instruction)
         assertEquals("感谢使用本应用，希望能够帮助到您，祝您学习生活愉快顺利！",GuideStage.FINISH.instruction)
     }
 
@@ -295,7 +310,7 @@ class UsageGuideTest {
             val merged=if(previous>25) previous-1 else previous
             val expected=when(merged) {38->39;39->38;else->merged}
             val updated=GuideRecord(old,version=1).current()
-            assertEquals(expected,updated.step)
+            assertEquals(expandedStep(expected),updated.step)
             assertEquals(GuideHistory.Version,updated.version)
             assertEquals(updated,updated.current())
         }
@@ -304,9 +319,9 @@ class UsageGuideTest {
         }
         val values=mutablePreferencesOf(stringPreferencesKey("guide.records.v1") to
             """{"guest":{"step":35,"outcome":"IN_PROGRESS","version":1}}""")
-        assertEquals(35,GuidePreferenceKeys.read(values).records.getValue("guest").step)
+        assertEquals(41,GuidePreferenceKeys.read(values).records.getValue("guest").step)
         GuidePreferenceKeys.write(values,"another",GuideRecord(1))
-        assertEquals(35,GuidePreferenceKeys.read(values).records.getValue("guest").step)
+        assertEquals(41,GuidePreferenceKeys.read(values).records.getValue("guest").step)
     }
 
     @Test fun darkLessonResetsOnlyThePracticeThemeAndSettingsEntrancesStayInTheirSteps()=runTest {
@@ -321,11 +336,11 @@ class UsageGuideTest {
             assertEquals("settings_planning",runtime.target);assertEquals("root",runtime.window)
             runtime.enteredPlanning()
             assertEquals("planning_default_direction_group",runtime.target);assertEquals("sheet",runtime.window)
-            assertEquals(36,runtime.position.intValue)
+            assertEquals(42,runtime.position.intValue)
             runtime.select(GuideStage.TEMPLATES.ordinal);runtime.prepare()
             assertEquals("planning_templates_entry",runtime.target)
             runtime.enteredTemplates();assertEquals("template_list",runtime.target)
-            assertEquals(37,runtime.position.intValue)
+            assertEquals(43,runtime.position.intValue)
             runtime.exitedTemplates();assertEquals("planning_templates_entry",runtime.target)
         } finally { runtime.close();Dispatchers.resetMain() }
     }
@@ -359,7 +374,7 @@ class UsageGuideTest {
             runtime.updateGoal(imported)
             runtime.importedTemplate();assertEquals(GuideStage.EXPECT,runtime.stage)
             runtime.prepare();assertEquals(imported,runtime.goal)
-            assertEquals(43,GuideStage.entries.size)
+            assertEquals(49,GuideStage.entries.size)
         } finally { runtime.close();Dispatchers.resetMain() }
     }
 
@@ -414,11 +429,11 @@ class UsageGuideTest {
             assertEquals("tab_settings",runtime.target);assertEquals(0,runtime.page)
             runtime.enteredSettings();assertEquals("settings_room_marks",runtime.target);assertEquals(2,runtime.page)
             runtime.enteredMarks();assertEquals("settings_marks_list",runtime.target);assertEquals("sheet",runtime.window)
-            assertEquals(14,runtime.position.intValue);assertEquals(43,GuideStage.entries.size)
+            assertEquals(14,runtime.position.intValue);assertEquals(49,GuideStage.entries.size)
         } finally { runtime.close();Dispatchers.resetMain() }
     }
     @Test fun everyStepInstructionOmitsOnlyItsTrailingFullStop() {
-        assertEquals(43,GuideStage.entries.size)
+        assertEquals(49,GuideStage.entries.size)
         assertTrue(GuideStage.entries.all { it.instruction.isNotBlank() && !it.instruction.endsWith("。") && !it.instruction.endsWith(".") })
         assertEquals("欢迎使用YOURoom！来看看有哪些功能以及如何操作吧",GuideStage.INTRO.instruction)
         assertEquals("点击“从现在起”把开始时间设为当前时间，此处假设是10:01，此操作不会修改结束时间",GuideStage.FROM_NOW.instruction)
@@ -440,7 +455,7 @@ class UsageGuideTest {
             assertEquals("expected_room_dialog",runtime.target);assertEquals("expected",runtime.window)
             assertEquals(25,runtime.position.intValue)
             assertTrue(runtime.goal.expectedRooms.isEmpty())
-            assertEquals(43,GuideStage.entries.size)
+            assertEquals(49,GuideStage.entries.size)
         } finally { runtime.close();Dispatchers.resetMain() }
     }
 
@@ -483,7 +498,7 @@ class UsageGuideTest {
             assertEquals("planner_save_periods_0",runtime.target);assertEquals("period",runtime.window)
             runtime.openedTemplate()
             assertEquals("template_editor_content",runtime.target);assertEquals("sheet",runtime.window)
-            assertEquals(43,GuideStage.entries.size)
+            assertEquals(49,GuideStage.entries.size)
         } finally { runtime.close();Dispatchers.resetMain() }
     }
 

@@ -7,21 +7,18 @@ import org.junit.Assert.*
 import org.junit.Test
 import kotlin.random.Random
 
-/** Definition only: no tests were run during this implementation. */
+/** Offline poetry seeds remain available for guide fixtures and load failures. */
 class LeisureContentTest {
-    @Test fun everyThemeHasAllFiveOfflineCategoriesAndSources() {
-        for (tone in CampusTone.entries) {
-            val items = LeisureContent.items(tone)
-            assertEquals(LeisureKind.entries.toSet(), items.map { it.kind }.toSet())
-            assertEquals(items.size, items.map { it.id }.distinct().size)
-            assertTrue(items.all { it.body.isNotBlank() && it.source.isNotBlank() })
-            assertEquals(tone, items.single { it.kind == LeisureKind.THEME }.theme)
-        }
+    @Test fun offlineFallbackContainsOnlyAttributedVerseSeeds() {
+        val items = LeisureContent.items()
+        assertEquals(3,items.size)
+        assertEquals(items.size,items.map { it.id }.distinct().size)
+        assertTrue(items.all { it.id.startsWith("verse-") && it.body.isNotBlank() && '《' in it.source })
     }
     @Test fun nextNeverImmediatelyRepeatsTheSameItem() {
         var previous: String? = null
         repeat(60) { index ->
-            val item = LeisureContent.next(CampusTone.MATISSE, previous, Random(index))
+            val item = LeisureContent.next(previous, Random(index))
             assertNotEquals(previous, item.id)
             previous = item.id
         }

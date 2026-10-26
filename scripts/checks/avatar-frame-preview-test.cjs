@@ -1,0 +1,60 @@
+const auditPaths = require('./paths.cjs');
+auditPaths.enter();
+const {chromium}=auditPaths.playwright();
+const assert=require('node:assert/strict');
+const {pathToFileURL}=require('node:url');
+(async()=>{
+ const browser=await chromium.launch({executablePath:auditPaths.browser(),headless:true});
+ const page=await browser.newPage({viewport:{width:1440,height:1160},deviceScaleFactor:1});
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(pathToFileURL(auditPaths.resolve("docs/colors/avatar-frame-preview.html")).href);
+ await page.waitForFunction(()=>document.querySelectorAll('#gallery .phone').length===12);
+ await page.evaluate(async()=>{await Promise.all([...document.querySelectorAll('.avatar')].map(i=>i.decode()));});
+ assert.equal(await page.locator('#gallery .frame-color').count(),12);
+ assert.equal(await page.locator('#frame-comparison .frame-color').count(),3);
+ assert.equal(await page.locator('.card-variants:visible').count(),0);
+ const screenshot=auditPaths.resolve("artifacts/qa/avatar-verification/");
+ const settle=()=>page.evaluate(async()=>{await Promise.all(document.getAnimations().map(a=>a.finished.catch(()=>{})));});
+ await settle();
+ await page.screenshot({path:screenshot+'frame-comparison-light.png'});
+ for(const mode of ['original','solid','extend']){
+   await page.locator('[data-frame-mode="'+mode+'"]').click();
+   assert.equal(await page.locator('[data-frame-mode="'+mode+'"]').getAttribute('aria-pressed'),'true');
+   assert.equal(await page.locator('#gallery .frame-color').count(),12);
+   assert.equal(await page.evaluate(()=>[...document.querySelectorAll('#gallery .frame-color')].every(c=>c.getContext('2d').getImageData(5,47,1,1).data[3]>0)),true);
+ }
+ for(const id of await page.locator('#compare-theme option').evaluateAll(options=>options.map(o=>o.value))){
+   await page.locator('#compare-theme').selectOption(id);
+   assert.equal(await page.locator('#frame-comparison .avatar').first().getAttribute('src'),await page.locator('#frame-comparison .avatar').last().getAttribute('src'));
+ }
+ await page.locator('#compare-theme').selectOption('MORNING_BELL');
+ assert.match(await page.locator('#frame-comparison .avatar').first().getAttribute('src'),/晨钟暮鼓/);
+ await page.locator('#frame-strength').fill('160');
+ assert.equal(await page.locator('#strength-output').textContent(),'160%');
+ await page.locator('#frame-strength').fill('100');
+ await page.locator('#mode-toggle').click();
+ assert.equal(await page.locator('.phone[data-dark="true"]').count(),12);
+ await settle();
+ await page.screenshot({path:screenshot+'frame-comparison-dark.png'});
+ await page.locator('#gallery .study').first().locator('.next').click();
+ assert.equal(await page.locator('#gallery .study').first().locator('.theme-name').textContent(),'松绿');
+ await page.locator('#gallery .study').first().locator('.frame').click();
+ assert.equal(await page.locator('#lightbox').evaluate(d=>d.open),true);
+ await page.keyboard.press('Escape');
+ await page.locator('#reset').click();
+ assert.equal(await page.locator('.phone[data-dark="false"]').count(),12);
+ assert.equal(await page.locator('#strength-output').textContent(),'100%');
+ assert.equal(await page.locator('[data-frame-mode="extend"]').getAttribute('aria-pressed'),'true');
+ await page.setViewportSize({width:390,height:1100});
+ await settle();
+ await page.screenshot({path:screenshot+'frame-comparison-mobile.png'});
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+ await page.setViewportSize({width:320,height:1000});
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+ assert.equal((await page.locator('#frame-comparison .avatar').first().boundingBox()).width,75);
+ await page.emulateMedia({reducedMotion:'reduce'});
+ await page.locator('[data-frame-mode="solid"]').click();
+ assert.deepEqual(errors,[]);
+ console.log('PASS: file://, 12 final images, 3 comparison modes, range, light/dark, arrows, dialog, reset, 390/320px layout, reduced motion; zero browser errors.');
+ await browser.close();
+})().catch(e=>{console.error(e);process.exitCode=1;});

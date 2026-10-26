@@ -39,10 +39,10 @@ class GuideDirectoryTest {
         }
     }
 
-    @Test fun chaptersPartitionAllFortyThreeStepsWithoutGapsOrReordering() {
-        assertEquals(43,GuideStage.entries.size)
+    @Test fun chaptersPartitionAllFortyNineStepsWithoutGapsOrReordering() {
+        assertEquals(49,GuideStage.entries.size)
         assertEquals(GuideStage.entries,GuideChapters.indices.flatMap(::guideChapterSteps))
-        assertEquals(listOf("第 1—9 步","第 10—15 步","第 16—31 步","第 32—43 步"),
+        assertEquals(listOf("第 1—9 步","第 10—15 步","第 16—37 步","第 38—49 步"),
             GuideChapters.indices.map(::guideChapterRange))
         assertEquals(GuideChapters.size,GuideChapterDescriptions.size)
     }

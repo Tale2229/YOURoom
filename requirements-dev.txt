@@ -1,0 +1,4 @@
+# Optional Python maintenance tools; normal Android builds do not need these.
+Pillow==12.1.1
+fonttools==4.67.0
+playwright==1.60.0

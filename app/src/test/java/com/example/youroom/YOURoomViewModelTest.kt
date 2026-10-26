@@ -1,6 +1,7 @@
 package com.example.youroom
 
 import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewModelScope
 import com.example.youroom.data.*
 import com.example.youroom.data.local.FilterSettings
 import com.example.youroom.data.local.RememberedCredentials
@@ -36,7 +37,13 @@ class YOURoomViewModelTest {
         val model = YOURoomViewModel(source, settings, testClock,StandardTestDispatcher(testScheduler))
         val store = ViewModelStore().apply { put("test", model) }
         try { runCurrent(); block(model, source, settings) }
-        finally { store.clear(); Dispatchers.resetMain() }
+        finally {
+            // Disk work can still be returning from Dispatchers.IO after cancellation.
+            // Await the whole ViewModel scope before removing its Main test dispatcher.
+            val modelJob=model.viewModelScope.coroutineContext[Job]
+            store.clear()
+            try { modelJob?.join() } finally { Dispatchers.resetMain() }
+        }
     }
 
     @Test fun switchSharesTimeAndTagsAndRestoresCampusBuildings() = checkModel { model, source, _ ->
@@ -84,6 +91,32 @@ class YOURoomViewModelTest {
         assertTrue(model.planning.executions.value.isNotEmpty())
         model.openLogin();runCurrent()
         assertTrue(model.planning.executions.value.isEmpty())
+    }
+
+    @Test fun identicalConfirmedInputsReuseHistoryWithoutAppendingAndChangedFavoritesAreNewInputs() = checkModel(false) { model, _, _ ->
+        model.showDemo()
+        val draft=PlanningDraft(flexible=false,savedWindows=listOf(StudyWindow(480,540)))
+        model.generatePlanning(draft);runCurrent()
+        val first=model.planning.executions.value.getValue(Campus.XITUCHENG)
+        assertEquals(1,model.planningHistory.value.size)
+        assertEquals(first.input.key,model.planningHistory.value.single().inputKey)
+        model.generatePlanning(draft.copy(start=900,end=1000));runCurrent()
+        assertSame(first,model.planning.executions.value.getValue(Campus.XITUCHENG))
+        assertEquals(1,model.planningHistory.value.size)
+        model.planning.discard(Campus.XITUCHENG)
+        model.generatePlanning(draft);runCurrent()
+        val reused=model.planning.executions.value.getValue(Campus.XITUCHENG)
+        assertTrue(reused.reused);assertEquals(first.result,reused.result)
+        assertEquals(1,model.planningHistory.value.size)
+        val room=model.state.value.campusSnapshot!!.classrooms.first()
+        model.toggleFavorite(room);runCurrent()
+        model.generatePlanning(draft);runCurrent()
+        assertFalse(model.planning.executions.value.getValue(Campus.XITUCHENG).reused)
+        assertEquals(2,model.planningHistory.value.size)
+        model.toggleFavorite(room);runCurrent()
+        model.generatePlanning(draft);runCurrent()
+        assertTrue(model.planning.executions.value.getValue(Campus.XITUCHENG).reused)
+        assertEquals(2,model.planningHistory.value.size)
     }
 
     @Test fun lateResponseFromCanceledRequestCannotReplaceActiveCampus() = checkModel { model, source, _ ->

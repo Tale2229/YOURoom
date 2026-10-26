@@ -70,10 +70,10 @@ class GuideDirectoryUiTest {
         assertEquals(1,skipped)
         assertEquals(1,closed)
         compose.onNodeWithTag("guide_chapter_3").performScrollTo().performClick()
-        compose.onNodeWithTag("guide_step_list").performScrollToNode(hasTestTag("guide_step_42"))
-        compose.onNodeWithTag("guide_step_42").performScrollTo().performClick()
-        compose.onNodeWithTag("guide_enter_step").assertTextContains("进入第43步").performClick()
-        assertEquals(42,entered)
+        compose.onNodeWithTag("guide_step_list").performScrollToNode(hasTestTag("guide_step_48"))
+        compose.onNodeWithTag("guide_step_48").performScrollTo().performClick()
+        compose.onNodeWithTag("guide_enter_step").assertTextContains("进入第49步").performClick()
+        assertEquals(48,entered)
     }
 
     @Test fun largeTextKeepsFooterBackAndLastChapterStepReachable() {
@@ -84,8 +84,8 @@ class GuideDirectoryUiTest {
         compose.onNodeWithTag("guide_menu_close").assertIsDisplayed().assertContentDescriptionEquals("跳过指引")
         shot("large-cover")
         compose.onNodeWithTag("guide_chapter_3").performScrollTo().assertIsDisplayed().performClick()
-        compose.onNodeWithTag("guide_step_list").performScrollToNode(hasTestTag("guide_step_42"))
-        compose.onNodeWithTag("guide_step_42").performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithTag("guide_step_list").performScrollToNode(hasTestTag("guide_step_48"))
+        compose.onNodeWithTag("guide_step_48").performScrollTo().assertIsDisplayed().performClick()
         compose.onNodeWithTag("guide_enter_step").assertIsDisplayed()
         compose.onNodeWithTag("guide_chapter_back").assertIsDisplayed()
         shot("large-chapter")
@@ -95,14 +95,14 @@ class GuideDirectoryUiTest {
         val restoration=StateRestorationTester(compose)
         restoration.setContent {Content()}
         compose.onNodeWithTag("guide_chapter_3").performScrollTo().performClick()
-        compose.onNodeWithTag("guide_step_list").performScrollToNode(hasTestTag("guide_step_41"))
-        compose.onNodeWithTag("guide_step_41").performScrollTo().performClick()
+        compose.onNodeWithTag("guide_step_list").performScrollToNode(hasTestTag("guide_step_47"))
+        compose.onNodeWithTag("guide_step_47").performScrollTo().performClick()
         restoration.emulateSavedInstanceStateRestore()
-        compose.onNodeWithTag("guide_enter_step").assertTextContains("进入第42步")
+        compose.onNodeWithTag("guide_enter_step").assertTextContains("进入第48步")
         compose.onNodeWithTag("guide_chapter_back").assertIsDisplayed()
         assertEquals(-1,entered)
         compose.onNodeWithTag("guide_enter_step").performClick()
-        assertEquals(41,entered)
+        assertEquals(47,entered)
     }
 
     private fun shot(name:String) {

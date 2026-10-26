@@ -9,7 +9,7 @@ import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
 
-/** Added with the feature; deliberately not executed per the user's instruction. */
+/** Local history serialization and retention policy. */
 class PlanningHistoryCodecTest {
     private val instant = Instant.parse("2026-10-24T04:00:00Z")
     private val date = LocalDate.of(2026, 10, 24)
@@ -45,5 +45,15 @@ class PlanningHistoryCodecTest {
         val json = PlanningHistoryCodec.write(listOf(record(1)))
         assertEquals(1, PlanningHistoryCodec.read(json.dropLast(1) + ",{}]").size)
         assertTrue(PlanningHistoryCodec.read("invalid").isEmpty())
+    }
+    @Test fun fingerprintRoundTripsAndDeduplicatesPerOwnerWithoutCollapsingLegacyRecords() {
+        val key="a".repeat(64)
+        val older=record(1).copy(inputKey=key)
+        val newer=record(2).copy(inputKey=key)
+        val other=record(3,"account:other").copy(inputKey=key)
+        val values=listOf(older,newer,other,record(4),record(5))
+        assertEquals(values,PlanningHistoryCodec.read(PlanningHistoryCodec.write(values)))
+        val current=PlanningHistoryPolicy.current(values,date)
+        assertEquals(setOf("record-2","record-3","record-4","record-5"),current.map { it.id }.toSet())
     }
 }

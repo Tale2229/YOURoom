@@ -51,7 +51,7 @@ import com.example.youroom.ui.theme.themeRoles
 
 internal val GuideChapterDescriptions = listOf(
     "校区、节次、搜索与筛选", "收藏、标签、备注与排除",
-    "设置时段，生成与比较方案", "配色、偏好与本地数据",
+    "设置时段、等待内容与历史回放", "配色、偏好与本地数据",
 )
 
 internal fun guideChapterSteps(chapter: Int) = GuideStage.entries.filter { it.chapter == chapter }

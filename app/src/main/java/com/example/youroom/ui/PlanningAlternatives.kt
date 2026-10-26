@@ -77,7 +77,7 @@ internal fun PlanningWorkspace(execution: PlanningExecution?, campus: Campus, in
         tween(180,easing=FastOutSlowInEasing),label="alternative disclosure flip")
     LaunchedEffect(campus,execution?.id,guide?.preparedStage) { expanded=guide?.stage==GuideStage.ALTERNATIVES }
     BackHandler(interactive && available && expanded) { expanded=false }
-    Column(Modifier.fillMaxSize().testTag("planner_workspace")) {
+    Column(Modifier.fillMaxSize().guideTag("planner_workspace")) {
             if (available) {
                 Spacer(Modifier.fillMaxWidth().height(12.dp).testTag("planner_heading_spacing"))
                 // Inset only the painted band. Keep the original A typography,

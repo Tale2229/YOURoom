@@ -61,6 +61,7 @@ internal object PlanningHistoryCodec {
         put("v", 1); put("id", value.id); put("owner", value.owner); put("completed", value.completedAt.toString())
         put("date", value.date.toString()); put("campus", value.campus.name)
         put("selected", value.selectedOption); put("direction", value.defaultDirection.name)
+        value.inputKey?.let { put("inputKey",it) }
         put("goal", buildJsonObject {
             put("start", value.goal.start); put("end", value.goal.end); put("flexible", value.goal.flexible)
             value.goal.origin?.let { put("origin", it) }
@@ -96,6 +97,7 @@ internal object PlanningHistoryCodec {
         require(groups.all { group -> group.optionIndices.all { it in options.indices } })
         return PlanningHistoryRecord(p.s("id"), p.s("owner"), Instant.parse(p.s("completed")), date, campus, goal,
             ClassroomSnapshot(campus.dataKey, date, Instant.parse(p.s("fetched")), slots),
-            PlanningResult(options, p["message"]?.jsonPrimitive?.content, groups = groups), p.i("selected"), PlanningDirection.valueOf(p.s("direction")))
+            PlanningResult(options, p["message"]?.jsonPrimitive?.content, groups = groups), p.i("selected"), PlanningDirection.valueOf(p.s("direction")),
+            p["inputKey"]?.jsonPrimitive?.content?.takeIf { it.matches(Regex("[0-9a-f]{64}")) })
     }
 }

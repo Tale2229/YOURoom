@@ -20,7 +20,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.outlined.Close
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animate
@@ -31,7 +30,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.graphicsLayer
 import com.example.youroom.domain.*
 import java.time.Clock
-import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 
@@ -58,7 +56,7 @@ fun StudyPlanningScreen(state: YOURoomState, goal: PlanningDraft, plans: Map<Cam
     sharedHeaderMoving: Boolean = false, interactive: Boolean = true, onCancel: () -> Unit = {},
     onPlanningPreferences: (Campus, CampusPlanningPreferences) -> Unit = { _, _ -> },
     history: List<PlanningHistoryRecord> = emptyList(), historyNotice: String? = null,
-    utilityState: PlannerUtilityState? = null) {
+    utilityState: PlannerUtilityState? = null, onClearPlanning: () -> Unit = {}) {
     val westList = rememberLazyListState()
     val shaheList = rememberLazyListState()
     var heldGoal by remember { mutableStateOf(goal) }
@@ -68,16 +66,20 @@ fun StudyPlanningScreen(state: YOURoomState, goal: PlanningDraft, plans: Map<Cam
         val displayedGoal = if (ready) goal else heldGoal
         SideEffect { if (ready) heldGoal = goal }
         StudyPlanningContent(page, displayedGoal, plans[page.campus],
-            { if (active) { if (it!=goal) utilities.clearRecord(); onGoal(it) } },
+            { if (active) {
+                if (it.savedWindows!=goal.savedWindows) utilities.clearRecord()
+                onGoal(it)
+            } },
             { if (active) { utilities.clearRecord(); onGenerate() } },
             { if (active) onRefresh() }, { if (active) onCancel() },
             { id,index -> if (active) onOption(page.campus,id,index) },clock,
             if (page.campus == Campus.XITUCHENG) westList else shaheList, active,
             { if (active) onPlanningPreferences(page.campus, it) }, history, historyNotice, utilities,
             { record -> if (active) {
+                onGoal(goal.copy(savedWindows=emptyList()))
                 utilities.openRecord(record)
                 if (record.campus!=page.campus) onCampus(record.campus)
-            } })
+            } }, { if(active) onClearPlanning() })
     }
 }
 
@@ -88,7 +90,7 @@ private fun StudyPlanningContent(state: YOURoomState, goal: PlanningDraft, execu
     onCancel: () -> Unit, onOption: (Long,Int) -> Unit,clock: Clock, listState: LazyListState,
     interactive: Boolean, onPlanningPreferences: (CampusPlanningPreferences) -> Unit,
     history: List<PlanningHistoryRecord>, historyNotice: String?, utilities: PlannerUtilityState,
-    onHistory: (PlanningHistoryRecord) -> Unit) {
+    onHistory: (PlanningHistoryRecord) -> Unit, onClearPlanning: () -> Unit) {
     var startMoving by remember { mutableStateOf(false) }
     var endMoving by remember { mutableStateOf(false) }
     var wheelGoal by remember(goal) { mutableStateOf(goal) }
@@ -132,16 +134,23 @@ private fun StudyPlanningContent(state: YOURoomState, goal: PlanningDraft, execu
     val scope=rememberCoroutineScope()
     val displaySlots=remember(snapshot) { snapshot?.slots.orEmpty().sortedBy { it.start } }
     val guide=LocalUsageGuide.current
-    val resultPanel=guide!=null || utilities.panel==PlannerPanel.RESULT
+    var utilitySurfaceVisible by remember { mutableStateOf(false) }
+    val resultPanel=(guide!=null && !guide.utilityLesson) || (utilities.panel==PlannerPanel.RESULT && !utilitySurfaceVisible)
     val previewRecord=history.firstOrNull {
         it.id==utilities.recordId && it.date==planningToday && it.snapshot.queryDate==planningToday && it.campus==state.campus
-    }?.takeIf { guide==null }
+    }?.takeIf { guide==null || guide.utilityLesson }
     val previewExecution=remember(previewRecord,utilities.recordOption) { previewRecord?.let { record ->
         PlanningExecution(-record.completedAt.toEpochMilli(),
             PlanningInput(record.snapshot,record.campus,record.date,emptyMap(),record.goal),record.result,
             selectedOption=utilities.recordOption,defaultDirection=record.defaultDirection)
     } }
     val displayingHistory=resultPanel && previewRecord!=null
+    val currentInputKey=remember(snapshot,state.campus,planningToday,state.profiles,confirmedGoal) {
+        if(snapshot!=null && confirmedGoal!=null)
+            PlanningRequestIdentity.of(snapshot,state.campus,planningToday,state.profiles,confirmedGoal) else null
+    }
+    val alreadyDisplayed=currentInputKey!=null && if(previewRecord!=null) previewRecord.inputKey==currentInputKey
+        else execution?.let { it.reusable && it.input.key==currentInputKey }==true
     // Keep the selected record when its campus is temporarily fading, but never expose an
     // expired or evicted record after midnight, account cleanup or the global ten-item limit.
     LaunchedEffect(history,planningToday,utilities.recordId) {
@@ -190,11 +199,9 @@ private fun StudyPlanningContent(state: YOURoomState, goal: PlanningDraft, execu
     BoxWithConstraints(Modifier.fillMaxSize()) {
     // Reserve a real detail viewport, including the target strip and comparison header.
     // On short screens the input area can scroll independently instead of starving it.
-    val auxiliaryOpen = guide == null && utilities.panel != PlannerPanel.RESULT
-    // Expanding an auxiliary panel reserves usable space on compact phones.
-    // The original wheels stay available in their own scroll area; normal results keep their layout.
-    val editorMaximum=minOf(maxHeight * if (auxiliaryOpen) .28f else .6f,
-        maxHeight-104.dp).coerceAtLeast(0.dp)
+    // Opening a utility must not shrink the editor or move the target / feedback upwards.
+    // Utilities receive only the space left below them, even on a compact screen.
+    val editorMaximum=minOf(maxHeight * .6f,maxHeight-104.dp).coerceAtLeast(0.dp)
     Column(Modifier.fillMaxSize().testTag("planner_screen")) {
         Column(Modifier.fillMaxWidth().heightIn(max=editorMaximum).verticalScroll(editorScroll).testTag("planner_editor")) {
             if (state.demo) StatusNotice("演示规划 · 空闲安排为虚构，标记不写入真实数据。")
@@ -204,7 +211,7 @@ private fun StudyPlanningContent(state: YOURoomState, goal: PlanningDraft, execu
                         addEnabled = interactive && !startMoving && !endMoving && !pending && goal.savedWindows.size < PlanningPolicy.periodLimit,
                         expectedEnabled = interactive && snapshot != null && !stale,
                         flexibleEnabled = interactive && !pending,
-                        generateEnabled = interactive && !pending && !startMoving && !endMoving && confirmedGoal != null && snapshot != null && !stale &&
+                        generateEnabled = interactive && !pending && !alreadyDisplayed && !startMoving && !endMoving && confirmedGoal != null && snapshot != null && !stale &&
                             (guide==null || guide.stage==GuideStage.GENERATE),
                         expectedCount = expectedCount, pending = pending,
                         onStartMoving = { startMoving = it }, onEndMoving = { endMoving = it },
@@ -212,12 +219,13 @@ private fun StudyPlanningContent(state: YOURoomState, goal: PlanningDraft, execu
                         onEnd = { wheelGoal = wheelGoal.copy(end = it); onGoal(wheelGoal) },
                         onAdd = {
                             if (!addAccepted) {
-                                utilities.clearRecord()
                                 modeFeedback=null
                                 val now = if (state.demo) null else java.time.LocalTime.now(clock.withZone(SchoolZone))
                                     .let { (it.toSecondOfDay()+59)/60 }
-                                val addition = PlanningSchedule.add(goal,now)
+                                val replacingHistory=previewRecord!=null
+                                val addition = PlanningSchedule.add(if(replacingHistory) goal.copy(savedWindows=emptyList()) else goal,now)
                                 if (addition.goal != null) {
+                                    if(replacingHistory) { utilities.clearRecord();onClearPlanning() }
                                     addAccepted=true; addRejection=0; additionError=null
                                     onGoal(addition.goal)
                                 } else {
@@ -257,59 +265,67 @@ private fun StudyPlanningContent(state: YOURoomState, goal: PlanningDraft, execu
         // Preserve the former divider's exact layout height without drawing a line.
         Spacer(Modifier.fillMaxWidth().height(1.dp).testTag("planner_input_spacing"))
         Column(Modifier.weight(1f).fillMaxWidth().testTag("planner_results_area")) {
-            if (displayingHistory) Row(Modifier.fillMaxWidth().heightIn(min=48.dp).padding(start=24.dp,end=16.dp)
-                .testTag("planner_history_context"),verticalAlignment=Alignment.CenterVertically) {
-                Text("历史 · ${previewRecord!!.completedAt.atZone(SchoolZone).format(DateTimeFormatter.ofPattern("HH:mm"))} · ${previewRecord.campus.label}",
-                    Modifier.weight(1f),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                IconButton(onClick=utilities::clearRecord,enabled=interactive) {
-                    Icon(Icons.Outlined.Close,"返回当前规划",Modifier.size(18.dp))
-                }
-            }
-            PlanningTargetStrip(if(displayingHistory) previewRecord!!.snapshot.slots.sortedBy { it.start } else displaySlots,
-                if(displayingHistory) previewRecord!!.goal.windows else goal.savedWindows,clock,
-                actions = if(displayingHistory) null else PlanningRangeActions(
+            // Keep the same target while a selected historical workspace is covered by
+            // a utility; opening that utility must not swap its annotations or their height.
+            PlanningTargetStrip(previewRecord?.snapshot?.slots?.sortedBy { it.start } ?: displaySlots,
+                previewRecord?.goal?.windows ?: goal.savedWindows,clock,
+                actions = if(previewRecord!=null) null else PlanningRangeActions(
                 enabled = interactive && !pending && !startMoving && !endMoving && guide?.stage!=GuideStage.ADD,
                 onEdit = { index ->
                     onGoal(PlanningSchedule.remove(goal,index))
                     scope.launch { editorScroll.animateScrollTo(0) }
                 }, onDelete = { index -> onGoal(PlanningSchedule.remove(goal,index)) },
                 onSave = { templateSeed=goal.savedWindows.toList();guide?.openedTemplate() }))
-            // PlanningTargetStrip's measured height includes every annotation row. Flowing
-            // the reservation immediately after it anchors both panel tops below the lowest
-            // time label, without a guessed screen offset or a post-layout correction frame.
+            // Both layers start below the full target annotations. Only the upper layer
+            // reserves feedback height; opening it never translates the lower plan.
             val completed = execution?.result != null && execution.input.today == planningToday && !execution.cancelled
+            SideEffect {
+                if(interactive) utilities.observeCompletion(state.campus,
+                    execution?.takeIf { completed && !it.reused }?.id,resultsVisible=resultPanel)
+            }
+            val completionUnseen=completed && execution?.reused==false && utilities.completionUnseen(state.campus,execution.id)
             val auxiliaryFeedback = when {
                 pending -> PlanningResult(message="正在计算，可继续浏览或游戏")
-                completed -> PlanningResult(message=if (result!!.options.isEmpty()) "本次计算已结束" else "计算完成")
+                completionUnseen -> PlanningResult(message=if (result!!.options.isEmpty()) "本次计算已结束" else "计算完成")
                 else -> null
             }
             val localFeedback=additionError ?: modeFeedback
-            key(state.campus) {
-                val visibleResult=if(displayingHistory) previewExecution?.result else result
-                PlanningFeedbackHost(localFeedback ?: if (resultPanel) visibleResult?.takeIf { it.message!=null } else auxiliaryFeedback,
-                    goal,clock,onGoal,reserveSpace=!resultPanel,enabled=interactive && !displayingHistory,
-                    trailingAction=if (!resultPanel && completed && localFeedback==null)
-                        PlanningFeedbackButton("查看结果","planner_view_result") {
-                            utilities.runner.pause(); utilities.clearRecord(); utilities.panel=PlannerPanel.RESULT
-                        } else null)
-            }
-            if (resultPanel && !displayingHistory && execution != null && execution.input.today != planningToday) {
-                StatusNotice("以下为 ${execution.input.today} 生成的计划，仅供回看。")
-            }
-            if (resultPanel && !displayingHistory && pending) {
-                Row(Modifier.padding(horizontal = 24.dp, vertical = 12.dp).testTag("planner_loading"),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                    Text("比较时间与完整路线…", style = MaterialTheme.typography.bodySmall)
+            PlannerUtilityWorkspace(utilities,history,historyNotice,planningToday,
+                state.appearance.tone(state.campus),interactive,showUtilities=guide==null || guide.utilityLesson,
+                onHistory={ record -> additionError=null; modeFeedback=null; onHistory(record);guide?.replayedHistory() },
+                onSurfaceVisibleChanged={ utilitySurfaceVisible=it },
+                modifier=Modifier.weight(1f).fillMaxWidth(),feedback={ overlayActive ->
+                    PlanningFeedbackHost(localFeedback ?: auxiliaryFeedback,goal,clock,onGoal,
+                        reserveSpace=true,enabled=overlayActive,initiallyVisible=true,
+                        trailingAction=if(completionUnseen && localFeedback==null)
+                            PlanningFeedbackButton("查看结果","planner_view_result") {
+                                utilities.closePanel();utilities.clearRecord();guide?.viewedPlanningResult()
+                            } else null)
+                }) {
+            // No branch in this layer depends on whether the overlay is open. Its
+            // own notice, progress header and plan keep identical position / size.
+            Column(Modifier.fillMaxSize()) {
+                val visibleResult=if(previewRecord!=null) previewExecution?.result else result
+                key(state.campus) {
+                    PlanningFeedbackHost(localFeedback ?: visibleResult?.takeIf { it.message!=null },
+                        goal,clock,onGoal,enabled=interactive && resultPanel && (localFeedback!=null || previewRecord==null))
                 }
-            }
+                if(previewRecord==null && execution!=null && execution.input.today!=planningToday)
+                    StatusNotice("以下为 ${execution.input.today} 生成的计划，仅供回看。")
+                if(previewRecord==null && pending) {
+                    Row(Modifier.padding(horizontal=24.dp,vertical=12.dp).testTag("planner_loading"),
+                        verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                        CircularProgressIndicator(Modifier.size(20.dp),strokeWidth=2.dp)
+                        Text("比较时间与完整路线…",style=MaterialTheme.typography.bodySmall)
+                    }
+                }
             Box(Modifier.weight(1f).fillMaxWidth()) {
-            // Keep route browsing mounted while the auxiliary pane covers it.
-            // Its remembered direction/selection must not reset on returning.
-            val liveVisible=resultPanel && !displayingHistory
+            // Keep the workspace visible beneath the corner reveal, not a blank frame.
+            // It remains mounted but cannot be operated through an auxiliary surface.
+            val liveVisible=previewRecord==null
             Box(Modifier.fillMaxSize().graphicsLayer { alpha = if (liveVisible) 1f else 0f }
-                .then(if (liveVisible) Modifier else Modifier.clearAndSetSemantics {})) {
-            PlanningResultView(execution,state.campus,interactive && liveVisible,listState,{ id,index ->
+                .then(if (resultPanel && liveVisible) Modifier else Modifier.clearAndSetSemantics {})) {
+            PlanningResultView(execution,state.campus,interactive && resultPanel && liveVisible,listState,{ id,index ->
                 onOption(id,index); scope.launch { listState.animateScrollToItem(0) }
             })
             }
@@ -317,7 +333,7 @@ private fun StudyPlanningContent(state: YOURoomState, goal: PlanningDraft, execu
             // colored history panel. Its selection and scroll state never write to the live run.
             if(previewRecord!=null && previewExecution!=null) key(previewRecord.id) {
                 val previewList=rememberLazyListState()
-                Box(Modifier.fillMaxSize().graphicsLayer { alpha=if(displayingHistory) 1f else 0f }
+                Box(Modifier.fillMaxSize()
                     .then(if(displayingHistory) Modifier else Modifier.clearAndSetSemantics {})) {
                     PlanningResultView(previewExecution,previewRecord.campus,interactive && displayingHistory,previewList,
                         { _,index ->
@@ -326,11 +342,9 @@ private fun StudyPlanningContent(state: YOURoomState, goal: PlanningDraft, execu
                         })
                 }
             }
-            if (!resultPanel) PlannerUtilityPanel(utilities, history, historyNotice, planningToday,
-                state.appearance.tone(state.campus), interactive,
-                onHistory={ record -> additionError=null; modeFeedback=null; onHistory(record) })
             }
-            if (guide == null) PlannerUtilityBar(utilities, history.size, interactive)
+            }
+            }
     }
     }
     }
@@ -340,6 +354,7 @@ private fun StudyPlanningContent(state: YOURoomState, goal: PlanningDraft, execu
 @Composable
 private fun PlanningResultView(execution: PlanningExecution?, campus: Campus, interactive: Boolean,
     listState: LazyListState, onOption: (Long,Int) -> Unit) {
+    val guide=LocalUsageGuide.current
     val result=execution?.result
     val selected=execution?.selectedOption ?: 0
     val plan=result?.options?.takeIf { it.isNotEmpty() }?.let {
@@ -355,7 +370,9 @@ private fun PlanningResultView(execution: PlanningExecution?, campus: Campus, in
                 val frozen=execution!!.input.snapshot
                 val frozenSlots=frozen.slots.sortedBy { it.start }
                 itemsIndexed(uses,key={ _,use -> use.classroom.id }) { index,use ->
-                    Crossfade(use,animationSpec=tween(160),label="plan room use") { shown ->
+                    Crossfade(use,modifier=if(guide?.stage==GuideStage.HISTORY_REPLAY && interactive)
+                        Modifier.guideTag("planner_room_${use.classroom.id}") else Modifier,
+                        animationSpec=tween(160),label="plan room use") { shown ->
                         PlanningRoomRow(shown,frozenSlots,frozen.index.freeSlotsByRoom[shown.classroom.id].orEmpty(),
                             shown.classroom.id in execution.input.goal.expectedRooms,interactive,execution.id,
                             Modifier.background(mainPageRowColor(MaterialTheme.colorScheme,tinted=index%2==1))

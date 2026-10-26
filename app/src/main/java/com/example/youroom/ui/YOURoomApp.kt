@@ -157,7 +157,13 @@ private fun WorkspacePages(state: YOURoomState, tab: Int, model: YOURoomViewMode
     val guide=LocalUsageGuide.current
     val history by model.planningHistory.collectAsStateWithLifecycle()
     val historyNotice by model.historyNotice.collectAsStateWithLifecycle()
-    val utilities = remember(state.demo, state.training) { PlannerUtilityState() }
+    val persistentGame = !state.demo && !state.training
+    val localUtilities = remember(state.demo, state.training) {
+        PlannerUtilityState(if(persistentGame) state.dinosaurBestScore else 0,
+            onBestScore={ if(persistentGame) model.recordDinosaurBestScore(it) })
+    }
+    val utilities=guide?.utilities ?: localUtilities
+    SideEffect { if(persistentGame) utilities.runner.restoreBestScore(state.dinosaurBestScore) }
     fun changeCampus(campus:com.example.youroom.domain.Campus) {
         guide?.recordAction(GuideStage.CAMPUS);model.setCampus(campus)
     }
@@ -197,8 +203,10 @@ private fun WorkspacePages(state: YOURoomState, tab: Int, model: YOURoomViewMode
                             sharedHeaderMoving = headerMoving, interactive = page == (if(preparing) guide!!.page else tab),
                             onCancel = model::cancelPlanning,
                             onPlanningPreferences = model::setPlanningPreferences,
-                            history = history, historyNotice = historyNotice.takeUnless { state.demo || state.training },
+                            history = guide?.history?.takeIf { it.isNotEmpty() } ?: history,
+                            historyNotice = historyNotice.takeUnless { state.demo || state.training },
                             utilityState = utilities,
+                            onClearPlanning={ model.planning.discard(state.campus) },
                             clock = LocalUsageGuide.current?.clock ?: java.time.Clock.system(com.example.youroom.domain.SchoolZone))
                         else -> SettingsScreen(state, manageRoom, model::clearProfile,
                             { if(guide!=null) guide.signal("logout") else model.logout() },

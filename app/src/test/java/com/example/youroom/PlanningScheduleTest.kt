@@ -81,6 +81,22 @@ class PlanningScheduleTest {
         assertEquals(PlanningProblem.PAST_TIME,PlanningSchedule.add(PlanningDraft(),500).error!!.problem)
     }
 
+    @Test fun pastStartIsCorrectedBeforeInvalidEndOrShortDurationAndKeepsConfirmedPeriods() {
+        val original=PlanningDraft(420,420,savedWindows=listOf(StudyWindow(600,660)))
+        for(end in listOf(400,420,425)) {
+            val draft=original.copy(end=end)
+            assertEquals(PlanningProblem.PAST_TIME,PlanningSchedule.add(draft,480).error!!.problem)
+            val updated=draft.copy(start=481)
+            assertEquals(PlanningProblem.INVALID_TIME,PlanningSchedule.add(updated,480).error!!.problem)
+            assertEquals(original.savedWindows,updated.savedWindows)
+        }
+        val short=PlanningDraft(470,490)
+        assertEquals(PlanningProblem.PAST_TIME,PlanningSchedule.add(short,480).error!!.problem)
+        assertEquals(PlanningProblem.TOO_SHORT,PlanningSchedule.add(short.copy(start=481),480).error!!.problem)
+        assertEquals(PlanningProblem.INVALID_TIME,PlanningSchedule.add(original.copy(start=-1),480).error!!.problem)
+        assertEquals(PlanningProblem.INVALID_TIME,PlanningSchedule.add(original.copy(end=1440),480).error!!.problem)
+    }
+
     @Test fun anEarlierConfirmedPeriodIsNotRecheckedWhenAddingALaterOne() {
         val draft = PlanningDraft(780,840,savedWindows=listOf(StudyWindow(480,720)))
         assertNotNull(PlanningSchedule.add(draft,782).goal)

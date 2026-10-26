@@ -15,6 +15,7 @@ data class PlanningHistoryRecord(
     val result: PlanningResult,
     val selectedOption: Int,
     val defaultDirection: PlanningDirection,
+    val inputKey: String? = null,
 )
 
 object PlanningHistoryPolicy {
@@ -22,6 +23,7 @@ object PlanningHistoryPolicy {
     fun current(records: List<PlanningHistoryRecord>, date: LocalDate): List<PlanningHistoryRecord> =
         records.filter { it.date == date && it.snapshot.queryDate == date }
             .distinctBy { it.id }.groupBy { it.owner }.values.flatMap { account ->
-                account.sortedByDescending { it.completedAt }.take(Limit)
+                account.sortedByDescending { it.completedAt }
+                    .distinctBy { it.inputKey?.let { key -> "${it.campus}:$key" } ?: "legacy:${it.id}" }.take(Limit)
             }.sortedByDescending { it.completedAt }
 }
