@@ -1,15 +1,53 @@
-*.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+# Android / Gradle generated files
+.gradle/
+.kotlin/
+**/build/
+.externalNativeBuild/
+.cxx/
+captures/
 local.properties
+
+# Machine-local IDE and OS state
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local outputs, browser profiles, downloads and temporary files
+/artifacts/
+/.tmp/
+/dist/
+/logs/
+node_modules/
+*.apk
+*.aab
+*.ap_
+*.hprof
+*.jfr
+*.crdownload
+hs_err_pid*.log
+replay_pid*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+
+# Python development environment and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Signing keys and machine-local signing configuration
+*.jks
+*.keystore
+keystore.properties
+
+# Local documentation and design materials.
+# Existing tracked branding files are left untouched for now.
+/docs/

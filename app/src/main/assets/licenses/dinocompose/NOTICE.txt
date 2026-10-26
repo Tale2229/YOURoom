@@ -1,0 +1,21 @@
+DinoCompose / DinoChrome
+Copyright 2020 Wajahat Karim
+
+Project: https://github.com/wajahatkarim3/DinoCompose
+Upstream revision: 10ee4069d57c3c15c47161fcf88a07107f6e83c6
+Upstream file: app/src/main/java/com/wajahatkarim3/dino/compose/AssetPaths.kt
+License: Apache License, Version 2.0 (see LICENSE.txt in this directory).
+
+YOURoom reuses the two dinosaur running-frame vector paths, cactus path and cloud
+path. The upstream coordinate transforms, frame/update loop, application screen,
+theme, debug controls and scoring implementation are not copied.
+
+Changes by YOURoom (2026-10-24):
+- Normalize vector origins and scope parsed paths to the mounted game.
+- Render using the local panel viewport and the current application theme.
+- Use YOURoom's time-based simulation, gradual acceleration and lifecycle pause.
+- Align cactus drawing and collision coordinates; retain session-only scoring.
+- Keep the existing calculation-completion notification outside the game.
+
+DinoCompose is a third-party recreation inspired by the Chrome T-Rex game.
+No Google endorsement or ownership of upstream artwork is claimed.

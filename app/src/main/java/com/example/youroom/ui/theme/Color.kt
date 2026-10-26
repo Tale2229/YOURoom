@@ -2,7 +2,9 @@ package com.example.youroom.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val YouRoomBlue = Color(0xFF255BE4)
-val YouRoomInk = Color(0xFF172338)
-val YouRoomPaper = Color(0xFFF7F8FC)
-val YouRoomMuted = Color(0xFF657189)
+val XituchengKhaki = Color(0xFF665637)
+val ShaheGreen = Color(0xFF315C4E)
+val YOURoomInk = Color(0xFF252927)
+val YOURoomPaper = Color(0xFFF7F6F2)
+val YOURoomMuted = Color(0xFF646A66)
+val YOURoomRule = Color(0xFFDCE0DA)

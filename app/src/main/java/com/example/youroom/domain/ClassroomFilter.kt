@@ -1,34 +1,33 @@
 package com.example.youroom.domain
 
-/** All selected teaching periods must be free. Breaks are deliberately not inferred. */
+/** Selected periods must all be free; no selection lists even excluded rooms for browsing. */
 object ClassroomFilter {
     fun search(
         snapshot: ClassroomSnapshot,
         filters: SearchFilters,
         profiles: Map<String, RoomProfile>,
     ): SearchResult {
-        if (filters.firstSlot > filters.lastSlot) return SearchResult(emptyList(), emptyList(), false, true)
-        val numbers = (filters.firstSlot..filters.lastSlot).toSet()
+        val numbers = filters.selectedSlots
+        if (numbers.any { it <= 0 }) return SearchResult(emptyList(), emptyList(), false, true)
         val selected = snapshot.slots.filter { it.number in numbers }.sortedBy { it.number }
         if (selected.map { it.number }.toSet() != numbers) {
             return SearchResult(emptyList(), selected, false, true)
         }
-        val common = selected.map { slot -> slot.classrooms.map { it.id }.toSet() }
+        val index = snapshot.index
+        val common = if (selected.isEmpty()) index.roomsById.keys else selected
+            .map { slot -> index.roomsBySlot.getValue(slot.number) }
             .reduce { first, next -> first intersect next }
         val query = filters.query.trim()
-        val matches = snapshot.classrooms.asSequence()
-            .filter { it.id in common }
+        val matches = common.asSequence().mapNotNull(index.roomsById::get)
             .map { room ->
-                RoomMatch(room, profiles[room.id] ?: room.emptyProfile(),
-                    snapshot.slots.filter { slot -> slot.classrooms.any { it.id == room.id } }
-                        .map { it.number }.toSet())
+                RoomMatch(room, profiles[room.id] ?: room.emptyProfile(), index.freeSlotsByRoom.getValue(room.id))
             }
-            .filter { !it.profile.excluded }
-            .filter { filters.building == null || it.classroom.building == filters.building }
-            .filter { query.isEmpty() || it.classroom.name.contains(query, true) || it.profile.note.contains(query, true) }
+            .filter { selected.isEmpty() || !it.profile.excluded }
+            .filter { filters.buildings.isEmpty() || it.classroom.building in filters.buildings }
+            .filter { query.isEmpty() || it.classroom.name.contains(query, true) }
             .filter { !filters.favoritesOnly || it.profile.favorite }
-            .filter { !filters.quietOnly || it.profile.quiet }
             .filter { !filters.outletsOnly || it.profile.outlets }
+            .filter { it.profile.allTags.containsAll(filters.tags) }
             .filter { filters.minimumCapacity == 0 || (it.classroom.capacity ?: 0) >= filters.minimumCapacity }
             .sortedWith(compareByDescending<RoomMatch> { it.profile.favorite }
                 .thenBy { it.classroom.building.toIntOrNull() ?: Int.MAX_VALUE }
