@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 from PIL import Image, ImageChops, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "docs/branding/LOGO.svg"
+SOURCE = ROOT / "assets/branding/LOGO.svg"
 RES = ROOT / "app/src/main/res"
 OUT = ROOT / "app/build/launcher-verification"
 ANDROID = "{http://schemas.android.com/apk/res/android}"

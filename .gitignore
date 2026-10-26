@@ -49,5 +49,5 @@ __pycache__/
 keystore.properties
 
 # Local documentation and design materials.
-# Existing tracked branding files are left untouched for now.
+# Final logo and README screenshots are tracked under /assets/.
 /docs/

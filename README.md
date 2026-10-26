@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/branding/LOGO.svg" width="112" alt="YOURoom Logo">
+  <img src="assets/branding/LOGO.svg" width="112" alt="YOURoom Logo">
 </p>
 
 <h1 align="center">YOURoom</h1>
@@ -209,7 +209,7 @@ CHANGELOG.md              历史变更记录
 - [ClassroomDataSource.kt](app/src/main/java/com/example/youroom/data/ClassroomDataSource.kt)：界面与业务使用的数据源契约
 - [Campus.kt](app/src/main/java/com/example/youroom/domain/Campus.kt)、[Models.kt](app/src/main/java/com/example/youroom/domain/Models.kt)、[CampusTopology.kt](app/src/main/java/com/example/youroom/domain/CampusTopology.kt)：校区、节次和教学楼相关模型
 
-`docs/` 主要保存本地开发与设计资料，不作为构建依赖；其中尚在跟踪的品牌文件供项目展示使用。资源维护工具的条件见 [scripts/README.md](scripts/README.md)。
+`assets/branding/` 保存最终 Logo，`assets/readme/` 保存项目展示截图。`docs/` 仅保存本地开发与设计资料，不纳入版本管理，也不作为构建依赖。资源维护工具的条件见 [scripts/README.md](scripts/README.md)。
 
 </details>
 
